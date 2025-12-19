@@ -1,0 +1,57 @@
+# == General ===
+.DS_Store
+.vscode/
+.idea/
+node_modules/
+bin/
+dist/
+.env
+*.log
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.env
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+
+# === Infrastructure ===
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+.docker/
+*.log
+
+# === Web ===
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.next/
+.nuxt/
+
+# === Critical ===
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
