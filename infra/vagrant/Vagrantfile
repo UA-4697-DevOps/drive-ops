@@ -1,0 +1,51 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+    config.vm.box = "generic/debian12"
+
+    config.vm.provider "virtualbox" do |vb|
+        vb.name = "drive-ops-vm"
+        vb.memory = "4096"
+        vb.cpus = 2
+    
+        vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+        vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+    end
+
+    config.vm.network "private_network", ip: "192.168.56.10"
+
+    # Port forwarding template
+    # Client Gateway
+    config.vm.network "forwarded_port", guest: 3000, host: 3000, host_ip: "127.0.0.1"
+    # Driver Service
+    config.vm.network "forwarded_port", guest: 5001, host: 5001, host_ip: "127.0.0.1"
+    # Trip Service
+    config.vm.network "forwarded_port", guest: 5002, host: 5002, host_ip: "127.0.0.1"
+    # PostgreSQL
+    config.vm.network "forwarded_port", guest: 5432, host: 5432, host_ip: "127.0.0.1"
+
+    config.vm.synced_folder "../..", "/vagrant", 
+    type: "virtualbox",
+    owner: "vagrant",
+    group: "vagrant"
+
+    config.vm.hostname = "drive-ops"
+
+    config.vm.provision "shell", inline: <<-SHELL
+    apt-get update
+    apt-get install -y python3 python3-pip
+    SHELL
+
+    config.vm.post_up_message = <<-MESSAGE
+    ======================================
+    Drive-Ops VM is ready!
+    ======================================
+    
+    Services will be available at:
+    - Client Gateway: http://localhost:3000
+    - Driver Service: http://localhost:5001
+    - Trip Service: http://localhost:5002
+    ======================================
+    MESSAGE
+end
