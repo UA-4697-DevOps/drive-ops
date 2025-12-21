@@ -1,6 +1,6 @@
 ---
 - name: Prepare Debian VM for Docker services
-  hosts: vagrant
+  hosts: local_vm
   become: yes
   gather_facts: yes
   
