@@ -1,0 +1,61 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# Vagrantfile for ARM architecture (Apple Silicon M1/M2/M3)
+# Provider: QEMU/libvirt
+
+Vagrant.configure("2") do |config|
+    config.vm.box = "generic/debian12"
+
+    config.vm.provider "qemu" do |qe, override|
+        qe.arch = "aarch64"
+        qe.machine = "virt,accel=hvf"
+        qe.cpu = "cortex-a72"
+        qe.net_device = "virtio-net-pci"
+        qe.memory = "4G"
+        qe.smp = "cpus=2"
+    end
+
+    config.vm.provider "libvirt" do |lv|
+        lv.memory = "4096"
+        lv.cpus = 2
+        lv.machine_type = "virt"
+        lv.driver = "qemu"
+    end
+
+    config.vm.network "private_network", ip: "192.168.56.10"
+
+    # Port forwarding
+    config.vm.network "forwarded_port", guest: 3000, host: 3000, host_ip: "127.0.0.1"
+    config.vm.network "forwarded_port", guest: 5001, host: 5001, host_ip: "127.0.0.1"
+    config.vm.network "forwarded_port", guest: 5002, host: 5002, host_ip: "127.0.0.1"
+    config.vm.network "forwarded_port", guest: 5432, host: 5432, host_ip: "127.0.0.1"
+
+    config.vm.synced_folder "../..", "/vagrant",
+        type: "rsync",
+        rsync__exclude: [".git/", "node_modules/", "__pycache__/", "venv/", ".vagrant/"],
+        rsync__args: ["--verbose", "--archive", "--delete", "-z", "--copy-links"]
+
+    config.vm.hostname = "drive-ops"
+
+    config.vm.provision "shell", inline: <<-SHELL
+        apt-get update
+        apt-get install -y python3 python3-pip rsync
+    SHELL
+
+    config.vm.post_up_message = <<-MESSAGE
+    ======================================
+    Drive-Ops VM is ready! (QEMU/ARM)
+    ======================================
+    
+    ⚠️  IMPORTANT: File sync uses rsync
+    Run in separate terminal:
+      vagrant rsync-auto
+    
+    Services will be available at:
+    - Client Gateway: http://localhost:3000
+    - Driver Service: http://localhost:5001
+    - Trip Service: http://localhost:5002
+    ======================================
+    MESSAGE
+end
