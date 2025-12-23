@@ -7,10 +7,10 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "${TRIP_SERVICE_PORT:-8080}:8080" 
+      - "${TRIP_SERVICE_PORT:-5002}:8080" 
     environment:
       # Database connection string - will be changed with credentials given by Task #46
-      - DB_URL=postgres://vagrant:vagrant@db:5432/trips?sslmode=disable
+      - DB_URL=postgres://vagrant:trips@db:5432/trips?sslmode=disable
       # Message broker URL - commented out until amqp logic is implemented
       # - BROKER_URL=amqp://guest:guest@rabbitmq:5672/
     depends_on:
@@ -21,9 +21,14 @@ services:
   db:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER=vagrant
-      - POSTGRES_PASSWORD=vagrant
-      - POSTGRES_DB=trips
+      POSTGRES_USER=vagrant
+      POSTGRES_PASSWORD=trips
+      POSTGRES_DB=trips
+    ports:
+      - "5432:5432"
+    volumes:
+      # CodeRabbit FIX: Added data persistence
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U vagrant -d trips"]
       interval: 5s
@@ -36,8 +41,9 @@ services:
       context: .
       dockerfile: Dockerfile.migrations
     environment:
-      - DB_URL=postgres://vagrant:vagrant@db:5432/trips?sslmode=disable
-    entrypoint: sh -c "sleep 10 && migrate -path=/migrations/ -database $$DB_URL up"
+      - DB_URL=postgres://vagrant:trips@db:5432/trips?sslmode=disable
+    # CodeRabbit FIX: Removed 'sleep 10' and fixed variable expansion
+    entrypoint: sh -c "migrate -path=/migrations/ -database $$DB_URL up"
     depends_on:
       db:
         condition: service_healthy
@@ -47,3 +53,5 @@ services:
   #   ports:
   #     - "5672:5672"
   #     - "15672:15672"
+volumes:
+  postgres_data:
