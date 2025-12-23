@@ -1,0 +1,1 @@
+# TripService CI/CD та Testing
