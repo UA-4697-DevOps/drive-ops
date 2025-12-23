@@ -16,6 +16,19 @@ services:
     depends_on:
       trip-migrations:
         condition: service_completed_successfully
+  
+  #Temporal db for test
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=vagrant
+      - POSTGRES_PASSWORD=vagrant
+      - POSTGRES_DB=trips
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vagrant -d trips"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # Database migration runner 
   trip-migrations:
@@ -24,8 +37,10 @@ services:
       dockerfile: Dockerfile.migrations
     environment:
       - DB_URL=postgres://vagrant:vagrant@db:5432/trips?sslmode=disable
-    command: -path=/migrations/ -database "postgres://vagrant:vagrant@db:5432/trips?sslmode=disable" up
-
+    entrypoint: sh -c "sleep 10 && migrate -path=/migrations/ -database $$DB_URL up"
+    depends_on:
+      db:
+        condition: service_healthy
   # RabbitMQ service - temporary disabled
   # rabbitmq:
   #   image: rabbitmq:3-management
