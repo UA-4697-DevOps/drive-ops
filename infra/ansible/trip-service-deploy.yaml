@@ -18,10 +18,9 @@
         dest: "{{ app_path }}/"
 
     - name: Build and Start containers
-      community.docker.docker_compose_v2:
-        project_src: "{{ app_path }}"
-        state: present
-        build: always
+      shell: "docker compose up -d --build"
+      args:
+        chdir: "{{ app_path }}"
       register: deploy_status
 
     - name: Show status
