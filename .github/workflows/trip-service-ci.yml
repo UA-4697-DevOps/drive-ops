@@ -1,0 +1,30 @@
+name: Trip Service CI
+
+on:
+  push:
+    paths:
+      - 'trip-service/**'
+  pull_request:
+    paths:
+      - 'trip-service/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23' 
+
+      - name: Install dependencies
+        run: |
+          cd services/trip-service
+          # Команда Go сама завантажить залежності під час тестування
+
+      - name: Run tests
+        run: |
+          cd trip-service
+          go test ./...
