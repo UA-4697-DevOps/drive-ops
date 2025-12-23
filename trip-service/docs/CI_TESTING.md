@@ -1,138 +1,138 @@
-# TripService CI/CD та Testing
+# TripService CI/CD and Testing
 
-## Огляд
+## Overview
 
-Система тестування для trip-service включає unit та integration тести. Integration тести використовують реальну PostgreSQL базу даних в Docker контейнері для перевірки взаємодії компонентів.
+The testing system for trip-service includes unit and integration tests. Integration tests use a real PostgreSQL database in a Docker container to verify component interactions.
 
-## Локальна розробка
+## Local Development
 
-### Запуск unit тестів
+### Running Unit Tests
 
-Unit тести перевіряють окремі компоненти без зовнішніх залежностей.
+Unit tests verify individual components without external dependencies.
 
 ```bash
 cd trip-service
 go test $(go list ./... | grep -v /tests/integration)
 ```
 
-### Запуск integration тестів
+### Running Integration Tests
 
-**Передумови:**
+**Prerequisites:**
 - Docker
 - Docker Compose
 
-**Команди:**
+**Commands:**
 
 ```bash
-# Запустити тестову базу даних
+# Start test database
 cd trip-service/tests/integration
 docker-compose -f docker-compose.test.yml up -d
 
-# Почекати поки PostgreSQL буде готовий (або перевірити статус)
+# Wait for PostgreSQL to be ready (or check status)
 docker logs trip-service-test-db
 
-# Запустити тести
+# Run tests
 cd ../..
 go test -v ./tests/integration/...
 
-# Зупинити тестову базу даних
+# Stop test database
 cd tests/integration
 docker-compose -f docker-compose.test.yml down -v
 ```
 
-**Примітка:** TestMain в `setup_test.go` автоматично запускає і зупиняє Docker Compose, тому ці команди можна використовувати для manual setup.
+**Note:** TestMain in `setup_test.go` automatically starts and stops Docker Compose, so these commands can be used for manual setup.
 
-### Запуск всіх тестів
+### Running All Tests
 
 ```bash
 cd trip-service
 go test ./...
 ```
 
-## Архітектура integration тестів
+## Integration Test Architecture
 
-### Компоненти
+### Components
 
-- **PostgreSQL 15** в Docker контейнері
-- **Тестова БД:** `trip_service_test`
-- **Port:** `5433` (щоб не конфліктувати з локальним PostgreSQL на 5432)
+- **PostgreSQL 15** in Docker container
+- **Test DB:** `trip_service_test`
+- **Port:** `5433` (to avoid conflicts with local PostgreSQL on 5432)
 - **Credentials:** `testuser` / `testpass`
-- **Контейнер:** `trip-service-test-db`
+- **Container:** `trip-service-test-db`
 
-### Що тестується
+### What is Tested
 
-1. **Підключення до БД** (`TestDatabaseConnection`)
-   - Перевірка що можна підключитися до PostgreSQL
-   - Перевірка ping до бази даних
+1. **Database Connection** (`TestDatabaseConnection`)
+   - Verify connection to PostgreSQL
+   - Verify database ping
 
-2. **Міграції** (`TestDatabaseMigrations`)
-   - Таблиця `trips` існує
-   - Enum тип `trip_status` створений
-   - Індекс `idx_trips_passenger_id` існує
+2. **Migrations** (`TestDatabaseMigrations`)
+   - Table `trips` exists
+   - Enum type `trip_status` created
+   - Index `idx_trips_passenger_id` exists
 
-3. **Repository CRUD операції**
-   - `TestTripRepository_Create` - створення trip
-   - `TestTripRepository_GetByID` - отримання trip за ID
-   - `TestTripRepository_Update` - оновлення trip (статус, driver_id)
-   - `TestTripRepository_Delete` - видалення trip
+3. **Repository CRUD Operations**
+   - `TestTripRepository_Create` - create trip
+   - `TestTripRepository_GetByID` - get trip by ID
+   - `TestTripRepository_Update` - update trip (status, driver_id)
+   - `TestTripRepository_Delete` - delete trip
 
 4. **/health endpoint** (`TestHealthEndpoint`)
-   - HTTP запит до /health
-   - Перевірка 200 OK та JSON response
-   - **ПРИМІТКА:** Тест пропускається поки HTTP сервер не буде реалізований
+   - HTTP request to /health
+   - Verify 200 OK and JSON response
+   - **NOTE:** Test is skipped until HTTP server is implemented
 
-### Ізоляція тестів
+### Test Isolation
 
-- **Кожен запуск** створює новий Docker контейнер
-- **Немає persistent volume** - чистий slate кожного разу
-- **Кожен тест** очищає свої дані через `t.Cleanup()`
-- **Міграції** застосовуються автоматично в TestMain
+- **Each run** creates a new Docker container
+- **No persistent volume** - clean slate every time
+- **Each test** cleans its data via `t.Cleanup()`
+- **Migrations** are applied automatically in TestMain
 
-### Структура файлів
+### File Structure
 
 ```
 trip-service/tests/integration/
-├── docker-compose.test.yml    # Docker Compose конфігурація для тестової БД
+├── docker-compose.test.yml    # Docker Compose config for test DB
 ├── setup_test.go               # TestMain, SetupTestDB, RunMigrations, WaitForDB
-├── helpers.go                  # Helper функції (CreateTestTrip, AssertTripEqual, etc.)
-└── trip_integration_test.go    # Всі integration тести
+├── helpers.go                  # Helper functions (CreateTestTrip, AssertTripEqual, etc.)
+└── trip_integration_test.go    # All integration tests
 ```
 
 ## CI/CD Pipeline
 
-### Структура Workflow
+### Workflow Structure
 
-GitHub Actions workflow містить 3 паралельні jobs:
+GitHub Actions workflow contains 3 parallel jobs:
 
-1. **unit-test** - швидкі unit тести
-2. **integration-test** - тести з PostgreSQL
-3. **docker-build** - збірка Docker image
+1. **unit-test** - fast unit tests
+2. **integration-test** - tests with PostgreSQL
+3. **docker-build** - Docker image build
 
-Jobs 2 і 3 запускаються паралельно для швидкості. Job 1 (unit-test) запускається незалежно.
+Jobs 2 and 3 run in parallel for speed. Job 1 (unit-test) runs independently.
 
 ### Job 1: Unit Test
 
-**Що робить:**
-- Встановлює Go 1.23
-- Кешує Go modules
-- Запускає unit тести (виключаючи integration)
+**What it does:**
+- Sets up Go 1.23
+- Caches Go modules
+- Runs unit tests (excluding integration)
 
-**Команда:**
+**Command:**
 ```bash
 go test $(go list ./... | grep -v /tests/integration)
 ```
 
-**Час виконання:** ~30 секунд
+**Execution time:** ~30 seconds
 
 ### Job 2: Integration Test
 
-**Що робить:**
-1. Встановлює Go 1.23
-2. Кешує Go modules
-3. Запускає PostgreSQL через docker-compose
-4. Чекає 10 секунд поки БД буде готова
-5. Запускає integration тести
-6. Зупиняє контейнер (навіть якщо тести failed)
+**What it does:**
+1. Sets up Go 1.23
+2. Caches Go modules
+3. Starts PostgreSQL via docker-compose
+4. Waits 10 seconds for DB to be ready
+5. Runs integration tests
+6. Stops container (even if tests failed)
 
 **Environment Variables:**
 ```yaml
@@ -143,21 +143,21 @@ DB_PASSWORD: testpass
 DB_NAME: trip_service_test
 ```
 
-**Команда:**
+**Command:**
 ```bash
 go test -v ./tests/integration/...
 ```
 
-**Час виконання:** ~1-2 хвилини
+**Execution time:** ~1-2 minutes
 
 ### Job 3: Docker Build
 
-**Що робить:**
-1. Встановлює Docker Buildx
-2. Логінується в GitHub Container Registry (GHCR)
-3. Створює metadata для tags
-4. Збирає Docker image з кешуванням
-5. Push image (тільки на main branch, не на PR)
+**What it does:**
+1. Sets up Docker Buildx
+2. Logs in to GitHub Container Registry (GHCR)
+3. Creates metadata for tags
+4. Builds Docker image with caching
+5. Pushes image (only on main branch, not on PR)
 
 **Image Tags:**
 - `main-sha-<commit>` - main branch builds
@@ -165,308 +165,68 @@ go test -v ./tests/integration/...
 - `pr-<number>` - pull request builds
 
 **Push Strategy:**
-- **Main branch:** Push до GHCR
-- **Pull requests:** Build only, no push (економія місця в registry)
+- **Main branch:** Push to GHCR
+- **Pull requests:** Build only, no push (saves registry space)
 
 **Cache Strategy:**
-- Використовує GitHub Actions cache для Docker layers
-- Значно пришвидшує повторні збірки
+- Uses GitHub Actions cache for Docker layers
+- Significantly speeds up subsequent builds
 
-**ПРИМІТКА:** Цей job зможе працювати тільки після того як буде доданий `trip-service/Dockerfile`.
+**NOTE:** This job will work only after `trip-service/Dockerfile` is added.
 
-### Тригери
+### Triggers
 
-CI запускається на:
-- **Push** до будь-якої гілки з змінами в `trip-service/**`
-- **Pull Request** з змінами в `trip-service/**`
+CI runs on:
+- **Push** to any branch with changes in `trip-service/**`
+- **Pull Request** with changes in `trip-service/**`
 
-### Кешування
+### Caching
 
 **Go Modules:**
 - Cache key: `${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}`
-- Шлях: `~/.cache/go-build`, `~/go/pkg/mod`
-- Пришвидшує встановлення залежностей
+- Path: `~/.cache/go-build`, `~/go/pkg/mod`
+- Speeds up dependency installation
 
 **Docker Layers:**
 - Cache type: GitHub Actions cache (gha)
-- Mode: `max` (кешує всі layers)
-- Пришвидшує Docker builds
-
-## Troubleshooting
-
-### Port 5433 вже зайнятий
-
-**Симптом:**
-```
-Error starting userland proxy: listen tcp4 0.0.0.0:5433: bind: address already in use
-```
-
-**Рішення:**
-```bash
-# Знайти процес що використовує порт
-lsof -i :5433
-
-# Або змінити порт в docker-compose.test.yml
-ports:
-  - "5434:5432"  # Використати інший порт
-```
-
-### Docker не запущений
-
-**Симптом:**
-```
-Cannot connect to the Docker daemon
-```
-
-**Рішення:**
-```bash
-# Linux
-sudo systemctl start docker
-
-# macOS
-open -a Docker
-
-# Перевірити статус
-docker ps
-```
-
-### Міграції не застосовуються
-
-**Симптом:**
-```
-Failed to execute migration: syntax error
-```
-
-**Рішення:**
-```bash
-# Перевірити файли міграцій
-ls -la trip-service/db/migrations/
-
-# Перевірити синтаксис SQL
-cat trip-service/db/migrations/001_init_trips.up.sql
-
-# Подивитися логи PostgreSQL
-docker logs trip-service-test-db
-
-# Підключитися до БД і перевірити вручну
-docker exec -it trip-service-test-db psql -U testuser -d trip_service_test
-```
-
-### Integration тести падають в CI
-
-**Симптом:**
-```
-Failed to connect to database: connection refused
-```
-
-**Можливі причини:**
-1. БД не встигла запуститися (збільшити sleep в CI)
-2. Неправильні credentials в environment variables
-3. Міграції failed
-
-**Рішення:**
-```bash
-# Переглянути логи GitHub Actions
-gh run view <run-id> --log
-
-# Локально відтворити проблему
-cd trip-service/tests/integration
-docker-compose -f docker-compose.test.yml up
-
-# В іншому терміналі
-cd trip-service
-go test -v ./tests/integration/...
-```
-
-### TestMain redeclared error
-
-**Симптом:**
-```
-TestMain redeclared in this block
-```
-
-**Причина:**
-У вас є два файли з `TestMain` функцією в одному пакеті.
-
-**Рішення:**
-Видалити старий/порожній `TestMain`. Тільки `setup_test.go` має містити `TestMain`.
-
-### GORM package not found
-
-**Симптом:**
-```
-could not import gorm.io/gorm
-```
-
-**Рішення:**
-```bash
-# Створити go.mod якщо не існує
-cd trip-service
-go mod init github.com/UA-4697-DevOps/drive-ops/trip-service
-
-# Додати залежності
-go get gorm.io/gorm
-go get gorm.io/driver/postgres
-go get github.com/google/uuid
-
-# Або просто запустити тести - Go автоматично завантажить
-go test ./...
-```
-
-### Docker build fails: Dockerfile not found
-
-**Симптом:**
-```
-ERROR: failed to solve: failed to read dockerfile
-```
-
-**Причина:**
-`trip-service/Dockerfile` ще не створений.
-
-**Рішення:**
-Цей job буде працювати після того як Dockerfile буде доданий. Build може бути тимчасово disabled або пропущений в PR.
+- Mode: `max` (caches all layers)
+- Speeds up Docker builds
 
 ## Debug Commands
 
-### Перевірити тестову базу даних
+### Check Test Database
 
 ```bash
-# Подивитися чи контейнер запущений
+# Check if container is running
 docker ps | grep trip-service-test-db
 
-# Подивитися логи
+# View logs
 docker logs trip-service-test-db
 
-# Підключитися до БД
+# Connect to DB
 docker exec -it trip-service-test-db psql -U testuser -d trip_service_test
 
-# В psql:
-\dt                          # Показати таблиці
-\d trips                     # Показати структуру таблиці
-\dT                          # Показати типи (enum)
-\di                          # Показати індекси
-SELECT * FROM trips;         # Показати дані
+# In psql:
+\dt                          # Show tables
+\d trips                     # Show table structure
+\dT                          # Show types (enum)
+\di                          # Show indexes
+SELECT * FROM trips;         # Show data
 ```
 
-### Перевірити Go environment
+### Check Go Environment
 
 ```bash
-# Версія Go
+# Go version
 go version
 
 # Go environment
 go env
 
-# Список пакетів
+# List packages
 go list ./...
 
-# Залежності
+# Dependencies
 go mod graph
 go mod verify
 ```
-
-### Перевірити CI логи
-
-```bash
-# За допомогою GitHub CLI
-gh run list --workflow=trip-service-ci.yml
-
-# Переглянути конкретний run
-gh run view <run-id>
-
-# Переглянути логи
-gh run view <run-id> --log
-
-# Переглянути логи конкретного job
-gh run view <run-id> --log --job=integration-test
-```
-
-## Best Practices
-
-### Написання тестів
-
-1. **Ізоляція:** Кожен тест має бути незалежним
-   ```go
-   t.Cleanup(func() {
-       testDB.Exec("DELETE FROM trips WHERE id = ?", trip.ID)
-   })
-   ```
-
-2. **Описові назви:** Використовуйте pattern `Test<Entity>_<Action>`
-   ```go
-   func TestTripRepository_Create(t *testing.T)
-   func TestTripRepository_GetByID(t *testing.T)
-   ```
-
-3. **t.Helper():** Використовуйте в helper функціях
-   ```go
-   func AssertTripEqual(t *testing.T, expected, actual *domain.Trip) {
-       t.Helper()  // Помилки будуть вказувати на caller, не на цю функцію
-       // ...
-   }
-   ```
-
-4. **t.Log() для успішних тестів:** Додавайте логування
-   ```go
-   t.Log("Successfully created trip")
-   ```
-
-### Управління даними
-
-1. **Не використовуйте seed data в тестах** - створюйте дані на льоту
-2. **Очищайте після себе** - використовуйте `t.Cleanup()`
-3. **Використовуйте унікальні IDs** - генеруйте через `uuid.New()`
-
-### CI/CD
-
-1. **Запускайте тести локально перед push**
-   ```bash
-   go test ./...
-   ```
-
-2. **Не commit-ите .env файли** з credentials
-
-3. **Перевіряйте CI логи** якщо тести падають
-
-4. **Використовуйте skip для incomplete features**
-   ```go
-   t.Skip("Skipping - feature not yet implemented")
-   ```
-
-## Метрики та Моніторинг
-
-### Час виконання CI
-
-**Ціль:** < 5 хвилин total
-
-**Поточна структура:**
-- Unit tests: ~30 сек
-- Integration tests: ~1-2 хв (паралельно з docker-build)
-- Docker build: ~1-2 хв (паралельно з integration-test)
-
-**Total:** ~2-3 хвилини (завдяки паралелізації)
-
-### Покриття тестами
-
-**Перевірити покриття:**
-```bash
-go test -cover ./...
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
-```
-
-## Майбутні покращення
-
-1. **Test coverage reporting** - інтеграція з Codecov
-2. **Linting в CI** - додати golangci-lint
-3. **E2E tests** - тести повного API
-4. **Performance tests** - бенчмарки
-5. **Makefile** - спростити команди
-
-## Підтримка
-
-Якщо у вас виникли питання або проблеми з тестами:
-
-1. Перевірте цю документацію
-2. Подивіться логи (локальні або CI)
-3. Створіть issue в GitHub з деталями проблеми
