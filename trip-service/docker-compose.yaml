@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  # Main application service
+  trip-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${TRIP_SERVICE_PORT:-8080}:8080" 
+    environment:
+      # Database connection string - will be changed with credentials given by Task #46
+      - DB_URL=postgres://vagrant:vagrant@db:5432/trips?sslmode=disable
+      # Message broker URL - commented out until amqp logic is implemented
+      # - BROKER_URL=amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      trip-migrations:
+        condition: service_completed_successfully
+
+  # Database migration runner 
+  trip-migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrations
+    environment:
+      - DB_URL=postgres://vagrant:vagrant@db:5432/trips?sslmode=disable
+    command: -path=/migrations/ -database "postgres://vagrant:vagrant@db:5432/trips?sslmode=disable" up
+
+  # RabbitMQ service - temporary disabled
+  # rabbitmq:
+  #   image: rabbitmq:3-management
+  #   ports:
+  #     - "5672:5672"
+  #     - "15672:15672"
