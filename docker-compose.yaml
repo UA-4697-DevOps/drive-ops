@@ -1,0 +1,10 @@
+services:
+  test:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    container_name: test-nginx
+
+networks:
+  default:
+    name: drive-ops-network

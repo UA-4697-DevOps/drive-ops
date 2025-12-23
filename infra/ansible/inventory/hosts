@@ -1,0 +1,6 @@
+[local_vm]
+drive-ops-vm ansible_host=192.168.56.10 ansible_user=vagrant ansible_python_interpreter=/usr/bin/python3 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+
+[local_vm:vars]
+ansible_become=yes
+ansible_become_method=sudo
