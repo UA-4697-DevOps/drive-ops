@@ -8,7 +8,7 @@ The testing system for trip-service includes unit and integration tests. Integra
 
 ### Running Unit Tests
 
-Unit tests verify individual components without external dependencies.
+Unit tests verify individual components.Tests in the internal/repository package use Testcontainers and require Docker to be running locally to spin up a temporary database.
 
 ```bash
 cd trip-service
