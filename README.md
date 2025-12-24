@@ -1,8 +1,8 @@
-# Drive-Ops Platform 🚗
+# Drive-Ops Platform 
 
 Welcome to the **Drive-Ops** monorepo. This repository contains the distributed infrastructure and microservices powering the platform. We use a modular architecture to ensure scalability and independent service management.
 
-## 🏗 Repository Structure
+## Repository Structure
 
 This project is organized as a monorepo to streamline development across multiple services:
 
@@ -13,7 +13,7 @@ This project is organized as a monorepo to streamline development across multipl
 
 ---
 
-## 🚀 CI/CD & Automation
+## CI/CD & Automation
 
 We have implemented a baseline CI/CD infrastructure using GitHub Actions to maintain high code quality standards. 
 
@@ -31,7 +31,7 @@ We have implemented a baseline CI/CD infrastructure using GitHub Actions to main
 
 ---
 
-## 🛠 Getting Started
+## Getting Started
 
 ### Local Setup
 1. Clone the repository: `git clone https://github.com/UA-4697-DevOps/drive-ops.git`
@@ -47,7 +47,7 @@ Testing is encouraged for every contribution. You can run tests locally within e
 
 ---
 
-## 📝 Documentation
+## Documentation
 Continuous documentation is a core part of this project. Each directory contains localized documentation to help you get started with that specific module.
 
 
