@@ -1,7 +1,29 @@
-# Drive-Ops Monorepo
+# Drive-Ops Platform 🚗
 
-## Project Status
-| Service | Status CI |
+Welcome to the **Drive-Ops** monorepo. This repository contains the distributed infrastructure and microservices powering the platform. We use a modular architecture to ensure scalability and independent service management.
+
+## 🏗 Repository Structure
+
+This project is organized as a monorepo to streamline development across multiple services:
+
+* **`client-gateway/`** — The entry point for client requests and authentication.
+* **`driver-service/`** — Handles driver-related logic and state management.
+* **`trip-service/`** — Manages the core business logic for trip processing.
+* **`.github/workflows/`** — Centralized CI/CD automation logic.
+
+---
+
+## 🚀 CI/CD & Automation
+
+We have implemented a baseline CI/CD infrastructure using GitHub Actions to maintain high code quality standards. 
+
+### Current Status:
+* **Infrastructure Stubs**: Pipelines are currently configured with stable stubs to ensure green builds while service logic is being integrated.
+* **Independent Triggers**: Workflows are optimized to run only when changes are detected in specific service directories.
+* **Status Visibility**: Service health and build status are tracked via the badges below.
+
+### Service Health:
+| Service | Build Status |
 | :--- | :--- |
 | **Driver Service** | ![Driver Status](https://github.com/UA-4697-DevOps/drive-ops/actions/workflows/driver-service-ci.yml/badge.svg) |
 | **Trip Service** | ![Trip Status](https://github.com/UA-4697-DevOps/drive-ops/actions/workflows/trip-service-ci.yml/badge.svg) |
@@ -9,45 +31,29 @@
 
 ---
 
-## CI/CD Pipeline
-This monorepo uses GitHub Actions to automate development workflows. Each service has its own pipeline configured to ensure reliability.
+## 🛠 Getting Started
 
-### What runs per service:
-* **Linting & Syntax:** Automated checks for Python (flake8) and Go (golangci-lint) to maintain code style.
-* **Unit Tests:** Automated execution of `pytest` (for Python) or `go test` (for Go) on every push or Pull Request.
-* **Docker Build:** Automatic verification of the Docker image build process (specifically for `driver-service` as part of the CI/CD setup).
-* **Status Visibility:** Live status indicators (badges) are located at the top of this README to provide instant visibility into service health.
+### Local Setup
+1. Clone the repository: `git clone https://github.com/UA-4697-DevOps/drive-ops.git`
+2. Explore individual service directories for specific environment requirements.
 
+### Running Tests
+Testing is encouraged for every contribution. You can run tests locally within each service folder using the standard testing tools provided for that environment.
 
-## Test
-* **Syntax & Linting:** Automated checks for Python (flake8) and Go (golangci-lint).
-* **Unit Testing:** Every push triggers a test suite execution on **Python 3.13.8** or **Go 1.23**.
-* **Accuracy:** Workflows are linked to service directories to ensure only relevant tests run per change.
+### Contribution Flow
+1. **Infrastructure**: Ensure your service folder contains the necessary configuration files.
+2. **Implementation**: Build your service logic within the assigned directory.
+3. **CI Integration**: Once your tests are ready, the CI stubs in `.github/workflows/` should be updated to execute your specific test suites.
 
-### 1. Driver Service (Python)
-- **Location**: All logic and tests are located in the `driver-service/` directory.
-- **How to run tests**:
-  1. Navigate to the directory: `cd driver-service`
-  2. Install dependencies: `pip install -r requirements.txt`
-  3. Set Python path: `export PYTHONPATH=$PYTHONPATH:$(pwd)`
-  4. Execute tests: `pytest`
+---
 
-### 2. Trip Service (Go)
-- **Location**: Code resides in the `trip-service/` directory.
-- **How to run tests**:
-  1. Navigate to the directory: `cd trip-service`
-  2. Execute tests: `go test ./...`
-
-### 3. Client Gateway (Python)
-- **Location**: Service-specific logic is in `client-gateway/`.
-- **How to run tests**: Follow the same steps as for the **Driver Service**.
+## 📝 Documentation
+Continuous documentation is a core part of this project. Each directory contains localized documentation to help you get started with that specific module.
 
 
-## Documentation Accuracy & CI Links
-
-To ensure these instructions remain up-to-date, they are directly linked to our automation suite:
-
-- **CI Logic**: All automated checks are defined in [GitHub Workflows](.github/workflows/).
-- **Driver Service Tests**: The logic for Python tests is validated by [driver-service-ci.yml](.github/workflows/driver-service-ci.yml).
-- **Trip Service Tests**: Go testing procedures follow the steps in [trip-service-ci.yml](.github/workflows/trip-service-ci.yml).
-- **Environment**: Local setup instructions are mirrored from the `Install dependencies` and `Run tests` steps in the CI configuration to ensure consistency between local and remote environments.
+**Action Items for Service Teams:**
+Each team should update the `README.md` file in their service folder with the following details:
+* **Tech Stack**: Specify the programming languages, frameworks, and versions used (e.g., Python 3.13/FastAPI, Go 1.23).
+* **Local Development**: Step-by-step instructions on environment setup, dependency installation, and local execution.
+* **Testing Suite**: Details on how to write and run service-specific unit and integration tests.
+* **API Definitions**: Documentation of endpoints, data models, or links to Swagger/OpenAPI specs.
