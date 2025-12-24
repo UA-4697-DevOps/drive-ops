@@ -1,0 +1,29 @@
+---
+- name: Deploy TripService to VM
+  hosts: local_vm
+  become: no  
+  vars:
+    app_path: "/home/vagrant/app/trip-service"
+
+  tasks:
+    - name: Create app directory
+      file:
+        path: "{{ app_path }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy service source code
+      copy:
+        src: "/vagrant/trip-service/"
+        dest: "{{ app_path }}/"
+
+    - name: Build and Start containers
+      shell: "docker compose up -d --build"
+      args:
+        chdir: "{{ app_path }}"
+      register: deploy_status
+
+    - name: Show status
+      debug:
+        msg: "TripService is up and running!"
+      when: deploy_status.changed
