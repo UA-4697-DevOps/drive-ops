@@ -1,0 +1,15 @@
+name: Trip Service CI
+on:
+  push:
+    paths:
+      - 'trip-service/**'
+  pull_request:
+    paths:
+      - 'trip-service/**'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Infrastructure Stub
+        run: echo "Trip Service CI is ready. Waiting for tests..."

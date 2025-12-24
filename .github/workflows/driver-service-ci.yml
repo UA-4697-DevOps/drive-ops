@@ -1,0 +1,15 @@
+name: Client Gateway CI
+on:
+  push:
+    paths:
+      - 'client-gateway/**'
+  pull_request:
+    paths:
+      - 'client-gateway/**'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Infrastructure Stub
+        run: echo "Client Gateway CI is ready. Waiting for tests..."

@@ -1,0 +1,15 @@
+name: Driver Service CI
+on:
+  push:
+    paths:
+      - 'driver-service/**'
+  pull_request:
+    paths:
+      - 'driver-service/**'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Infrastructure Stub
+        run: echo "Driver Service CI is ready. Waiting for tests..."
