@@ -28,6 +28,11 @@ func (h *TripHandler) CreateTrip(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.CreateTrip(r.Context(), &trip); err != nil {
+		if errors.Is(err, service.ErrInvalidInput) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -59,6 +64,7 @@ func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /health
+// TODO: verifying database connectivity in health check
 func (h *TripHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"ok"}`))
