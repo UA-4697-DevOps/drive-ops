@@ -3,9 +3,11 @@ on:
   push:
     paths:
       - 'trip-service/**'
+      - '.github/workflows/trip-service-ci.yml'
   pull_request:
     paths:
       - 'trip-service/**'
+      - '.github/workflows/trip-service-ci.yml'
 jobs:
   test:
     runs-on: ubuntu-latest

@@ -3,9 +3,11 @@ on:
   push:
     paths:
       - 'driver-service/**'
+      - '.github/workflows/driver-service-ci.yml'
   pull_request:
     paths:
       - 'driver-service/**'
+      - '.github/workflows/driver-service-ci.yml'
 jobs:
   test:
     runs-on: ubuntu-latest
