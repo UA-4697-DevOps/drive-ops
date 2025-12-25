@@ -24,7 +24,7 @@ Welcome to the **Drive-Ops** monorepo — distributed infrastructure and microse
 
 ## Getting Started
 
-Contribution Flow: https://github.com/UA-4697-DevOps/drive-ops/blob/main/CONTRIBUTING.md
+Contribution Flow: [CONTRIBUTING.md](https://github.com/UA-4697-DevOps/drive-ops/blob/main/CONTRIBUTING.md)
 
 ### Client Gateway
 - Prereqs: `<list>`
