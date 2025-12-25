@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"trip-service/internal/domain"
 	"trip-service/internal/service"
@@ -31,6 +32,7 @@ func (h *TripHandler) CreateTrip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(trip)
 }
@@ -43,13 +45,16 @@ func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid UUID format", http.StatusBadRequest)
 		return
 	}
-
 	trip, err := h.svc.GetTrip(r.Context(), id)
 	if err != nil {
-		http.Error(w, "Trip not found", http.StatusNotFound)
+		if errors.Is(err, service.ErrTripNotFound) {
+			http.Error(w, "Trip not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
 		return
 	}
-
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(trip)
 }
 

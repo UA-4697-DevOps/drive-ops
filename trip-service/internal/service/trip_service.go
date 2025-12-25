@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"trip-service/internal/domain"
 	"trip-service/internal/repository"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 var (
@@ -23,23 +25,23 @@ func NewTripService(repo *repository.TripRepository) *TripService {
 }
 
 func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
-	if trip.Pickup == "" || trip.Dropoff == "" {
+	if trip.Pickup == "" || trip.Dropoff == "" || trip.PassengerID == uuid.Nil {
 		return ErrInvalidInput
-	}
-	if trip.PassengerID == uuid.Nil {
-		return errors.New("passenger_id is required")
 	}
 
 	trip.ID = uuid.New()
-	trip.Status = "PENDING"
-	
+	trip.Status = domain.TripStatusPending
+
 	return s.repo.Create(ctx, trip)
 }
 
 func (s *TripService) GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, error) {
 	trip, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, ErrTripNotFound
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrTripNotFound
+		}
+		return nil, fmt.Errorf("failed to get trip: %w", err)
 	}
 	return trip, nil
 }

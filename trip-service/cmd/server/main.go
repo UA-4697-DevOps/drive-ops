@@ -11,8 +11,8 @@ import (
 
 	api "trip-service/internal/api/http"
 
-	"github.com/joho/godotenv"
 	"github.com/go-chi/chi/v5"
+	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -29,12 +29,13 @@ func main() {
 		log.Println("Note: .env file not found, using system env variables")
 	}
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
 		getEnv("DB_HOST", "localhost"),
 		getEnv("DB_USER", "postgres"),
 		getEnv("DB_PASSWORD", "postgres"),
 		getEnv("DB_NAME", "trip_db"),
 		getEnv("DB_PORT", "5432"),
+		getEnv("DB_SSLMODE", "disable"),
 	)
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
@@ -48,7 +49,7 @@ func main() {
 	handler := api.NewTripHandler(svc)
 
 	r := chi.NewRouter()
-	
+
 	r.Get("/health", handler.HealthCheck)
 	r.Route("/trips", func(r chi.Router) {
 		r.Post("/", handler.CreateTrip)
