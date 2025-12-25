@@ -1,15 +1,15 @@
-name: Driver Service CI
+name: Client Gateway CI
 on:
   push:
     paths:
-      - 'driver-service/**'
+      - 'client-gateway/**'
   pull_request:
     paths:
-      - 'driver-service/**'
+      - 'client-gateway/**'
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Infrastructure Stub
-        run: echo "Driver Service CI is ready. Waiting for tests..."
+        run: echo "Client Gateway CI is ready. Waiting for tests..."
