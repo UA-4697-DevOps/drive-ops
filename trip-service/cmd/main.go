@@ -29,13 +29,19 @@ func main() {
 		log.Println("Note: .env file not found, using system env variables")
 	}
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
-		getEnv("DB_HOST", "localhost"),
-		getEnv("DB_USER", "postgres"),
-		getEnv("DB_PASSWORD", "postgres"),
-		getEnv("DB_NAME", "trip_db"),
-		getEnv("DB_PORT", "5432"),
-	)
+	// Support both DB_URL (from docker-compose) and individual env vars (for local dev)
+	var dsn string
+	if dbURL := os.Getenv("DB_URL"); dbURL != "" {
+		dsn = dbURL
+	} else {
+		dsn = fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
+			getEnv("DB_HOST", "localhost"),
+			getEnv("DB_USER", "postgres"),
+			getEnv("DB_PASSWORD", "postgres"),
+			getEnv("DB_NAME", "trip_db"),
+			getEnv("DB_PORT", "5432"),
+		)
+	}
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
