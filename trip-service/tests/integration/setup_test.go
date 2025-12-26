@@ -139,6 +139,22 @@ func WaitForDB(dsn string, timeout time.Duration) error {
 
 // RunMigrations executes SQL migrations from the migrations directory
 func RunMigrations(db *gorm.DB) error {
+	// Check if migrations already applied (e.g., by trip-migrations service in CI)
+	var exists bool
+	query := `SELECT EXISTS (
+		SELECT FROM information_schema.tables
+		WHERE table_schema = 'public'
+		AND table_name = 'trips'
+	)`
+	if err := db.Raw(query).Scan(&exists).Error; err != nil {
+		return fmt.Errorf("failed to check if migrations applied: %w", err)
+	}
+
+	if exists {
+		log.Println("Migrations already applied, skipping")
+		return nil
+	}
+
 	sqlDB, err := db.DB()
 	if err != nil {
 		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
