@@ -3,8 +3,9 @@ package http
 import (
 	"encoding/json"
 	"net/http"
-	"trip-service/internal/domain"
-	"trip-service/internal/service"
+
+	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/domain"
+	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/service"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"

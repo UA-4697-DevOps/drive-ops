@@ -2,6 +2,9 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
+	"io"
+	"net/http"
 	"testing"
 	"time"
 
@@ -230,32 +233,33 @@ func TestTripRepository_Delete(t *testing.T) {
 }
 
 // TestHealthEndpoint tests the health check endpoint
-// NOTE: This test will only work after HTTP server is implemented
 func TestHealthEndpoint(t *testing.T) {
-	t.Skip("Skipping health endpoint test - HTTP server not yet implemented")
+	//t.Skip("Skipping health endpoint test - HTTP server not yet implemented")
 
-	// When HTTP server is ready, uncomment and update the URL:
-	/*
-		resp, err := MakeHTTPRequest("GET", "http://localhost:8080/health")
-		if err != nil {
-			t.Fatalf("Failed to make health check request: %v", err)
-		}
-		defer resp.Body.Close()
+	resp, err := MakeHTTPRequest("GET", "http://localhost:5002/health")
+	if err != nil {
+		t.Fatalf("Failed to make health check request: %v", err)
+	}
+	defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("Expected status 200, got %d", resp.StatusCode)
-		}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
 
-		// Parse and verify response body
-		var health map[string]interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
-		}
+	// Parse and verify response body
+	var health map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
+		// Read the body to see what we actually got
+		resp.Body.Close()
+		resp, _ = MakeHTTPRequest("GET", "http://localhost:5002/health")
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Failed to decode response: %v. Body was: %s", err, string(body))
+	}
 
-		if status, ok := health["status"]; !ok || status != "healthy" {
-			t.Errorf("Expected status 'healthy', got %v", status)
-		}
+	if status, ok := health["status"]; !ok || status != "ok" {
+		t.Errorf("Expected status 'ok', got %v", status)
+	}
 
-		t.Log("Health endpoint returned 200 OK")
-	*/
+	t.Log("Health endpoint returned 200 OK")
+
 }

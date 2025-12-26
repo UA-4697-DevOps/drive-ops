@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24.0-alpine AS builder
 WORKDIR /app
 COPY . .
 RUN go build -o trip-service ./cmd/main.go
@@ -10,9 +10,8 @@ FROM alpine:3.18
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /app
 
-# Copy binary and migrations
+# Copy binary (migrations handled by trip-migrations service)
 COPY --from=builder /app/trip-service .
-COPY --from=builder /app/migrations ./migrations
 
 # Set permissions and switch user
 RUN chown -R appuser:appgroup /app

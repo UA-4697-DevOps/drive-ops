@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
-	"trip-service/internal/domain"
 
+	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/domain"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )

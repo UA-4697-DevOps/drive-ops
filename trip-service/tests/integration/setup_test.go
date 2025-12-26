@@ -179,12 +179,12 @@ func getEnv(key, defaultValue string) string {
 
 // startDockerCompose starts the test database container
 func startDockerCompose() error {
-	cmd := exec.Command("docker-compose", "-f", "docker-compose.test.yml", "up", "-d")
+	cmd := exec.Command("docker", "compose", "-f", "docker-compose.test.yml", "up", "-d")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("docker-compose up failed: %w", err)
+		return fmt.Errorf("docker compose up failed: %w", err)
 	}
 
 	log.Println("Started test database container")
@@ -193,12 +193,12 @@ func startDockerCompose() error {
 
 // stopDockerCompose stops and removes the test database container
 func stopDockerCompose() {
-	cmd := exec.Command("docker-compose", "-f", "docker-compose.test.yml", "down", "-v")
+	cmd := exec.Command("docker", "compose", "-f", "docker-compose.test.yml", "down", "-v")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		log.Printf("Warning: docker-compose down failed: %v", err)
+		log.Printf("Warning: docker compose down failed: %v", err)
 	} else {
 		log.Println("Stopped test database container")
 	}

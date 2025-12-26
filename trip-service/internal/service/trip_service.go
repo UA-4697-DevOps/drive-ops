@@ -3,8 +3,9 @@ package service
 import (
 	"context"
 	"errors"
-	"trip-service/internal/domain"
-	"trip-service/internal/repository"
+
+	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/domain"
+	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/repository"
 
 	"github.com/google/uuid"
 )

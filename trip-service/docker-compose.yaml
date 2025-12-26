@@ -21,9 +21,9 @@ services:
   db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER=vagrant
-      POSTGRES_PASSWORD=trips
-      POSTGRES_DB=trips
+      POSTGRES_USER: vagrant
+      POSTGRES_PASSWORD: trips
+      POSTGRES_DB: trips
     ports:
       - "5432:5432"
     volumes:

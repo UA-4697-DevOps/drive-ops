@@ -6,13 +6,13 @@ import (
 	"net/http"
 	"os"
 
-	"trip-service/internal/repository"
-	"trip-service/internal/service"
+	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/repository"
+	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/service"
 
-	api "trip-service/internal/api/http"
+	api "github.com/UA-4697-DevOps/drive-ops/trip-service/internal/api/http"
 
-	"github.com/joho/godotenv"
 	"github.com/go-chi/chi/v5"
+	"github.com/joho/godotenv"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
