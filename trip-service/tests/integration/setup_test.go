@@ -23,19 +23,28 @@ var (
 
 // TestMain sets up the test environment, runs tests, and tears down
 func TestMain(m *testing.M) {
-	// Start docker-compose for test database
-	if err := startDockerCompose(); err != nil {
-		log.Fatalf("Failed to start docker-compose: %v", err)
-	}
-
-	// Wait for database to be ready
-	log.Println("Waiting for PostgreSQL to start...")
-	time.Sleep(5 * time.Second) // Give container time to start
-
 	dsn := getTestDSN()
-	if err := WaitForDB(dsn, 90*time.Second); err != nil {
-		stopDockerCompose()
-		log.Fatalf("Failed to connect to test database: %v", err)
+
+	// Check if database is already running (e.g., in CI with full stack)
+	managedCompose := false
+	if err := WaitForDB(dsn, 2*time.Second); err != nil {
+		// Database not available, start docker-compose
+		log.Println("Database not available, starting docker-compose...")
+		if err := startDockerCompose(); err != nil {
+			log.Fatalf("Failed to start docker-compose: %v", err)
+		}
+		managedCompose = true
+
+		// Wait for database to be ready
+		log.Println("Waiting for PostgreSQL to start...")
+		time.Sleep(5 * time.Second) // Give container time to start
+
+		if err := WaitForDB(dsn, 90*time.Second); err != nil {
+			stopDockerCompose()
+			log.Fatalf("Failed to connect to test database: %v", err)
+		}
+	} else {
+		log.Println("Database already running, skipping docker-compose startup")
 	}
 
 	log.Println("PostgreSQL is ready!")
@@ -44,14 +53,18 @@ func TestMain(m *testing.M) {
 	var err error
 	testDB, err = SetupTestDB()
 	if err != nil {
-		stopDockerCompose()
+		if managedCompose {
+			stopDockerCompose()
+		}
 		log.Fatalf("Failed to setup test database: %v", err)
 	}
 
 	// Run migrations
 	if err := RunMigrations(testDB); err != nil {
 		TearDownTestDB(testDB)
-		stopDockerCompose()
+		if managedCompose {
+			stopDockerCompose()
+		}
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
@@ -60,7 +73,9 @@ func TestMain(m *testing.M) {
 
 	// Cleanup
 	TearDownTestDB(testDB)
-	stopDockerCompose()
+	if managedCompose {
+		stopDockerCompose()
+	}
 
 	os.Exit(code)
 }

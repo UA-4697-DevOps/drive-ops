@@ -54,11 +54,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Start test database
+      - name: Start trip-service stack
         run: |
-          cd trip-service/tests/integration
-          docker compose -f docker-compose.test.yml up -d
-          sleep 10
+          cd trip-service
+          docker compose up -d --build
+          sleep 15
+
+      - name: Check service health
+        run: |
+          curl -f http://localhost:5002/health || (docker compose -f trip-service/docker-compose.yaml logs && exit 1)
 
       - name: Run integration tests
         run: |
@@ -66,13 +70,14 @@ jobs:
           go test -v ./tests/integration/...
         env:
           DB_HOST: localhost
-          DB_PORT: 5433
-          DB_USER: testuser
-          DB_PASSWORD: testpass
-          DB_NAME: trip_service_test
+          DB_PORT: 5432
+          DB_USER: vagrant
+          DB_PASSWORD: trips
+          DB_NAME: trips
 
-      - name: Stop test database
+      - name: Stop trip-service stack
         if: always()
         run: |
-          cd trip-service/tests/integration
-          docker compose -f docker-compose.test.yml down -v 
+          cd trip-service
+          docker compose logs
+          docker compose down -v 
