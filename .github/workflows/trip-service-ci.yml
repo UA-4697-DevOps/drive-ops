@@ -1,5 +1,4 @@
 name: Trip Service CI
-
 on:
   push:
     paths:
