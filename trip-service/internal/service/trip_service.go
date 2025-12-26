@@ -33,7 +33,7 @@ func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
 
 	trip.ID = uuid.New()
 	trip.Status = "PENDING"
-	
+
 	return s.repo.Create(ctx, trip)
 }
 
