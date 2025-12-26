@@ -1,0 +1,21 @@
+version: 1.0 
+
+reviews: 
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+
+path_filters:
+  - "!**/node_modules/**"
+  - "!**/*.lock"
+
+tools:
+  shellcheck:
+    enabled: true #checking scripts and dockerfiles
+  revive:
+    enabled: true #checking go code
+  ruff:
+    enabled: true #checking python code
+
+chat: 
+  auto_reply: true 

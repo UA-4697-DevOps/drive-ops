@@ -10,3 +10,9 @@
 ## Pull Requests
 - PRs require at least 1 review.
 - Main branch is protected.
+
+## AI Code Reviews 
+We use **CodeRebbit to have instant feedback on your code
+- **Bot Comments**: helpful suggestions. We can fix them or ignore
+- **Interaction**: we can ask for improvements 
+
