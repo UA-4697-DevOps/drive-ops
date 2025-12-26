@@ -24,7 +24,7 @@ Welcome to the **Drive-Ops** monorepo — distributed infrastructure and microse
 
 ## Getting Started
 
-Contribution Flow: [CONTRIBUTING.md](https://github.com/UA-4697-DevOps/drive-ops/blob/main/CONTRIBUTING.md)
+Contribution Flow: [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 ### Client Gateway
 - Prereqs: `<list>`
@@ -40,17 +40,18 @@ Contribution Flow: [CONTRIBUTING.md](https://github.com/UA-4697-DevOps/drive-ops
 - API docs: `<link>`
 
 ### Driver Service
-- Prereqs: `<list>`
-- Env vars: `<LIST>`
+- Prereqs: Python 3.14.2, [driver-service/requirements.txt](./driver-service/requirements.txt)
+- Env vars: [driver-service/.env.example](./driver-service/.env.example)
 - Run:
-  ```
-  <cmd>
+  ```bash
+  python driver-service/src/main.py
   ```
 - Test:
+  ```bash
+  pytest
   ```
-  <cmd>
-  ```
-- API docs: `<link>`
+- API docs: [driver-service/README.md](./driver-service/README.md)
+- Contributing: [driver-service/CONTRIBUTING.md](./driver-service/CONTRIBUTING.md)
 
 ### Trip Service
 - Prereqs: `<list>`
