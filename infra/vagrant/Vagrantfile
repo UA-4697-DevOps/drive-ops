@@ -51,6 +51,7 @@ Vagrant.configure("2") do |config|
         #Trip service playbook
         ansible-playbook -i inventory/localhost trip-service-deploy.yaml
 
+        
         echo ""
         echo "Provisioning complete!"
         echo ""
