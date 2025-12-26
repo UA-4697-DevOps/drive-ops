@@ -135,3 +135,4 @@
           - "{{ docker_compose_version.stdout }}"
           - "========================================"
       tags: always
+      
