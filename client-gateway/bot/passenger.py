@@ -14,7 +14,6 @@ def register_handlers(bot, user_orders, user_roles, buttons, keyboards, helpers)
     
     passenger_menu = keyboards['passenger_menu']
     skip_menu = keyboards['skip_menu']
-    role_selection_menu = keyboards['role_selection_menu']
     get_user_menu = keyboards['get_user_menu']
     
     safe_send = helpers['safe_send']
@@ -54,6 +53,11 @@ def register_handlers(bot, user_orders, user_roles, buttons, keyboards, helpers)
 
     def process_pickup_step(message):
         chat_id = message.chat.id
+        
+        if chat_id not in user_orders or not user_orders.get(chat_id):
+            safe_send(chat_id, "❌ Замовлення скасовано або закінчилось. Спробуйте знову.", reply_markup=get_user_menu(chat_id))
+            return
+        
         address = message.text
 
         if not validate_address_and_retry(chat_id, address, "\u274C Адреса занадто коротка. Спробуйте ще раз:", process_pickup_step):
@@ -65,6 +69,11 @@ def register_handlers(bot, user_orders, user_roles, buttons, keyboards, helpers)
 
     def process_dropoff_step(message):
         chat_id = message.chat.id
+        
+        if chat_id not in user_orders or not user_orders.get(chat_id):
+            safe_send(chat_id, "❌ Замовлення скасовано або закінчилось. Спробуйте знову.", reply_markup=get_user_menu(chat_id))
+            return
+        
         address = message.text
 
         if not validate_address_and_retry(chat_id, address, "\u274C Будь ласка, вкажіть повну адресу призначення:", process_dropoff_step):
@@ -81,6 +90,10 @@ def register_handlers(bot, user_orders, user_roles, buttons, keyboards, helpers)
 
     def process_comment_step(message):
         chat_id = message.chat.id
+        
+        if chat_id not in user_orders or not user_orders.get(chat_id):
+            safe_send(chat_id, "❌ Замовлення скасовано або закінчилось. Спробуйте знову.", reply_markup=get_user_menu(chat_id))
+            return
         
         if message.text == BTN_SKIP:
             user_orders[chat_id]['comment'] = "Не вказано"

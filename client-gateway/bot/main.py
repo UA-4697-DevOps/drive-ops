@@ -3,6 +3,7 @@ import sys
 import logging
 from logging.handlers import RotatingFileHandler
 import time
+import requests
 import telebot
 from telebot import types
 from dotenv import load_dotenv
@@ -133,24 +134,87 @@ def submit_trip_request(chat_id, order):
         chat_id, payload['pickup'], payload['dropoff'], payload['comment']
     )
 
-    trip_id = f"TRIP-{chat_id}-{int(time.time())}"
-    logger.info("Trip request generated id: %s", trip_id)
-
-    response = {
-        'success': True,
-        'trip_id': trip_id,
-        'request_id': trip_id,
-        'status': 'pending',
-        'error': None,
-        'raw_response': {'id': trip_id, 'status': 'pending'},
-    }
-
-    logger.info(
-        "Trip request response: success=%s trip_id=%s status=%s error=%s",
-        response['success'], response['trip_id'], response['status'], response['error']
-    )
-
-    return response
+    request_id = f"REQ-{chat_id}-{int(time.time())}"
+    
+    try:
+        url = f"{TRIP_SERVICE_URL}/requests"
+        logger.info("Sending trip request to %s", url)
+        
+        resp = requests.post(url, json=payload, timeout=10)
+        
+        if resp.status_code in (200, 201):
+            data = resp.json()
+            trip_id = data.get('id') or data.get('trip_id') or request_id
+            status = data.get('status', 'pending')
+            
+            logger.info(
+                "Trip request success: trip_id=%s status=%s",
+                trip_id, status
+            )
+            
+            return {
+                'success': True,
+                'trip_id': trip_id,
+                'request_id': request_id,
+                'status': status,
+                'error': None,
+                'raw_response': data,
+            }
+        else:
+            logger.error(
+                "Trip request failed: status_code=%s response=%s",
+                resp.status_code, resp.text
+            )
+            return {
+                'success': False,
+                'trip_id': None,
+                'request_id': request_id,
+                'status': 'error',
+                'error': {
+                    'status_code': resp.status_code,
+                    'message': resp.text or 'Unknown error',
+                },
+                'raw_response': None,
+            }
+    except requests.exceptions.Timeout:
+        logger.error("Trip request timeout for chat_id=%s", chat_id)
+        return {
+            'success': False,
+            'trip_id': None,
+            'request_id': request_id,
+            'status': 'error',
+            'error': {
+                'status_code': 504,
+                'message': 'Сервіс не відповідає. Спробуйте пізніше.',
+            },
+            'raw_response': None,
+        }
+    except requests.exceptions.ConnectionError:
+        logger.error("Trip request connection error for chat_id=%s", chat_id)
+        return {
+            'success': False,
+            'trip_id': None,
+            'request_id': request_id,
+            'status': 'error',
+            'error': {
+                'status_code': 503,
+                'message': 'Сервіс недоступний. Спробуйте пізніше.',
+            },
+            'raw_response': None,
+        }
+    except Exception as e:
+        logger.exception("Trip request unexpected error for chat_id=%s: %s", chat_id, e)
+        return {
+            'success': False,
+            'trip_id': None,
+            'request_id': request_id,
+            'status': 'error',
+            'error': {
+                'status_code': 500,
+                'message': str(e),
+            },
+            'raw_response': None,
+        }
 
 HELPERS = {
     'safe_send': safe_send,
