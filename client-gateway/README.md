@@ -31,7 +31,7 @@ pip install -r requirements.txt
 ```
 
 ```bash
-python bot/drive_ops_bot.py
+python bot/main.py
 ```
 
 ## Running with Docker
