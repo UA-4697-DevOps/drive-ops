@@ -1,0 +1,17 @@
+name: Driver Service CI
+on:
+  push:
+    paths:
+      - 'driver-service/**'
+      - '.github/workflows/driver-service-ci.yml'
+  pull_request:
+    paths:
+      - 'driver-service/**'
+      - '.github/workflows/driver-service-ci.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Infrastructure Stub
+        run: echo "Driver Service CI is ready. Waiting for tests..."
