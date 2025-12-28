@@ -3,9 +3,11 @@ package http
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
-	"trip-service/internal/domain"
-	"trip-service/internal/service"
+
+	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/domain"
+	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/service"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -29,17 +31,20 @@ func (h *TripHandler) CreateTrip(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.svc.CreateTrip(r.Context(), &trip); err != nil {
 		if errors.Is(err, service.ErrInvalidInput) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "Invalid input: pickup and dropoff locations are required", http.StatusBadRequest)
 			return
 		}
-
-		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		// Log actual error for debugging, return generic message to client
+		log.Printf("Failed to create trip: %v", err)
+		http.Error(w, "Failed to create trip", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(trip)
+	if err := json.NewEncoder(w).Encode(trip); err != nil {
+		log.Printf("Failed to encode response: %v", err)
+	}
 }
 
 // GET /trips/{id}
@@ -50,22 +55,24 @@ func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid UUID format", http.StatusBadRequest)
 		return
 	}
+
 	trip, err := h.svc.GetTrip(r.Context(), id)
 	if err != nil {
-		if errors.Is(err, service.ErrTripNotFound) {
-			http.Error(w, "Trip not found", http.StatusNotFound)
-		} else {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-		}
+		http.Error(w, "Trip not found", http.StatusNotFound)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(trip)
+	if err := json.NewEncoder(w).Encode(trip); err != nil {
+		log.Printf("Failed to encode response: %v", err)
+	}
 }
 
 // GET /health
-// TODO: verifying database connectivity in health check
 func (h *TripHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
+	if _, err := w.Write([]byte(`{"status":"ok"}`)); err != nil {
+		log.Printf("Failed to write health response: %v", err)
+	}
 }

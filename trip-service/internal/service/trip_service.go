@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"trip-service/internal/domain"
-	"trip-service/internal/repository"
+
+	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/domain"
+	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/repository"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -25,8 +26,11 @@ func NewTripService(repo *repository.TripRepository) *TripService {
 }
 
 func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
-	if trip.Pickup == "" || trip.Dropoff == "" || trip.PassengerID == uuid.Nil {
+	if trip.Pickup == "" || trip.Dropoff == "" {
 		return ErrInvalidInput
+	}
+	if trip.PassengerID == uuid.Nil {
+		return errors.New("passenger_id is required")
 	}
 
 	trip.ID = uuid.New()
