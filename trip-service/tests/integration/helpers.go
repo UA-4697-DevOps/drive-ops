@@ -19,7 +19,7 @@ func CreateTestTrip(passengerID uuid.UUID, pickup, dropoff string) *domain.Trip 
 		DriverID:    nil,
 		Pickup:      pickup,
 		Dropoff:     dropoff,
-		Status:      "PENDING",
+		Status:      domain.TripStatusPending,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
