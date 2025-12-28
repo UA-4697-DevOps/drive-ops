@@ -240,7 +240,7 @@ func TestHealthEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to make health check request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
@@ -250,7 +250,7 @@ func TestHealthEndpoint(t *testing.T) {
 	var health map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
 		// Read the body to see what we actually got
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		resp, _ = MakeHTTPRequest("GET", "http://localhost:5002/health")
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("Failed to decode response: %v. Body was: %s", err, string(body))

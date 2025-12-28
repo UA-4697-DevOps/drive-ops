@@ -99,7 +99,7 @@ func TearDownTestDB(db *gorm.DB) {
 	if db != nil {
 		sqlDB, err := db.DB()
 		if err == nil {
-			sqlDB.Close()
+			_ = sqlDB.Close()
 		}
 	}
 }
@@ -126,7 +126,7 @@ func WaitForDB(dsn string, timeout time.Duration) error {
 			}
 
 			err = db.Ping()
-			db.Close()
+			_ = db.Close()
 
 			if err == nil {
 				log.Printf("Successfully connected to database after %d attempts", attempt)
