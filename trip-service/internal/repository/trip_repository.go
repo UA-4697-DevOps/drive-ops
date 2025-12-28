@@ -40,4 +40,3 @@ func (r *TripRepository) Update(ctx context.Context, trip *domain.Trip) error {
 func (r *TripRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.db.WithContext(ctx).Delete(&domain.Trip{}, "id = ?", id).Error
 }
-
