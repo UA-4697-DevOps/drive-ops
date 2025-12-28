@@ -23,19 +23,28 @@ var (
 
 // TestMain sets up the test environment, runs tests, and tears down
 func TestMain(m *testing.M) {
-	// Start docker-compose for test database
-	if err := startDockerCompose(); err != nil {
-		log.Fatalf("Failed to start docker-compose: %v", err)
-	}
-
-	// Wait for database to be ready
-	log.Println("Waiting for PostgreSQL to start...")
-	time.Sleep(5 * time.Second) // Give container time to start
-
 	dsn := getTestDSN()
-	if err := WaitForDB(dsn, 90*time.Second); err != nil {
-		stopDockerCompose()
-		log.Fatalf("Failed to connect to test database: %v", err)
+
+	// Check if database is already running (e.g., in CI with full stack)
+	managedCompose := false
+	if err := WaitForDB(dsn, 2*time.Second); err != nil {
+		// Database not available, start docker-compose
+		log.Println("Database not available, starting docker-compose...")
+		if err := startDockerCompose(); err != nil {
+			log.Fatalf("Failed to start docker-compose: %v", err)
+		}
+		managedCompose = true
+
+		// Wait for database to be ready
+		log.Println("Waiting for PostgreSQL to start...")
+		time.Sleep(5 * time.Second) // Give container time to start
+
+		if err := WaitForDB(dsn, 90*time.Second); err != nil {
+			stopDockerCompose()
+			log.Fatalf("Failed to connect to test database: %v", err)
+		}
+	} else {
+		log.Println("Database already running, skipping docker-compose startup")
 	}
 
 	log.Println("PostgreSQL is ready!")
@@ -44,14 +53,18 @@ func TestMain(m *testing.M) {
 	var err error
 	testDB, err = SetupTestDB()
 	if err != nil {
-		stopDockerCompose()
+		if managedCompose {
+			stopDockerCompose()
+		}
 		log.Fatalf("Failed to setup test database: %v", err)
 	}
 
 	// Run migrations
 	if err := RunMigrations(testDB); err != nil {
 		TearDownTestDB(testDB)
-		stopDockerCompose()
+		if managedCompose {
+			stopDockerCompose()
+		}
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
@@ -60,7 +73,9 @@ func TestMain(m *testing.M) {
 
 	// Cleanup
 	TearDownTestDB(testDB)
-	stopDockerCompose()
+	if managedCompose {
+		stopDockerCompose()
+	}
 
 	os.Exit(code)
 }
@@ -124,6 +139,22 @@ func WaitForDB(dsn string, timeout time.Duration) error {
 
 // RunMigrations executes SQL migrations from the migrations directory
 func RunMigrations(db *gorm.DB) error {
+	// Check if migrations already applied (e.g., by trip-migrations service in CI)
+	var exists bool
+	query := `SELECT EXISTS (
+		SELECT FROM information_schema.tables
+		WHERE table_schema = 'public'
+		AND table_name = 'trips'
+	)`
+	if err := db.Raw(query).Scan(&exists).Error; err != nil {
+		return fmt.Errorf("failed to check if migrations applied: %w", err)
+	}
+
+	if exists {
+		log.Println("Migrations already applied, skipping")
+		return nil
+	}
+
 	sqlDB, err := db.DB()
 	if err != nil {
 		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
@@ -179,12 +210,12 @@ func getEnv(key, defaultValue string) string {
 
 // startDockerCompose starts the test database container
 func startDockerCompose() error {
-	cmd := exec.Command("docker-compose", "-f", "docker-compose.test.yml", "up", "-d")
+	cmd := exec.Command("docker", "compose", "-f", "docker-compose.test.yml", "up", "-d")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("docker-compose up failed: %w", err)
+		return fmt.Errorf("docker compose up failed: %w", err)
 	}
 
 	log.Println("Started test database container")
@@ -193,12 +224,12 @@ func startDockerCompose() error {
 
 // stopDockerCompose stops and removes the test database container
 func stopDockerCompose() {
-	cmd := exec.Command("docker-compose", "-f", "docker-compose.test.yml", "down", "-v")
+	cmd := exec.Command("docker", "compose", "-f", "docker-compose.test.yml", "down", "-v")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
-		log.Printf("Warning: docker-compose down failed: %v", err)
+		log.Printf("Warning: docker compose down failed: %v", err)
 	} else {
 		log.Println("Stopped test database container")
 	}
