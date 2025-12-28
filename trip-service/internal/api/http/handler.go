@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 
@@ -29,10 +30,17 @@ func (h *TripHandler) CreateTrip(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.CreateTrip(r.Context(), &trip); err != nil {
-		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		if errors.Is(err, service.ErrInvalidInput) {
+			http.Error(w, "Invalid input: pickup and dropoff locations are required", http.StatusBadRequest)
+			return
+		}
+		// Log actual error for debugging, return generic message to client
+		log.Printf("Failed to create trip: %v", err)
+		http.Error(w, "Failed to create trip", http.StatusInternalServerError)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(trip); err != nil {
 		log.Printf("Failed to encode response: %v", err)
@@ -54,6 +62,7 @@ func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(trip); err != nil {
 		log.Printf("Failed to encode response: %v", err)
 	}
@@ -61,6 +70,7 @@ func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
 
 // GET /health
 func (h *TripHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte(`{"status":"ok"}`)); err != nil {
 		log.Printf("Failed to write health response: %v", err)
