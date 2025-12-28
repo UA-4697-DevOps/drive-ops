@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/domain"
 	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/repository"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 var (
@@ -32,7 +34,7 @@ func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
 	}
 
 	trip.ID = uuid.New()
-	trip.Status = "PENDING"
+	trip.Status = domain.TripStatusPending
 
 	return s.repo.Create(ctx, trip)
 }
@@ -40,7 +42,10 @@ func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
 func (s *TripService) GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, error) {
 	trip, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, ErrTripNotFound
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrTripNotFound
+		}
+		return nil, fmt.Errorf("failed to get trip: %w", err)
 	}
 	return trip, nil
 }

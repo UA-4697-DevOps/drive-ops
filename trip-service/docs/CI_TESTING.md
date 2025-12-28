@@ -351,7 +351,7 @@ concurrency:
 
 ## File Structure
 
-```
+```text
 trip-service/
 ├── cmd/
 │   └── main.go                      # Entry point, DB_URL support
