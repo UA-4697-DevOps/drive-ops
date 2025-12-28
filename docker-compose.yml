@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # --- Database: Postgres ---
+  db:
+    image: postgres:15-alpine
+    container_name: drive-ops-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${TRIP_DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-db:/docker-entrypoint-initdb.d
+    networks:
+      - drive-ops-net
+
+  # --- Message Broker: RabbitMQ ---
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: drive-ops-mq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"   # Порт для AMQP (взаємодія сервісів)
+      - "15672:15672" # Порт для Management UI (панель керування)
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - drive-ops-net
+
+networks:
+  drive-ops-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
