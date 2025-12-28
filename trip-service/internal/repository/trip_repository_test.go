@@ -46,7 +46,13 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// 3. Авто-міграція схеми (створення таблиці trips)
+	// 3. Створення enum типу trip_status (потрібно перед AutoMigrate)
+	err = db.Exec("CREATE TYPE trip_status AS ENUM ('PENDING', 'ACTIVE', 'COMPLETED', 'CANCELLED')").Error
+	if err != nil {
+		t.Fatalf("Failed to create trip_status enum: %v", err)
+	}
+
+	// 4. Авто-міграція схеми (створення таблиці trips)
 	err = db.AutoMigrate(&domain.Trip{})
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)
