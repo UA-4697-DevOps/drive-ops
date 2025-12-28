@@ -20,8 +20,8 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 	ctx := context.Background()
 
 	// 1. Налаштування та запуск контейнера Postgres (використовуємо 15-alpine для швидкості)
-	pgContainer, err := postgres.RunContainer(ctx,
-		testcontainers.WithImage("postgres:15-alpine"),
+	pgContainer, err := postgres.Run(ctx,
+		"postgres:15-alpine",
 		postgres.WithDatabase("trip_service_test"),
 		postgres.WithUsername("testuser"),
 		postgres.WithPassword("testpass"),
@@ -54,7 +54,7 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 
 	// Повертаємо об'єкт БД та функцію очищення
 	return db, func() {
-		pgContainer.Terminate(ctx)
+		_ = pgContainer.Terminate(ctx)
 	}
 }
 

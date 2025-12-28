@@ -33,7 +33,7 @@ func (h *TripHandler) CreateTrip(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(trip)
+	_ = json.NewEncoder(w).Encode(trip)
 }
 
 // GET /trips/{id}
@@ -51,11 +51,11 @@ func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(trip)
+	_ = json.NewEncoder(w).Encode(trip)
 }
 
 // GET /health
 func (h *TripHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
+	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
