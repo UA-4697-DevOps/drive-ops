@@ -1,4 +1,4 @@
 #Golang migrate tool
-FROM migrate/migrate
+FROM migrate/migrate:v4.19.0
 COPY db/migrations /migrations
 ENTRYPOINT ["migrate"]
