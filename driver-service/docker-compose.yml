@@ -1,7 +1,7 @@
 services:
   driver-service:
     build:
-      context: ./driver-service
+      context: .
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
