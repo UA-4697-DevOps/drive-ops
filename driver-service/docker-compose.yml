@@ -13,3 +13,4 @@ services:
 
   broker:
     image: rabbitmq:3
+    
