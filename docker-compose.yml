@@ -1,0 +1,12 @@
+    client-gateway:
+        build:
+          context: ./client-gateway
+          dockerfile: Dockerfile
+        container_name: drive-ops-client-gateway
+        restart: always
+        environment:
+          BOT_TOKEN: ${BOT_TOKEN}
+        networks:
+          - drive-ops-net
+        depends_on:
+          - rabbitmq
