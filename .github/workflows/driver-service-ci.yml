@@ -1,4 +1,5 @@
 name: Driver Service CI
+
 on:
   push:
     paths:
@@ -8,10 +9,32 @@ on:
     paths:
       - 'driver-service/**'
       - '.github/workflows/driver-service-ci.yml'
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: driver-service
     steps:
-      - uses: actions/checkout@v6
-      - name: Infrastructure Stub
-        run: echo "Driver Service CI is ready. Waiting for tests..."
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest
+
+      - name: Run stub tests
+        run: |
+          pytest -q
+
+      - name: Run main.py
+        run: |
+          python src/main.py
+
