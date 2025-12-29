@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"trip-service/internal/domain"
-	"trip-service/internal/repository"
 	"trip-service/internal/service"
 
 	api "trip-service/internal/api/http"
@@ -54,8 +53,8 @@ func main() {
 	}
 
 	//Dependency Injection
-	repo := repository.NewTripRepository(db)
-	svc := service.NewTripService(repo)
+	// repo := repository.NewTripRepository(db)
+	svc := &service.MockTripService{}
 	handler := api.NewTripHandler(svc)
 
 	r := chi.NewRouter()
