@@ -16,3 +16,11 @@ type Trip struct {
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
+
+const (
+	TripStatusPending    = "PENDING"
+	TripStatusConfirmed  = "CONFIRMED"
+	TripStatusInProgress = "IN_PROGRESS"
+	TripStatusCompleted  = "COMPLETED"
+	TripStatusCancelled  = "CANCELLED"
+)
