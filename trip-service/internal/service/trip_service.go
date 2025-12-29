@@ -16,6 +16,13 @@ var (
 	ErrInvalidInput = errors.New("pickup and dropoff locations are required")
 )
 
+// TripServiceInterface описує поведінку сервісу
+type TripServiceInterface interface {
+	CreateTrip(ctx context.Context, trip *domain.Trip) error
+	GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, error)
+	CheckHealth(ctx context.Context) error
+}
+
 type TripService struct {
 	repo *repository.TripRepository
 }

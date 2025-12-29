@@ -12,10 +12,10 @@ import (
 )
 
 type TripHandler struct {
-	svc *service.TripService
+	svc service.TripServiceInterface
 }
 
-func NewTripHandler(svc *service.TripService) *TripHandler {
+func NewTripHandler(svc service.TripServiceInterface) *TripHandler {
 	return &TripHandler{svc: svc}
 }
 
