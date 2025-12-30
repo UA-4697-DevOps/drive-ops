@@ -156,16 +156,16 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         
         try:
             await query.edit_message_reply_markup(reply_markup=None)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception("Failed to clear inline keyboard markup for quick_order_taxi: %s", e)
         
         if chat_id not in user_roles:
             await context.bot.send_message(chat_id, "Спочатку оберіть вашу роль за допомогою команди /start")
-            return
+            return ConversationHandler.END
 
         if chat_id in user_orders and user_orders[chat_id].get('_in_progress'):
             await context.bot.send_message(chat_id, "У вас вже є незавершене замовлення. Скасуйте командою /cancel_order або завершіть поточне.")
-            return
+            return ConversationHandler.END
 
         user_orders[chat_id] = {'pickup': None, 'dropoff': None, 'comment': None, '_in_progress': True}
         
@@ -175,6 +175,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             parse_mode='Markdown',
             reply_markup=ReplyKeyboardRemove()
         )
+        return PICKUP
 
     async def handle_order_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
@@ -189,19 +190,18 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     chat_id, order.get('pickup'), order.get('dropoff'), order.get('comment')
                 )
 
-                result = submit_trip_request(chat_id, order)
+                result = await submit_trip_request(chat_id, order)
                 req_id = result.get('request_id')
-                status = result.get('status', 'created')
                 trip_id = result.get('trip_id')
                 error = result.get('error')
 
                 logger.info(
                     "Trip request response: success=%s trip_id=%s status=%s error=%s",
-                    result.get('success'), trip_id, status, error
+                    result.get('success'), trip_id, result.get('status'), error
                 )
 
                 if result.get('success'):
-                    status = result.get('status', 'PENDING')
+                    status = result.get('status', 'PENDING').upper()
                     status_text = {
                         'PENDING': '⏳ Очікує водія',
                         'CONFIRMED': '✅ Підтверджено',
@@ -244,7 +244,10 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
 
     # Conversation handler for ordering taxi
     conv_handler = ConversationHandler(
-        entry_points=[MessageHandler(filters.Text([BTN_ORDER_TAXI]), start_order_flow)],
+        entry_points=[
+            MessageHandler(filters.Text([BTN_ORDER_TAXI]), start_order_flow),
+            CallbackQueryHandler(handle_quick_order_taxi, pattern="^quick_order_taxi$"),
+        ],
         states={
             PICKUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_pickup_step)],
             DROPOFF: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_dropoff_step)],
@@ -256,5 +259,4 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     application.add_handler(MessageHandler(filters.Text([BTN_PASSENGER]), select_passenger_role))
     application.add_handler(MessageHandler(filters.Text([BTN_RATES]), show_rates))
     application.add_handler(conv_handler)
-    application.add_handler(CallbackQueryHandler(handle_quick_order_taxi, pattern="^quick_order_taxi$"))
     application.add_handler(CallbackQueryHandler(handle_order_status, pattern="^order_"))

@@ -3,7 +3,7 @@ import sys
 import logging
 from logging.handlers import RotatingFileHandler
 import time
-import requests
+import httpx
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters
 from dotenv import load_dotenv
@@ -107,13 +107,14 @@ async def safe_edit_message_text(chat_id, message_id, text, context, **kwargs):
         logger.exception("Failed to edit message %s/%s: %s", chat_id, message_id, e)
         return None
 
-def submit_trip_request(chat_id, order):
+async def submit_trip_request(chat_id, order):
     payload = {
         'pickup': order.get('pickup'),
         'dropoff': order.get('dropoff'),
         'comment': order.get('comment'),
         'source': 'telegram_bot',
         'user_chat_id': chat_id,
+        'passenger_id': order.get('passenger_id') or str(chat_id),
     }
     logger.info(
         "Trip request payload: chat_id=%s pickup=%s dropoff=%s comment=%s",
@@ -123,10 +124,11 @@ def submit_trip_request(chat_id, order):
     request_id = f"REQ-{chat_id}-{int(time.time())}"
     
     try:
-        url = f"{TRIP_SERVICE_URL}/requests"
+        url = f"{TRIP_SERVICE_URL}/trips"
         logger.info("Sending trip request to %s", url)
         
-        resp = requests.post(url, json=payload, timeout=10)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, json=payload)
         
         if resp.status_code in (200, 201):
             data = resp.json()
@@ -162,7 +164,7 @@ def submit_trip_request(chat_id, order):
                 },
                 'raw_response': None,
             }
-    except requests.exceptions.Timeout:
+    except httpx.TimeoutException:
         logger.error("Trip request timeout for chat_id=%s", chat_id)
         return {
             'success': False,
@@ -175,7 +177,7 @@ def submit_trip_request(chat_id, order):
             },
             'raw_response': None,
         }
-    except requests.exceptions.ConnectionError:
+    except httpx.ConnectError:
         logger.error("Trip request connection error for chat_id=%s", chat_id)
         return {
             'success': False,
