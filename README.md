@@ -60,7 +60,7 @@ Contribution Flow: [CONTRIBUTING.md](./CONTRIBUTING.md)
   cd driver-service && docker-compose up -d --build
   ```
 
-- Deploye on Vagrant:
+- Deploy on Vagrant:
   ```bash
   ansible-playbook -i driver-service/inventory driver-service/deploy.yml
   ```

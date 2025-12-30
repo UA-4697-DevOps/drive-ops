@@ -15,8 +15,7 @@
   docker-compose ps
   ```
 
-- Views Logs(If the service is not working correctly, check the console output)
+- View Logs(If the service is not working correctly, check the console output)
  ```bash
-  docker logs -f driver-service
+  docker-сompose logs -f driver-service
   ```
-  
