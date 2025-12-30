@@ -21,7 +21,6 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         )
 
     async def show_driver_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        chat_id = update.effective_chat.id
         await update.message.reply_text(
             "\U0001F4ED У вас немає нових замовлень\n\n"
             "\U0001F4A1 Нові замовлення з'являться тут автоматично."
