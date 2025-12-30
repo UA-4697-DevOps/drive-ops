@@ -62,7 +62,7 @@ Contribution Flow: [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 - Deploy on Vagrant:
   ```bash
-  ansible-playbook -i driver-service/inventory driver-service/deploy.yml
+  ansible-playbook -i path/to/your/inventory driver-service/deploy.yml
   ```
 - API docs & Troubleshooting: [driver-service/README.md](./driver-service/README.md)
 

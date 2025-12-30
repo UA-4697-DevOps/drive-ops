@@ -10,7 +10,7 @@
   ansible-playbook -i inventory deploy.yml
   ```
 
-- Diagnosrics and Troubleshooting(This section will help you troubleshoot problems if events are not passing through the system.)
+- Diagnostics and Troubleshooting(This section will help you troubleshoot problems if events are not passing through the system.)
  ```bash
   docker-compose ps
   ```
