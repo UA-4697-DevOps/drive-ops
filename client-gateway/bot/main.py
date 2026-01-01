@@ -3,9 +3,10 @@ import sys
 import logging
 from logging.handlers import RotatingFileHandler
 import time
+import re
 import httpx
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from dotenv import load_dotenv
 import passenger
 import driver
@@ -233,7 +234,7 @@ def main():
     application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start_message))
-    application.add_handler(MessageHandler(filters.Text([BTN_CHANGE_ROLE]), change_role))
+    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_CHANGE_ROLE)}$"), change_role))
     
     passenger.register_handlers(application, user_orders, user_roles, BUTTONS, KEYBOARDS, HELPERS)
     driver.register_handlers(application, user_orders, user_roles, BUTTONS, KEYBOARDS, HELPERS)

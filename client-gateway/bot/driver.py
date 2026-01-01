@@ -1,4 +1,5 @@
 import logging
+import re
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
@@ -54,8 +55,8 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             parse_mode='Markdown'
         )
 
-    application.add_handler(MessageHandler(filters.Text([BTN_DRIVER]), select_driver_role))
-    application.add_handler(MessageHandler(filters.Text([BTN_MY_ORDERS]), show_driver_orders))
+    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_DRIVER)}$"), select_driver_role))
+    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_MY_ORDERS)}$"), show_driver_orders))
     application.add_handler(CallbackQueryHandler(accept_trip, pattern="^accept_trip_"))
     application.add_handler(CallbackQueryHandler(decline_trip, pattern="^decline_trip_"))
 

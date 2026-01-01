@@ -1,4 +1,5 @@
 import logging
+import re
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters, CommandHandler
 
@@ -245,7 +246,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     # Conversation handler for ordering taxi
     conv_handler = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Text([BTN_ORDER_TAXI]), start_order_flow),
+            MessageHandler(filters.Regex(f"^{re.escape(BTN_ORDER_TAXI)}$"), start_order_flow),
             CallbackQueryHandler(handle_quick_order_taxi, pattern="^quick_order_taxi$"),
         ],
         states={
@@ -256,7 +257,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         fallbacks=[CommandHandler("cancel_order", cancel_order_command)],
     )
 
-    application.add_handler(MessageHandler(filters.Text([BTN_PASSENGER]), select_passenger_role))
-    application.add_handler(MessageHandler(filters.Text([BTN_RATES]), show_rates))
+    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_PASSENGER)}$"), select_passenger_role))
+    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_RATES)}$"), show_rates))
     application.add_handler(conv_handler)
     application.add_handler(CallbackQueryHandler(handle_order_status, pattern="^order_"))
