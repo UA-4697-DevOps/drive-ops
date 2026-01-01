@@ -12,37 +12,29 @@
   when: not env_file.stat.exists
 
 - name: Build Docker image for client-gateway
-  ansible.builtin.shell:
-    docker build -t client-gateway .
+  community.docker.docker_image:
+    name: client-gateway
+    source: build
+    build:
+      path: "{{ playbook_dir }}/../../client-gateway"
   when: env_file.stat.exists
-  args:
-    chdir: "{{ playbook_dir }}/../../client-gateway"
-
-- name: Check for existing client-gateway container
-  ansible.builtin.shell:
-    docker ps -a --filter "name=client-gateway-bot" --format "{{'{{.Names}}'}}"
-  register: existing_container
-  changed_when: false
-
-- name: Stop existing client-gateway container
-  ansible.builtin.shell:
-    docker stop client-gateway-bot || true
-  when: existing_container.stdout == "client-gateway-bot"
 
 - name: Remove existing client-gateway container
-  ansible.builtin.shell:
-    docker rm client-gateway-bot || true
-  when: existing_container.stdout == "client-gateway-bot"
+  community.docker.docker_container:
+    name: client-gateway-bot
+    state: absent
+  when: env_file.stat.exists
 
 - name: Run client-gateway container
-  ansible.builtin.shell:
-    docker run -d --name client-gateway-bot --env-file bot/.env client-gateway
+  community.docker.docker_container:
+    name: client-gateway-bot
+    image: client-gateway
+    state: started
+    env_file: "{{ playbook_dir }}/../../client-gateway/bot/.env"
   when: env_file.stat.exists
   register: run_container
-  args:
-    chdir: "{{ playbook_dir }}/../../client-gateway"
 
 - name: Display client-gateway container status
   ansible.builtin.debug:
-    msg: "Client-gateway container started with ID: {{ run_container.stdout }}"
+    msg: "Client-gateway container started with ID: {{ run_container.container.Id }}"
   when: env_file.stat.exists
