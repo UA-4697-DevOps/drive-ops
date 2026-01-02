@@ -3,12 +3,24 @@
   hosts: vagrant
   become: yes
   tasks:
+    - name: Ensure Docker is installed
+      apt:
+        name: docker.io
+        state: present
+      become: yes
+
+    - name: Ensure docker-compose plugin is installed
+      apt:
+        name: docker-compose-plugin
+        state: present
+      become: yes
+
     - name: Copy project to VM
       copy:
         src: ./
         dest: /home/vagrant/driver-service
 
-    - name: Run Docker Compose
-      shell: "docker-compose up -d --build"
-      args:
-        chdir: /home/vagrant/driver-service
+    - name: Run Docker Compose with Ansible module
+      community.docker.docker_compose:
+        project_src: /home/vagrant/driver-service
+        state: present
