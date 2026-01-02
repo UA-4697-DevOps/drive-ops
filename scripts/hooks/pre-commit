@@ -9,7 +9,7 @@ fi
 
 EXIT_CODE=0
 
-for FILE in $STAGED_FILES; do
+while IFS= read -r FILE; do
     # Only check text-based files (common monorepo extensions)
     if [[ "$FILE" =~ \.(py|go|cs|cpp|js|ts|json|yaml|yml|md|txt|conf|sh)$ ]]; then
         
@@ -19,7 +19,14 @@ for FILE in $STAGED_FILES; do
             echo "🔧 Fixing missing EOF newline in: $FILE"
             
             # Append a newline to the file
-            sed -i -e '$a\' "$FILE"
+            # Portable sed: works on both Linux (GNU) and macOS (BSD)
+            if sed --version >/dev/null 2>&1; then
+                # GNU sed (Linux)
+                sed -i -e '$a\' "$FILE"
+            else
+                # BSD sed (macOS)
+                sed -i '' -e '$a\' "$FILE"
+            fi
             
             # Re-stage the file so the fix is included in the commit
             git add "$FILE"
@@ -29,6 +36,6 @@ for FILE in $STAGED_FILES; do
             # EXIT_CODE=1 
         fi
     fi
-done
+done <<< "$STAGED_FILES"
 
 exit $EXIT_CODE
