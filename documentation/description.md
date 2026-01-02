@@ -8,21 +8,21 @@ sequenceDiagram
     participant MB as Message Broker
     participant DS as Driver Service
 
-    Note over P, DS: Фаза 1: Створення замовлення
+    Note over P, DS: Phase 1: Order Creation
     P->>CG: POST /trips (Origin, Destination)
-    CG->>TS: Forward Request (internal DTO)
-    TS->>TS: Save Trip to DB (Status: PENDING)
+    CG->>TS: Forward Request
+    TS->>TS: Save Trip to trip_db (Status: PENDING)
     TS-->>CG: 201 Created (TripID)
     CG-->>P: 201 Created (TripID)
 
-    Note over TS, DS: Фаза 2: Пошук та призначення водія
+    Note over TS, DS: Phase 2: Driver Discovery
     TS->>MB: Publish: trip.event.created
     MB-->>DS: Consume: trip.event.created
-    DS->>DS: Find nearby available drivers
+    DS->>DS: Search drivers in driver_db
     DS->>CG: Push Notification to Driver
     CG->>D: New Trip Request available!
 
-    Note over D, TS: Фаза 3: Прийняття замовлення водієм
+    Note over D, TS: Phase 3: Driver Acceptance
     D->>CG: POST /driver/accept-trip (TripID)
     CG->>DS: Forward Accept Request
     DS-->>CG: 200 OK
@@ -30,57 +30,65 @@ sequenceDiagram
     
     DS->>MB: Publish: trip.event.driver_assigned (DriverID, TripID)
     MB-->>TS: Consume: trip.event.driver_assigned
-    TS->>TS: Update Trip DB (Status: ACTIVE, DriverID)
+    TS->>TS: Update trip_db (Status: ACTIVE, DriverID)
 
-    Note over P, TS: Фаза 4: Перевірка статусу (Polling)
+    Note over P, TS: Phase 4: Status Polling
     P->>CG: GET /trips/{id}
-    CG->>TS: Fetch Trip Data
+    CG->>TS: Fetch Trip Data from trip_db
     TS-->>CG: Trip Object (Internal)
-    CG-->>P: Trip DTO (Shows Driver info & Status)
+    CG-->>P: Trip DTO
 ```
 
-# Фаза 1: Створення замовлення
-1.Пасажир надсилає запит на створення поїздки через POST /trips, вказуючи маршрут.
+# Phase 1: Order Creation
+The process begins when a passenger initiates a request for a ride.
 
-2.Client Gateway приймає запит та перенаправляє його до Trip Service.
+1. POST /trips: The Passenger App sends a request containing the origin and destination coordinates to the Client Gateway.
 
-3.Trip Service зберігає нову поїздку в базу даних із початковим статусом PENDING.
+2. Forward Request: The Client Gateway acts as a reverse proxy and routes the request to the Trip Service.
 
-4.Trip Service повертає відповідь 201 Created разом із ідентифікатором поїздки (TripID).
+3. Save Trip: The Trip Service persists the new trip record into the trip_db with an initial status of PENDING.
 
-5.Client Gateway передає підтвердження про створення поїздки назад у додаток пасажира.
+4. 201 Created (TripID): The Trip Service returns a success response with the generated TripID to the Gateway.
 
-# Фаза 2: Пошук та призначення водія
-6.Trip Service публікує подію trip.event.created у брокер повідомлень (Message Broker).
+5. 201 Created: The Client Gateway passes the success response back to the Passenger App, confirming the order is placed.
 
-7.Message Broker доставляє повідомлення сервісу водіїв (Driver Service).
+# Phase 2: Driver Discovery
+The system asynchronously searches for and notifies nearby drivers.
 
-8.Driver Service запускає внутрішній алгоритм пошуку найближчих доступних водіїв.
+6. Publish Event: The Trip Service publishes a trip.event.created message to the Message Broker (e.g., RabbitMQ or Kafka).
 
-9.Driver Service надсилає запит на Gateway для відправки Push-повідомлення водію.
+7. Consume Event: The Driver Service, which is subscribed to this topic, consumes the event.
 
-10.Client Gateway доставляє сповіщення про нове замовлення в додаток водія.
+8. Search Drivers: The Driver Service queries its local driver_db to find available drivers within the proximity of the trip origin.
 
-# Фаза 3: Прийняття замовлення водієм
-11.Водій погоджується на поїздку, надсилаючи запит POST /driver/accept-trip.
+9. Push Notification: The Driver Service sends a request to the Client Gateway to trigger a push notification.
 
-12.Client Gateway перенаправляє запит на прийняття замовлення до Driver Service.
+10. New Trip Request: The Client Gateway delivers the notification to the Driver App.
 
-13.Driver Service підтверджує успішну обробку запиту (відповідь 200 OK).
+# Phase 3: Driver Acceptance
+The transition from a pending trip to an active trip once a driver agrees to the request.
 
-14.Client Gateway передає статус успішного прийняття замовлення в додаток водія.
+11. POST /driver/accept-trip: The Driver App sends an acceptance request with the TripID to the Client Gateway.
 
-15.Driver Service публікує подію trip.event.driver_assigned у Message Broker.
+12. Forward Accept: The Gateway routes the acceptance logic to the Driver Service.
 
-16.Message Broker передає інформацію про призначеного водія до Trip Service.
+13. 200 OK: The Driver Service confirms the operation to the Gateway.
 
-17.Trip Service оновлює дані в базі: встановлює статус ACTIVE та записує ID водія.
+14. 200 OK: The Driver App receives confirmation that they have successfully taken the trip.
 
-# Фаза 4: Перевірка статусу (Polling)
-18.Додаток пасажира робить запит GET /trips/{id} для оновлення статусу поїздки (polling).
+15. Publish assigned event: The Driver Service emits a trip.event.driver_assigned event containing the DriverID and TripID.
 
-19.Client Gateway пересилає запит на отримання актуальних даних до Trip Service.
+16. Consume assigned event: The Trip Service consumes the event from the Message Broker.
 
-20.Trip Service повертає внутрішній об'єкт поїздки з актуальними даними з бази.
+17. Update trip_db: The Trip Service updates the trip record status to ACTIVE and links the specific DriverID to the trip.
 
-21.Client Gateway повертає пасажиру фінальний об'єкт (DTO) з інформацією про водія та статусом поїздки.
+# Phase 4: Status Polling
+How the Passenger App stays updated on the trip's progress.
+
+18. GET /trips/{id}: The Passenger App periodically polls the Client Gateway to check the status of the ride.
+
+19. Fetch Trip Data: The Gateway forwards the request to the Trip Service.
+
+20. Internal Object: The Trip Service retrieves the latest state from the trip_db.
+
+21. Trip DTO: The Client Gateway transforms the internal data into a Data Transfer Object (DTO) and returns it to the Passenger App to update the UI.
