@@ -123,6 +123,21 @@
       debug:
         msg: "{{ docker_compose_version.stdout }}"
       tags: verify
+      
+    - name: Ensure .env file exists
+      copy:
+        src: /vagrant/.env.example
+        dest: /vagrant/.env
+        remote_src: yes
+        force: no  # Не перезаписувати, якщо файл вже створено розробником
+      tags: infrastructure
+
+    - name: Start drive-ops infrastructure
+      community.docker.docker_compose_v2:
+        project_src: /vagrant
+        state: present
+        wait: yes
+      tags: infrastructure
 
   post_tasks:
     - name: Print completion message
