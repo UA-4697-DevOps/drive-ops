@@ -53,6 +53,19 @@ Contribution Flow: [CONTRIBUTING.md](./CONTRIBUTING.md)
 - API docs: [driver-service/README.md](./driver-service/README.md)
 - Contributing: [driver-service/CONTRIBUTING.md](./driver-service/CONTRIBUTING.md)
 
+**Docker, Docker Compose**
+
+- Local run:
+  ```bash
+  cd driver-service && docker-compose up -d --build
+  ```
+
+- Deploy on Vagrant:
+  ```bash
+  ansible-playbook -i path/to/your/inventory driver-service/deploy.yml
+  ```
+- API docs & Troubleshooting: [driver-service/README.md](./driver-service/README.md)
+
 ### Trip Service
 - Prereqs: `<list>`
 - Env vars: `<LIST>`
