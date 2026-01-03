@@ -1,0 +1,40 @@
+---
+- name: Check if .env file exists
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/../../client-gateway/bot/.env"
+  register: env_file
+
+- name: Notify about missing .env file
+  ansible.builtin.debug:
+    msg:
+      "The .env file for the client-gateway bot is missing.
+      Please create the file at client-gateway/bot/.env with the necessary environment variables."
+  when: not env_file.stat.exists
+
+- name: Build Docker image for client-gateway
+  community.docker.docker_image:
+    name: client-gateway
+    source: build
+    build:
+      path: "{{ playbook_dir }}/../../client-gateway"
+  when: env_file.stat.exists
+
+- name: Remove existing client-gateway container
+  community.docker.docker_container:
+    name: client-gateway-bot
+    state: absent
+  when: env_file.stat.exists
+
+- name: Run client-gateway container
+  community.docker.docker_container:
+    name: client-gateway-bot
+    image: client-gateway
+    state: started
+    env_file: "{{ playbook_dir }}/../../client-gateway/bot/.env"
+  when: env_file.stat.exists
+  register: run_container
+
+- name: Display client-gateway container status
+  ansible.builtin.debug:
+    msg: "Client-gateway container started with ID: {{ run_container.container.Id }}"
+  when: env_file.stat.exists
