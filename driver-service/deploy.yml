@@ -1,4 +1,3 @@
----
 - name: Deploy Driver Service to Vagrant
   hosts: vagrant
   become: yes
@@ -15,12 +14,7 @@
         state: present
       become: yes
 
-    - name: Copy project to VM
-      copy:
-        src: ./
-        dest: /home/vagrant/driver-service
-
     - name: Run Docker Compose with Ansible module
       community.docker.docker_compose:
-        project_src: /home/vagrant/driver-service
+        project_src: /home/vagrant/driver-service 
         state: present

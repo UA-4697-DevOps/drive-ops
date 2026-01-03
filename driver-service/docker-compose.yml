@@ -1,8 +1,14 @@
 services:
   driver-service:
-    build: .
+    build:
+      context: ../../
+      dockerfile: ./services/driver-service/Dockerfile
     env_file: .env.example
     ports: ["8000:8000"]
+    volumes:
+      - ../../shared:/app/shared:ro
+      - ../../config:/app/config:ro
+      - ./src:/app/src  
     depends_on: [db, broker]
     restart: unless-stopped
 
@@ -10,7 +16,7 @@ services:
     image: postgres:16
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
-    volumes:
+    volumes: 
       - db_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
