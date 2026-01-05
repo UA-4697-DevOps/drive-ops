@@ -2,7 +2,7 @@
 # 0. Define a single project root variable to avoid repetitive relative paths
 - name: Set project root path
   ansible.builtin.set_fact:
-    project_root: "{{ playbook_dir }}/../../.."
+    project_root: "{{ playbook_dir }}/../.."
   tags: [ infrastructure, docker ]
 
 # 1. Check if the environment configuration file exists
@@ -34,7 +34,7 @@
   community.docker.docker_compose_v2:
     project_src: "{{ project_root }}"
     state: present
-    build: missing
-    pull: missing  # Only pull base images if they are not present locally
-    wait: yes      # Essential: waits for all services to pass Healthchecks
+    build: policy
+    pull: missing
+    wait: yes
   tags: [ infrastructure, docker ]
