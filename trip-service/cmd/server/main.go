@@ -63,7 +63,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
 	}
-	defer publisher.Close()
+	defer func() {
+		if err := publisher.Close(); err != nil {
+			log.Printf("Error closing publisher: %v", err)
+		}
+	}()
 
 	// Dependency Injection
 	repo := repository.NewTripRepository(db)

@@ -33,7 +33,9 @@ func NewRabbitMQPublisher(config *Config) (*RabbitMQPublisher, error) {
 
 	channel, err := conn.Channel()
 	if err != nil {
-		conn.Close()
+		if closeErr := conn.Close(); closeErr != nil {
+			log.Printf("Error closing connection after channel failure: %v", closeErr)
+		}
 		return nil, fmt.Errorf("failed to open channel: %w", err)
 	}
 
@@ -48,8 +50,12 @@ func NewRabbitMQPublisher(config *Config) (*RabbitMQPublisher, error) {
 		nil,                 // arguments
 	)
 	if err != nil {
-		channel.Close()
-		conn.Close()
+		if closeErr := channel.Close(); closeErr != nil {
+			log.Printf("Error closing channel after exchange declare failure: %v", closeErr)
+		}
+		if closeErr := conn.Close(); closeErr != nil {
+			log.Printf("Error closing connection after exchange declare failure: %v", closeErr)
+		}
 		return nil, fmt.Errorf("failed to declare exchange: %w", err)
 	}
 
