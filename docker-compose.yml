@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # --- Database: Postgres ---
   db:
     image: postgres:15-alpine
     container_name: drive-ops-db
@@ -10,6 +9,11 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${TRIP_DB_NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${TRIP_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     ports:
       - "5432:5432"
     volumes:
@@ -18,14 +22,18 @@ services:
     networks:
       - drive-ops-net
 
-  # --- Message Broker: RabbitMQ ---
-  rabbitmq:
+  mq:
     image: rabbitmq:3-management-alpine
     container_name: drive-ops-mq
     restart: always
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -34,7 +42,6 @@ services:
     networks:
       - drive-ops-net
 
-  # --- Microservice: Client Gateway ---
   client-gateway:
     build:
       context: ./client-gateway
@@ -42,14 +49,16 @@ services:
     container_name: client-gateway-bot
     restart: always
     env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
     ports:
       - "8080:8080"
     depends_on:
-      - rabbitmq
+      - trip-service
+      - driver-service
     networks:
       - drive-ops-net
 
-  # --- Microservice: Trip Service ---
   trip-service:
     build:
       context: ./trip-service
@@ -60,12 +69,13 @@ services:
     ports:
       - "8081:8081"
     depends_on:
-      - db
-      - rabbitmq
+      db:
+        condition: service_healthy
+      mq:
+        condition: service_healthy
     networks:
       - drive-ops-net
 
-  # --- Microservice: Driver Service ---
   driver-service:
     build:
       context: ./driver-service
@@ -73,11 +83,15 @@ services:
     container_name: driver-service
     restart: always
     env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
     ports:
       - "8082:8082"
     depends_on:
-      - db
-      - rabbitmq
+      db:
+        condition: service_healthy
+      mq:
+        condition: service_healthy
     networks:
       - drive-ops-net
 
