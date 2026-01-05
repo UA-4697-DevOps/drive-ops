@@ -2,25 +2,19 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"trip-service/internal/domain"
 	"trip-service/internal/repository"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
-var (
-	ErrTripNotFound = errors.New("trip not found")
-	ErrInvalidInput = errors.New("pickup and dropoff locations are required")
-)
-
-// TripServiceInterface описує поведінку сервісу
+// TripServiceInterface defines the behavior of the trip service
 type TripServiceInterface interface {
 	CreateTrip(ctx context.Context, trip *domain.Trip) error
 	GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, error)
+	AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error
 	CheckHealth(ctx context.Context) error
 }
 
@@ -28,16 +22,18 @@ type TripService struct {
 	repo *repository.TripRepository
 }
 
+// NewTripService creates a new instance of TripService
 func NewTripService(repo *repository.TripRepository) *TripService {
 	return &TripService{repo: repo}
 }
 
+// CreateTrip handles the logic for initiating a new trip request
 func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
 	if trip.Pickup == "" || trip.Dropoff == "" {
-		return ErrInvalidInput
+		return fmt.Errorf("pickup and dropoff locations are required")
 	}
 	if trip.PassengerID == uuid.Nil {
-		return errors.New("passenger_id is required")
+		return fmt.Errorf("passenger_id is required")
 	}
 
 	trip.ID = uuid.New()
@@ -46,17 +42,31 @@ func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
 	return s.repo.Create(ctx, trip)
 }
 
+// GetTrip retrieves a trip by its unique identifier
 func (s *TripService) GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, error) {
 	trip, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrTripNotFound
-		}
-		return nil, fmt.Errorf("failed to get trip: %w", err)
+		return nil, err // Returns domain.ErrTripNotFound if not found in repo
 	}
 	return trip, nil
 }
 
+// AssignDriver handles the business logic for assigning a driver to an existing trip
+func (s *TripService) AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error {
+	if driverID == uuid.Nil {
+		return fmt.Errorf("driver_id is required for assignment")
+	}
+
+	// The repository handles the atomic update and state validation (status must be PENDING)
+	err := s.repo.AssignDriver(ctx, tripID, driverID)
+	if err != nil {
+		return err // Will return domain.ErrInvalidTripStatus if already taken
+	}
+
+	return nil
+}
+
+// CheckHealth verifies the database connection status
 func (s *TripService) CheckHealth(ctx context.Context) error {
 	sqlDB, err := s.repo.DB().DB()
 	if err != nil {
