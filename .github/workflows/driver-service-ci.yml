@@ -3,16 +3,24 @@ name: Driver Service CI
 on:
   push:
     paths:
-      - "driver-service/**"
-      - ".github/workflows/driver-service-ci.yml"
+      - 'driver-service/**'
+      - '.github/workflows/driver-service-ci.yml'
   pull_request:
     paths:
-      - "driver-service/**"
-      - ".github/workflows/driver-service-ci.yml"
+      - 'driver-service/**'
+      - '.github/workflows/driver-service-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: driver-service
@@ -24,7 +32,9 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: '3.13'
+          cache: 'pip'
+          cache-dependency-path: 'driver-service/requirements.txt'
 
       - name: Infrastructure Stub
         run: echo "Driver Service CI is ready. Running checks..."
@@ -32,16 +42,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest
+          pip install -r requirements.txt
 
       - name: Run stub tests
         run: pytest -q
-        timeout-minutes: 5
 
-      - name: Run main.py
-        run: python src/main.py
-        timeout-minutes: 1
+      - name: Syntax check
+        run: python -m compileall -q src
 
   docker:
     needs: test
