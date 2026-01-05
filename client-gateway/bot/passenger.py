@@ -211,7 +211,6 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                         'IN_PROGRESS': '🚗 В дорозі',
                         'COMPLETED': '🏁 Завершено',
                         'CANCELLED': '❌ Скасовано',
-                        'MOCKED_PENDING': '⏳ Очікує водія (MOCK)',
                     }.get(status, status)
                     
                     trip_display_id = trip_id or req_id or '—'
