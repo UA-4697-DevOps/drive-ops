@@ -1,11 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
+	"trip-service/internal/broker"
 	"trip-service/internal/repository"
 	"trip-service/internal/service"
 
@@ -38,7 +43,7 @@ func main() {
 			getEnv("DB_HOST", "localhost"),
 			getEnv("DB_USER", "postgres"),
 			getEnv("DB_PASSWORD", "postgres"),
-			getEnv("DB_NAME", "trip_db"),
+			getEnv("TRIP_DB_NAME", "trip_db"),
 			getEnv("DB_PORT", "5432"),
 		)
 	}
@@ -48,9 +53,21 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	//Dependency Injection
+	// Initialize RabbitMQ publisher
+	brokerConfig, err := broker.LoadConfig()
+	if err != nil {
+		log.Fatalf("Failed to load broker config: %v", err)
+	}
+
+	publisher, err := broker.NewRabbitMQPublisher(brokerConfig)
+	if err != nil {
+		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
+	}
+	defer publisher.Close()
+
+	// Dependency Injection
 	repo := repository.NewTripRepository(db)
-	svc := service.NewTripService(repo)
+	svc := service.NewTripService(repo, publisher)
 	handler := api.NewTripHandler(svc)
 
 	r := chi.NewRouter()
@@ -61,6 +78,36 @@ func main() {
 		r.Get("/{id}", handler.GetTrip)
 	})
 
-	log.Printf("Server is running on %s...", getEnv("SERVER_PORT", ":8080"))
-	log.Fatal(http.ListenAndServe(getEnv("SERVER_PORT", ":8080"), r))
+	// Setup HTTP server with graceful shutdown
+	serverPort := getEnv("TRIP_SERVICE_PORT", ":8080")
+	srv := &http.Server{
+		Addr:    serverPort,
+		Handler: r,
+	}
+
+	// Channel to listen for interrupt signals
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	// Start server in a goroutine
+	go func() {
+		log.Printf("Server is running on %s...", serverPort)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	<-stop
+	log.Println("Shutting down server...")
+
+	// Graceful shutdown with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
+	}
+
+	log.Println("Server stopped gracefully")
 }
