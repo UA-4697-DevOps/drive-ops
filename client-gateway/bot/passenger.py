@@ -2,8 +2,9 @@ import logging
 import re
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters, CommandHandler
+from logger_utils import create_trip_request_logger
 
-logger = logging.getLogger('drive_ops')
+logger = create_trip_request_logger()
 
 # Conversation states
 PICKUP, DROPOFF, COMMENT = range(3)

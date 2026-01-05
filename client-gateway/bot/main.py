@@ -1,7 +1,5 @@
 import os
 import sys
-import logging
-from logging.handlers import RotatingFileHandler
 import time
 import re
 import httpx
@@ -10,23 +8,9 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 from dotenv import load_dotenv
 import passenger
 import driver
+from logger_utils import create_trip_request_logger, generate_correlation_id
 
-LOG_DIR = os.path.join(os.path.dirname(__file__), 'logs')
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, 'bot.log')
-
-logger = logging.getLogger('drive_ops')
-logger.setLevel(logging.INFO)
-
-log_format = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-
-file_handler = RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
-file_handler.setFormatter(log_format)
-logger.addHandler(file_handler)
-
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(log_format)
-logger.addHandler(console_handler)
+logger = create_trip_request_logger()
 
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -109,27 +93,46 @@ async def safe_edit_message_text(chat_id, message_id, text, context, **kwargs):
         return None
 
 async def submit_trip_request(chat_id, order):
+    """
+    Submit a trip request to the trip service.
+    Logs the full lifecycle: request init -> validation -> response.
+    
+    Args:
+        chat_id: Telegram user chat ID
+        order: Dictionary with 'pickup', 'dropoff', 'comment' fields
+    
+    Returns:
+        Dictionary with success status, trip_id, error details, etc.
+    """
+    start_time = time.time()
+    correlation_id = generate_correlation_id()
+    
     payload = {
         'pickup': order.get('pickup'),
         'dropoff': order.get('dropoff'),
-        # WORKAROUND for testing: hardcoded passenger_id
-        # TODO: restore UUID generation after testing
-        # passenger_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"telegram-user-{chat_id}"))
         'passenger_id': order.get('passenger_id') or "123e4567-e89b-12d3-a456-426614174000",
     }
-    logger.info(
-        "Trip request payload: chat_id=%s pickup=%s dropoff=%s passenger_id=%s",
-        chat_id, payload['pickup'], payload['dropoff'], payload['passenger_id']
-    )
-
+    
     request_id = f"REQ-{chat_id}-{int(time.time())}"
+    
+    logger.info(
+        "Trip request initiated: chat_id=%s request_id=%s",
+        chat_id, request_id,
+        extra={'correlationId': correlation_id}
+    )
     
     try:
         url = f"{TRIP_SERVICE_URL}/trips"
-        logger.info("Sending trip request to %s", url)
+        logger.info(
+            "Sending POST %s with pickup=%s, dropoff=%s",
+            url, payload['pickup'], payload['dropoff'],
+            extra={'correlationId': correlation_id}
+        )
         
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(url, json=payload)
+        
+        latency = int((time.time() - start_time) * 1000)
         
         if resp.status_code in (200, 201):
             data = resp.json()
@@ -137,8 +140,9 @@ async def submit_trip_request(chat_id, order):
             status = data.get('status', 'pending')
             
             logger.info(
-                "Trip request success: trip_id=%s status=%s",
-                trip_id, status
+                "Trip request SUCCESS: trip_id=%s status=%s latency=%dms",
+                trip_id, status, latency,
+                extra={'correlationId': correlation_id}
             )
             
             return {
@@ -151,8 +155,9 @@ async def submit_trip_request(chat_id, order):
             }
         else:
             logger.error(
-                "Trip request failed: status_code=%s response=%s",
-                resp.status_code, resp.text
+                "Trip request FAILED: status_code=%s latency=%dms response=%s",
+                resp.status_code, latency, resp.text[:200],
+                extra={'correlationId': correlation_id}
             )
             return {
                 'success': False,
@@ -166,7 +171,12 @@ async def submit_trip_request(chat_id, order):
                 'raw_response': None,
             }
     except httpx.TimeoutException:
-        logger.error("Trip request timeout for chat_id=%s", chat_id)
+        latency = int((time.time() - start_time) * 1000)
+        logger.error(
+            "Trip request TIMEOUT: chat_id=%s latency=%dms request_id=%s",
+            chat_id, latency, request_id,
+            extra={'correlationId': correlation_id}
+        )
         return {
             'success': False,
             'trip_id': None,
@@ -179,7 +189,12 @@ async def submit_trip_request(chat_id, order):
             'raw_response': None,
         }
     except httpx.ConnectError:
-        logger.error("Trip request connection error for chat_id=%s", chat_id)
+        latency = int((time.time() - start_time) * 1000)
+        logger.error(
+            "Trip request CONNECTION_ERROR: chat_id=%s latency=%dms request_id=%s",
+            chat_id, latency, request_id,
+            extra={'correlationId': correlation_id}
+        )
         return {
             'success': False,
             'trip_id': None,
@@ -192,7 +207,12 @@ async def submit_trip_request(chat_id, order):
             'raw_response': None,
         }
     except Exception as e:
-        logger.exception("Trip request unexpected error for chat_id=%s: %s", chat_id, e)
+        latency = int((time.time() - start_time) * 1000)
+        logger.exception(
+            "Trip request UNEXPECTED_ERROR: chat_id=%s latency=%dms request_id=%s error=%s",
+            chat_id, latency, request_id, str(e),
+            extra={'correlationId': correlation_id}
+        )
         return {
             'success': False,
             'trip_id': None,

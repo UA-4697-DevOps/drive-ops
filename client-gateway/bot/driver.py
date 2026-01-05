@@ -2,8 +2,9 @@ import logging
 import re
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from logger_utils import create_trip_request_logger
 
-logger = logging.getLogger('drive_ops')
+logger = create_trip_request_logger()
 
 
 def register_handlers(application, user_orders, user_roles, buttons, keyboards, helpers):
