@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"trip-service/internal/domain"
-
 	"trip-service/internal/service"
 
 	"github.com/go-chi/chi/v5"
@@ -22,7 +21,7 @@ func NewTripHandler(svc service.TripServiceInterface) *TripHandler {
 	return &TripHandler{svc: svc}
 }
 
-// POST /trips
+// CreateTrip handles POST /trips
 func (h *TripHandler) CreateTrip(w http.ResponseWriter, r *http.Request) {
 	var trip domain.Trip
 	if err := json.NewDecoder(r.Body).Decode(&trip); err != nil {
@@ -31,11 +30,7 @@ func (h *TripHandler) CreateTrip(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.CreateTrip(r.Context(), &trip); err != nil {
-		if errors.Is(err, service.ErrInvalidInput) {
-			http.Error(w, "Invalid input: pickup and dropoff locations are required", http.StatusBadRequest)
-			return
-		}
-		// Log actual error for debugging, return generic message to client
+		// Log actual error for debugging
 		log.Printf("Failed to create trip: %v", err)
 		http.Error(w, "Failed to create trip", http.StatusInternalServerError)
 		return
@@ -48,7 +43,7 @@ func (h *TripHandler) CreateTrip(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// GET /trips/{id}
+// GetTrip handles GET /trips/{id}
 func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -59,7 +54,11 @@ func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
 
 	trip, err := h.svc.GetTrip(r.Context(), id)
 	if err != nil {
-		http.Error(w, "Trip not found", http.StatusNotFound)
+		if errors.Is(err, domain.ErrTripNotFound) {
+			http.Error(w, "Trip not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -69,7 +68,45 @@ func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// GET /health
+// AssignDriver handles PATCH /trips/{id}/assign-driver
+func (h *TripHandler) AssignDriver(w http.ResponseWriter, r *http.Request) {
+	// 1. Parse Trip ID from URL
+	idStr := chi.URLParam(r, "id")
+	tripID, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "Invalid Trip UUID format", http.StatusBadRequest)
+		return
+	}
+
+	// 2. Decode Request Body (driver_id)
+	var req domain.AssignDriverRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// 3. Call Service Layer
+	err = h.svc.AssignDriver(r.Context(), tripID, req.DriverID)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrTripNotFound):
+			http.Error(w, "Trip not found", http.StatusNotFound)
+		case errors.Is(err, domain.ErrInvalidTripStatus):
+			// 409 Conflict is best for "already taken" or "invalid state"
+			http.Error(w, "Trip is no longer available for assignment", http.StatusConflict)
+		default:
+			log.Printf("Failed to assign driver: %v", err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// 4. Return Success
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "driver_assigned"})
+}
+
+// HealthCheck handles GET /health
 func (h *TripHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
