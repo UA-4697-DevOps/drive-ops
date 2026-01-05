@@ -13,12 +13,12 @@
   when: not env_file.stat.exists
   tags: infrastructure
 
-# 3. Pull/Build and Start everything defined in docker-compose.yml
+# 3. Start the stack (Optimized build)
 - name: Start the entire drive-ops stack
   community.docker.docker_compose_v2:
     project_src: "/vagrant"
     state: present
-    build: always
+    build: missing 
     wait: yes
   tags: docker
   
