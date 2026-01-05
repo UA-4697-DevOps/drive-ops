@@ -29,7 +29,7 @@ func main() {
 		log.Println("Note: .env file not found, using system env variables")
 	}
 
-	// Support both DB_URL (from docker-compose) and individual env vars (for local dev)
+	// Database Connection setup
 	var dsn string
 	if dbURL := os.Getenv("DB_URL"); dbURL != "" {
 		dsn = dbURL
@@ -48,19 +48,25 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	//Dependency Injection
+	// Dependency Injection: Repository -> Service -> Handler
 	repo := repository.NewTripRepository(db)
 	svc := service.NewTripService(repo)
 	handler := api.NewTripHandler(svc)
 
 	r := chi.NewRouter()
 
+	// Routes
 	r.Get("/health", handler.HealthCheck)
+	
 	r.Route("/trips", func(r chi.Router) {
 		r.Post("/", handler.CreateTrip)
 		r.Get("/{id}", handler.GetTrip)
+		
+		// New endpoint for driver assignment (Task requirement)
+		r.Patch("/{id}/assign-driver", handler.AssignDriver)
 	})
 
-	log.Printf("Server is running on %s...", getEnv("SERVER_PORT", ":8080"))
-	log.Fatal(http.ListenAndServe(getEnv("SERVER_PORT", ":8080"), r))
+	serverPort := getEnv("SERVER_PORT", ":8080")
+	log.Printf("Trip Service is running on %s...", serverPort)
+	log.Fatal(http.ListenAndServe(serverPort, r))
 }
