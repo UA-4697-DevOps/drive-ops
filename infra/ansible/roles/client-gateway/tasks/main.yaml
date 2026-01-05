@@ -1,0 +1,48 @@
+---
+# 1. Verify if the .env file exists in the project root (/vagrant)
+- name: Check if .env file exists
+  ansible.builtin.stat:
+    path: "/vagrant/.env"
+  register: env_file
+  tags: infrastructure
+
+# 2. Halt execution with a clear message if .env is missing
+# This enforces manual initialization and prevents inconsistent deployment states
+- name: Fail if .env file is missing
+  ansible.builtin.fail:
+    msg: |
+      The .env file is missing! 
+      Please copy .env.example to .env in the project root and set your credentials.
+      Example command: cp .env.example .env
+  when: not env_file.stat.exists
+  tags: infrastructure
+
+# 3. Tasks below will only execute if the .env file is present
+- name: Build Docker image for client-gateway
+  community.docker.docker_image:
+    name: client-gateway
+    source: build
+    build:
+      path: "/vagrant/client-gateway"
+  tags: docker
+
+- name: Remove existing client-gateway container if it exists
+  community.docker.docker_container:
+    name: client-gateway-bot
+    state: absent
+  tags: docker
+
+- name: Run client-gateway container
+  community.docker.docker_container:
+    name: client-gateway-bot
+    image: client-gateway
+    state: started
+    # Mount the developer's local .env file into the container
+    env_file: "/vagrant/.env"
+  register: run_container
+  tags: docker
+
+- name: Display client-gateway container status
+  ansible.builtin.debug:
+    msg: "Client-gateway container started with ID: {{ run_container.container.Id }}"
+  tags: verify
