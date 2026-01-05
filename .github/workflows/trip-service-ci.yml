@@ -6,11 +6,13 @@ on:
     paths:
       - 'trip-service/**'
       - '.github/workflows/trip-service-ci.yml'
+      - 'docker-compose.yml'
   pull_request:
     branches: [main]
     paths:
       - 'trip-service/**'
       - '.github/workflows/trip-service-ci.yml'
+      - 'docker-compose.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
