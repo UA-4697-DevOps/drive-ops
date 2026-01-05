@@ -91,5 +91,5 @@ jobs:
         push: ${{ env.SHOULD_PUSH_IMAGE == 'true' }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        cache-from: type=gha,scope=driver-service
+        cache-to: type=gha,mode=max,scope=driver-service
