@@ -214,25 +214,27 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                         'MOCKED_PENDING': '⏳ Очікує водія (MOCK)',
                     }.get(status, status)
                     
+                    trip_display_id = trip_id or req_id or '—'
                     await query.edit_message_text(
                         text=(
                             "✅ Замовлення прийнято!\n"
                             "Шукаємо найближче авто...\n\n"
-                            f"🆔 Trip ID: {trip_id or req_id}\n"
+                            f"🆔 Trip ID: {trip_display_id}\n"
                             f"📦 Статус: {status_text}"
                         )
                     )
                 else:
                     err_text = (error or {}).get('message')
                     code = (error or {}).get('status_code')
+                    local_req = req_id if req_id is not None else 'N/A'
                     await query.edit_message_text(
                         text=(
                             "❌ Не вдалося створити поїздку.\n"
-                            f"Причина: {escape_markdown(err_text or 'сервіс недоступний.', version=2)}\n"
-                            + (f"Код: {escape_markdown(str(code), version=2)}\n" if code is not None else "")
-                            + f"\nЛокальний запит: {escape_markdown(req_id, version=2)}"
+                            f"Причина: {err_text or 'сервіс недоступний.'}\n"
+                            + (f"Код: {code}\n" if code is not None else "")
+                            + f"\nЛокальний запит: {local_req}"
                         ),
-                        parse_mode='MarkdownV2'
+                        parse_mode='Markdown'
                     )
             elif query.data == "order_cancel":
                 await query.edit_message_text(
