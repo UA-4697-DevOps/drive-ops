@@ -36,9 +36,6 @@ jobs:
           cache: 'pip'
           cache-dependency-path: 'driver-service/requirements.txt'
 
-      - name: Infrastructure Stub
-        run: echo "Driver Service CI is ready. Running checks..."
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
