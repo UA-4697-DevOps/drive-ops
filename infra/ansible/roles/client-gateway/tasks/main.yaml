@@ -1,12 +1,12 @@
 ---
-# 1. Verify that the global .env file exists in the project root (containing bot tokens and DB credentials)
+# 1. Verify the existence of the global .env file in the project root
 - name: Check if .env file exists
   ansible.builtin.stat:
-    path: "/vagrant/.env"
+    path: "{{ playbook_dir }}/../../../.env"
   register: env_file
   tags: infrastructure
 
-# 2. Halt execution immediately if the file is missing (Fail-Fast pattern)
+# 2. Halt execution if the file is missing (Fail-Fast pattern)
 - name: Fail if .env file is missing
   ansible.builtin.fail:
     msg: |
@@ -18,12 +18,12 @@
   when: not env_file.stat.exists
   tags: infrastructure
 
-# 3. Deploy the entire stack (including ClientGateway with colleagues' configurations)
+# 3. Deploy the entire drive-ops stack via Docker Compose
 - name: Deploy the entire drive-ops stack via Docker Compose
   community.docker.docker_compose_v2:
-    project_src: "/vagrant"
+    project_src: "{{ playbook_dir }}/../../../"
     state: present
-    # build: missing — optimal for development performance
     build: missing
     wait: yes
   tags: docker
+  
