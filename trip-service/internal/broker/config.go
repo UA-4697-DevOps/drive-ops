@@ -22,8 +22,16 @@ func LoadConfig() (*Config, error) {
 		// Build URL from individual components
 		host := getEnv("RABBITMQ_HOST", "localhost")
 		port := getEnv("RABBITMQ_PORT", "5672")
-		user := getEnv("RABBITMQ_USER", "guest")
-		password := getEnv("RABBITMQ_PASSWORD", "guest")
+		user := os.Getenv("RABBITMQ_USER")
+		password := os.Getenv("RABBITMQ_PASSWORD")
+
+		// Validate required credentials
+		if user == "" {
+			return nil, fmt.Errorf("RABBITMQ_USER environment variable is required")
+		}
+		if password == "" {
+			return nil, fmt.Errorf("RABBITMQ_PASSWORD environment variable is required")
+		}
 
 		url = fmt.Sprintf("amqp://%s:%s@%s:%s/", user, password, host, port)
 	}
