@@ -37,8 +37,9 @@ jobs:
           cache-dependency-path: trip-service/go.sum
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
+          version: v2.6
           working-directory: trip-service
 
   unit-test:
