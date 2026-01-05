@@ -13,6 +13,14 @@ os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, 'bot.log')
 
 
+class CorrelationIdFilter(logging.Filter):
+    def filter(self, record):
+        # Get correlation ID from extra dict if provided
+        if not hasattr(record, 'correlationId'):
+            record.correlationId = 'NONE'
+        return True
+
+
 def setup_logger(name='drive_ops', log_file=LOG_FILE):
     logger = logging.getLogger(name)
     
@@ -47,28 +55,10 @@ def setup_logger(name='drive_ops', log_file=LOG_FILE):
     return logger
 
 
-class CorrelationIdFilter(logging.Filter):
-    def filter(self, record):
-        # Get correlation ID from extra dict if provided
-        if hasattr(record, 'correlationId'):
-            pass  # Already set
-        else:
-            record.correlationId = 'NONE'
-        return True
-
-
 def generate_correlation_id():
     return str(uuid.uuid4())[:8]
-
-
-def add_correlation_filter(logger):
-    correlation_filter = CorrelationIdFilter()
-    logger.addFilter(correlation_filter)
 
 
 def create_trip_request_logger():
     logger = setup_logger()
     return logger
-
-
-logger = create_trip_request_logger()

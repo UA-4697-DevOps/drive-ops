@@ -110,7 +110,8 @@ async def submit_trip_request(chat_id, order):
     payload = {
         'pickup': order.get('pickup'),
         'dropoff': order.get('dropoff'),
-        'passenger_id': order.get('passenger_id') or "123e4567-e89b-12d3-a456-426614174000",
+        'passenger_id': order.get('passenger_id') or str(chat_id),
+        'comment': order.get('comment'),
     }
     
     request_id = f"REQ-{chat_id}-{int(time.time())}"
@@ -154,9 +155,10 @@ async def submit_trip_request(chat_id, order):
                 'raw_response': data,
             }
         else:
+            response_preview = resp.text.encode('utf-8')[:200].decode('utf-8', errors='ignore')
             logger.error(
                 "Trip request FAILED: status_code=%s latency=%dms response=%s",
-                resp.status_code, latency, resp.text[:200],
+                resp.status_code, latency, response_preview,
                 extra={'correlationId': correlation_id}
             )
             return {

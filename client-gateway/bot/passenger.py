@@ -230,7 +230,8 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                             f"Причина: {err_text or 'сервіс недоступний.'}\n"
                             + (f"Код: {code}\n" if code is not None else "")
                             + f"\nЛокальний запит: {req_id}"
-                        )
+                        ),
+                        parse_mode='Markdown'
                     )
             elif query.data == "order_cancel":
                 await query.edit_message_text(
