@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -19,6 +20,7 @@ type Publisher interface {
 
 // RabbitMQPublisher implements Publisher for RabbitMQ
 type RabbitMQPublisher struct {
+	mu           sync.Mutex
 	conn         *amqp.Connection
 	channel      *amqp.Channel
 	exchangeName string
@@ -75,6 +77,10 @@ func (p *RabbitMQPublisher) PublishTripCreated(ctx context.Context, event *domai
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
 
+	// Lock to protect concurrent access to channel (amqp.Channel is not thread-safe)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	err = p.channel.PublishWithContext(
 		ctx,
 		p.exchangeName,      // exchange
@@ -99,6 +105,10 @@ func (p *RabbitMQPublisher) PublishTripCreated(ctx context.Context, event *domai
 
 // Close closes the RabbitMQ connection
 func (p *RabbitMQPublisher) Close() error {
+	// Lock to protect concurrent access to channel
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	var chanErr, connErr error
 
 	if p.channel != nil {
