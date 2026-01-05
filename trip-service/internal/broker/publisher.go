@@ -99,17 +99,25 @@ func (p *RabbitMQPublisher) PublishTripCreated(ctx context.Context, event *domai
 
 // Close closes the RabbitMQ connection
 func (p *RabbitMQPublisher) Close() error {
+	var chanErr, connErr error
+
 	if p.channel != nil {
-		if err := p.channel.Close(); err != nil {
-			log.Printf("Error closing channel: %v", err)
+		if chanErr = p.channel.Close(); chanErr != nil {
+			log.Printf("Error closing channel: %v", chanErr)
 		}
 	}
+
 	if p.conn != nil {
-		if err := p.conn.Close(); err != nil {
-			log.Printf("Error closing connection: %v", err)
-			return err
+		if connErr = p.conn.Close(); connErr != nil {
+			log.Printf("Error closing connection: %v", connErr)
 		}
 	}
+
 	log.Println("Closed RabbitMQ connection")
-	return nil
+
+	// Return channel error first if present, otherwise connection error
+	if chanErr != nil {
+		return chanErr
+	}
+	return connErr
 }

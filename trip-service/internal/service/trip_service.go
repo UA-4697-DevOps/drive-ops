@@ -32,6 +32,12 @@ type TripService struct {
 }
 
 func NewTripService(repo *repository.TripRepository, publisher broker.Publisher) *TripService {
+	if repo == nil {
+		panic("repository cannot be nil")
+	}
+	if publisher == nil {
+		panic("publisher cannot be nil")
+	}
 	return &TripService{
 		repo:      repo,
 		publisher: publisher,
