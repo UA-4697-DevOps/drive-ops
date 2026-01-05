@@ -3,12 +3,12 @@ name: Driver Service CI
 on:
   push:
     paths:
-      - 'driver-service/**'
-      - '.github/workflows/driver-service-ci.yml'
+      - "driver-service/**"
+      - ".github/workflows/driver-service-ci.yml"
   pull_request:
     paths:
-      - 'driver-service/**'
-      - '.github/workflows/driver-service-ci.yml'
+      - "driver-service/**"
+      - ".github/workflows/driver-service-ci.yml"
 
 jobs:
   test:
@@ -16,13 +16,18 @@ jobs:
     defaults:
       run:
         working-directory: driver-service
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.13"
+
+      - name: Infrastructure Stub
+        run: echo "Driver Service CI is ready. Running checks..."
 
       - name: Install dependencies
         run: |
@@ -31,10 +36,9 @@ jobs:
           pip install pytest
 
       - name: Run stub tests
-        run: |
-          pytest -q
+        run: pytest -q
+        timeout-minutes: 5
 
       - name: Run main.py
-        run: |
-          python src/main.py
-
+        run: python src/main.py
+        timeout-minutes: 1
