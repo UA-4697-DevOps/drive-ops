@@ -123,13 +123,17 @@
       debug:
         msg: "{{ docker_compose_version.stdout }}"
       tags: verify
-      
-    - name: Ensure .env file exists
-      copy:
-        src: /vagrant/.env.example
-        dest: /vagrant/.env
-        remote_src: yes
-        force: no  # Не перезаписувати, якщо файл вже створено розробником
+
+    - name: Check if .env file exists
+      stat:
+        path: /vagrant/.env
+      register: env_file
+      tags: infrastructure
+
+    - name: Fail if .env is missing
+      fail:
+        msg: "ERROR: .env file is missing! Please copy .env.example to .env and set your credentials."
+      when: not env_file.stat.exists
       tags: infrastructure
 
     - name: Start drive-ops infrastructure
