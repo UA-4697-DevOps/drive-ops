@@ -2,6 +2,7 @@ import logging
 import re
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters, CommandHandler
+from telegram.helpers import escape_markdown
 from logger_utils import create_trip_request_logger
 
 logger = create_trip_request_logger()
@@ -227,11 +228,11 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     await query.edit_message_text(
                         text=(
                             "❌ Не вдалося створити поїздку.\n"
-                            f"Причина: {err_text or 'сервіс недоступний.'}\n"
-                            + (f"Код: {code}\n" if code is not None else "")
-                            + f"\nЛокальний запит: {req_id}"
+                            f"Причина: {escape_markdown(err_text or 'сервіс недоступний.', version=2)}\n"
+                            + (f"Код: {escape_markdown(str(code), version=2)}\n" if code is not None else "")
+                            + f"\nЛокальний запит: {escape_markdown(req_id, version=2)}"
                         ),
-                        parse_mode='Markdown'
+                        parse_mode='MarkdownV2'
                     )
             elif query.data == "order_cancel":
                 await query.edit_message_text(
