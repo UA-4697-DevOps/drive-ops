@@ -1,11 +1,7 @@
-# == General ===
+# === General ===
 .DS_Store
 .vscode/
 .idea/
-node_modules/
-bin/
-dist/
-.env
 *.log
 
 # === Python ===
@@ -15,7 +11,6 @@ __pycache__/
 .venv/
 venv/
 ENV/
-.env
 build/
 develop-eggs/
 dist/
@@ -31,27 +26,48 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.pytest_cache/
+*.cover
+htmlcov/
 
+# === Docker ===
+.docker/
+docker-compose.override.yml
 
 # === Infrastructure ===
 .terraform/
 *.tfstate
 *.tfstate.backup
 .terraform.lock.hcl
-.docker/
-*.log
 
-# === Web ===
+# === Vagrant ===
+.vagrant/
+*.box
+
+# === JavaScript/Node ===
 node_modules/
 npm-debug.log*
 yarn-error.log*
 .next/
 .nuxt/
+package-lock.json
 
-# === Critical ===
+# === Environment & Secrets ===
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 *.pem
+*.key
+*.crt
+
+# === Databases ===
+*.db
+*.sqlite
+*.sqlite3
+db_data/
+
+# === OS ===
+Thumbs.db
+*.swp
+*.swo
+*~
