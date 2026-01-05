@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/domain"
-	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/repository"
+	"trip-service/internal/domain"
+	"trip-service/internal/repository"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -55,4 +55,17 @@ func (s *TripService) GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, 
 		return nil, fmt.Errorf("failed to get trip: %w", err)
 	}
 	return trip, nil
+}
+
+func (s *TripService) CheckHealth(ctx context.Context) error {
+	sqlDB, err := s.repo.DB().DB()
+	if err != nil {
+		return fmt.Errorf("failed to get database connection: %w", err)
+	}
+
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return fmt.Errorf("database health check failed: %w", err)
+	}
+
+	return nil
 }

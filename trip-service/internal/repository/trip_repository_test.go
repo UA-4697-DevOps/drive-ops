@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+	"trip-service/internal/domain"
 
-	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/domain"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
@@ -76,6 +76,8 @@ func TestTripRepository_FullCycle(t *testing.T) {
 	testTrip := &domain.Trip{
 		ID:          tripID,
 		PassengerID: uuid.New(),
+		Pickup:      "123 Main St",
+		Dropoff:     "456 Oak Ave",
 		Status:      "PENDING",
 	}
 

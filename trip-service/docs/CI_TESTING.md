@@ -439,11 +439,13 @@ docker compose up -d
 
 **Debug:**
 ```bash
-# Connect manually
+# Connect to test database
 docker exec -it trip-service-test-db psql -U testuser -d trip_service_test
 
-# Or for main DB
-docker exec -it trip-service-db-1 psql -U vagrant -d trips
+# For main DB, first find the container name
+docker compose ps
+# Then connect (replace <container-name> with actual name from ps output)
+docker exec -it <container-name> psql -U vagrant -d trips
 ```
 
 ### Linter Errors

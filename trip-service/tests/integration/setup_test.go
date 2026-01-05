@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"testing"
 	"time"
 
@@ -169,6 +171,9 @@ func RunMigrations(db *gorm.DB) error {
 		return fmt.Errorf("failed to list migration files: %w", err)
 	}
 
+	// Sort files to ensure migrations run in correct order (001, 002, etc.)
+	sort.Strings(files)
+
 	// Execute each migration file
 	for _, file := range files {
 		content, err := os.ReadFile(file)
@@ -210,7 +215,8 @@ func getEnv(key, defaultValue string) string {
 
 // startDockerCompose starts the test database container
 func startDockerCompose() error {
-	cmd := exec.Command("docker", "compose", "-f", "docker-compose.test.yml", "up", "-d")
+	composePath := getDockerComposePath()
+	cmd := exec.Command("docker", "compose", "-f", composePath, "up", "-d")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -224,7 +230,8 @@ func startDockerCompose() error {
 
 // stopDockerCompose stops and removes the test database container
 func stopDockerCompose() {
-	cmd := exec.Command("docker", "compose", "-f", "docker-compose.test.yml", "down", "-v")
+	composePath := getDockerComposePath()
+	cmd := exec.Command("docker", "compose", "-f", composePath, "down", "-v")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -233,4 +240,12 @@ func stopDockerCompose() {
 	} else {
 		log.Println("Stopped test database container")
 	}
+}
+
+// getDockerComposePath returns absolute path to docker-compose.test.yml
+func getDockerComposePath() string {
+	// Get the directory where this test file is located
+	_, filename, _, _ := runtime.Caller(0)
+	testDir := filepath.Dir(filename)
+	return filepath.Join(testDir, "docker-compose.test.yml")
 }

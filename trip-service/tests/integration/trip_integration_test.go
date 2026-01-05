@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/domain"
-	"github.com/UA-4697-DevOps/drive-ops/trip-service/internal/repository"
+	"trip-service/internal/domain"
+	"trip-service/internal/repository"
+
 	"github.com/google/uuid"
 )
 
@@ -246,13 +247,15 @@ func TestHealthEndpoint(t *testing.T) {
 		t.Errorf("Expected status 200, got %d", resp.StatusCode)
 	}
 
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("Failed to read response body: %v", err)
+	}
+
 	// Parse and verify response body
 	var health map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
-		// Read the body to see what we actually got
-		_ = resp.Body.Close()
-		resp, _ = MakeHTTPRequest("GET", "http://localhost:5002/health")
-		body, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &health); err != nil {
 		t.Fatalf("Failed to decode response: %v. Body was: %s", err, string(body))
 	}
 

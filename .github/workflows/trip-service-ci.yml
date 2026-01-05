@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.25.5'
 
 jobs:
   lint:
@@ -67,9 +67,6 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     needs: unit-test
-    defaults:
-      run:
-        working-directory: trip-service
 
     steps:
       - uses: actions/checkout@v4
@@ -81,13 +78,13 @@ jobs:
           cache-dependency-path: trip-service/go.sum
 
       - name: Start trip-service stack
-        run: docker compose up -d --build
-      
+        run: docker compose up -d trip-service --build
+
       - name: Wait for services
         run: |
           echo "Waiting for services to be healthy..."
-        
-          timeout 90 bash -c 'until docker compose ps | grep -E "trip-service.*healthy"; do 
+
+          timeout 90 bash -c 'until docker compose ps | grep -E "trip-service.*healthy"; do
             echo "$(date): Waiting for trip-service..."
             docker compose ps
             sleep 3
@@ -96,24 +93,25 @@ jobs:
             docker compose logs
             exit 1
           }
-          
+
           echo "Services are healthy!"
-      
+
       - name: Verify health endpoint
         run: |
           echo "Testing /health endpoint..."
-          
+
           response=$(curl -f -s http://localhost:5002/health)
           echo "Response: $response"
-          
+
           if ! echo "$response" | jq -e '.status' > /dev/null 2>&1; then
             echo "Invalid health response"
             exit 1
           fi
-          
+
           echo "Health check passed!"
-          
+
       - name: Run Go integration tests
+        working-directory: trip-service
         run: go test -v -race ./tests/integration/...
         env:
           SERVICE_URL: http://localhost:5002
@@ -122,17 +120,17 @@ jobs:
           DB_USER: vagrant
           DB_PASSWORD: trips
           DB_NAME: trips
-        
+
       - name: Show logs on failure
         if: failure()
         run: |
           echo "=== Docker Compose Status ==="
           docker compose ps
-          
+
           echo ""
           echo "=== Trip Service Logs ==="
           docker compose logs trip-service
-          
+
           echo ""
           echo "=== PostgreSQL Logs ==="
           docker compose logs db
