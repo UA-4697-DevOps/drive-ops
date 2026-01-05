@@ -1,0 +1,50 @@
+---
+- name: Deploy Driver Service to Vagrant
+  hosts: vagrant
+  become: yes
+  
+  tasks:
+    - name: Ensure Docker is installed
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+      become: yes
+
+    - name: Ensure docker-compose plugin is installed
+      apt:
+        name: docker-compose-plugin
+        state: present
+      become: yes
+
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add vagrant user to docker group
+      user:
+        name: vagrant
+        groups: docker
+        append: yes
+
+    - name: Run Docker Compose for Driver Service
+      community.docker.docker_compose:
+        project_src: /home/vagrant/drive-ops/driver-service
+        state: present
+      register: output
+
+    - name: Show Docker Compose output
+      debug:
+        var: output
+
+    - name: Wait for Driver Service to be healthy
+      uri:
+        url: http://localhost:8000/health
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 30
+      delay: 2
+      ignore_errors: yes
