@@ -41,3 +41,7 @@ func (r *TripRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.db.WithContext(ctx).Delete(&domain.Trip{}, "id = ?", id).Error
 }
 
+// DB returns the underlying database connection for health checks
+func (r *TripRepository) DB() *gorm.DB {
+	return r.db
+}
