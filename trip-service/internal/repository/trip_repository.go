@@ -26,14 +26,40 @@ func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Tri
 	var trip domain.Trip
 	err := r.db.WithContext(ctx).First(&trip, "id = ?", id).Error
 	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, domain.ErrTripNotFound
+		}
 		return nil, err
 	}
 	return &trip, nil
 }
 
-// UPDATE: update trip status(driver id for example)
+// UPDATE: update trip status (generic update)
 func (r *TripRepository) Update(ctx context.Context, trip *domain.Trip) error {
 	return r.db.WithContext(ctx).Save(trip).Error
+}
+
+// ASSIGN: Atomically assign a driver and update status to CONFIRMED
+// This method ensures we only update trips that are currently PENDING
+func (r *TripRepository) AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error {
+	result := r.db.WithContext(ctx).
+		Model(&domain.Trip{}).
+		Where("id = ? AND status = ?", tripID, domain.TripStatusPending).
+		Updates(map[string]interface{}{
+			"driver_id": driverID,
+			"status":    domain.TripStatusConfirmed,
+		})
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		// Either the trip doesn't exist or it's no longer PENDING
+		return domain.ErrInvalidTripStatus
+	}
+
+	return nil
 }
 
 // DELETE: delete trip by id
