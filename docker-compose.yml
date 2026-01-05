@@ -27,10 +27,57 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
-      - "5672:5672"   # Порт для AMQP (взаємодія сервісів)
-      - "15672:15672" # Порт для Management UI (панель керування)
+      - "5672:5672"
+      - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - drive-ops-net
+
+  # --- Microservice: Client Gateway ---
+  client-gateway:
+    build:
+      context: ./client-gateway
+      dockerfile: Dockerfile
+    container_name: client-gateway-bot
+    restart: always
+    env_file: .env
+    ports:
+      - "8080:8080"
+    depends_on:
+      - rabbitmq
+    networks:
+      - drive-ops-net
+
+  # --- Microservice: Trip Service ---
+  trip-service:
+    build:
+      context: ./trip-service
+      dockerfile: Dockerfile
+    container_name: trip-service
+    restart: always
+    env_file: .env
+    ports:
+      - "8081:8081"
+    depends_on:
+      - db
+      - rabbitmq
+    networks:
+      - drive-ops-net
+
+  # --- Microservice: Driver Service ---
+  driver-service:
+    build:
+      context: ./driver-service
+      dockerfile: Dockerfile
+    container_name: driver-service
+    restart: always
+    env_file: .env
+    ports:
+      - "8082:8082"
+    depends_on:
+      - db
+      - rabbitmq
     networks:
       - drive-ops-net
 
