@@ -209,33 +209,31 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                         'IN_PROGRESS': '🚗 В дорозі',
                         'COMPLETED': '🏁 Завершено',
                         'CANCELLED': '❌ Скасовано',
+                        'MOCKED_PENDING': '⏳ Очікує водія (MOCK)',
                     }.get(status, status)
                     
                     await query.edit_message_text(
                         text=(
-                            "\u2705 *Замовлення прийнято!*\n"
+                            "✅ Замовлення прийнято!\n"
                             "Шукаємо найближче авто...\n\n"
-                            f"\U0001F194 Trip ID: {trip_id or req_id}\n"
-                            f"\U0001F4E6 Статус: {status_text}"
-                        ),
-                        parse_mode='Markdown'
+                            f"🆔 Trip ID: {trip_id or req_id}\n"
+                            f"📦 Статус: {status_text}"
+                        )
                     )
                 else:
                     err_text = (error or {}).get('message')
                     code = (error or {}).get('status_code')
                     await query.edit_message_text(
                         text=(
-                            "\u274C *Не вдалося створити поїздку.*\n"
+                            "❌ Не вдалося створити поїздку.\n"
                             f"Причина: {err_text or 'сервіс недоступний.'}\n"
                             + (f"Код: {code}\n" if code is not None else "")
                             + f"\nЛокальний запит: {req_id}"
-                        ),
-                        parse_mode='Markdown'
+                        )
                     )
             elif query.data == "order_cancel":
                 await query.edit_message_text(
-                    text="\u274C *Замовлення скасовано.*",
-                    parse_mode='Markdown'
+                    text="❌ Замовлення скасовано."
                 )
             
             chat_id = query.message.chat.id

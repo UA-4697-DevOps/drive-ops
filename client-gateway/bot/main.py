@@ -112,14 +112,14 @@ async def submit_trip_request(chat_id, order):
     payload = {
         'pickup': order.get('pickup'),
         'dropoff': order.get('dropoff'),
-        'comment': order.get('comment'),
-        'source': 'telegram_bot',
-        'user_chat_id': chat_id,
-        'passenger_id': order.get('passenger_id') or str(chat_id),
+        # WORKAROUND for testing: hardcoded passenger_id
+        # TODO: restore UUID generation after testing
+        # passenger_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"telegram-user-{chat_id}"))
+        'passenger_id': order.get('passenger_id') or "123e4567-e89b-12d3-a456-426614174000",
     }
     logger.info(
-        "Trip request payload: chat_id=%s pickup=%s dropoff=%s comment=%s",
-        chat_id, payload['pickup'], payload['dropoff'], payload['comment']
+        "Trip request payload: chat_id=%s pickup=%s dropoff=%s passenger_id=%s",
+        chat_id, payload['pickup'], payload['dropoff'], payload['passenger_id']
     )
 
     request_id = f"REQ-{chat_id}-{int(time.time())}"
