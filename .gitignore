@@ -41,6 +41,8 @@ wheels/
 .docker/
 *.log
 .vagrant/
+postgres_data/
+rabbitmq_data/
 
 # === Web ===
 node_modules/

@@ -1,0 +1,118 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: drive-ops-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${TRIP_DB_NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${TRIP_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-db:/docker-entrypoint-initdb.d
+    networks:
+      - drive-ops-net
+
+  mq:
+    image: rabbitmq:3-management-alpine
+    container_name: drive-ops-mq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - drive-ops-net
+
+  client-gateway:
+    build:
+      context: ./client-gateway
+      dockerfile: Dockerfile
+    container_name: client-gateway-bot
+    restart: always
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8080:8080"
+    depends_on:
+      trip-service:
+        condition: service_healthy
+      driver-service:
+        condition: service_healthy
+    networks:
+      - drive-ops-net
+
+  trip-service:
+    build:
+      context: ./trip-service
+      dockerfile: Dockerfile
+    container_name: trip-service
+    restart: always
+    env_file: .env
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      db:
+        condition: service_healthy
+      mq:
+        condition: service_healthy
+    networks:
+      - drive-ops-net
+
+  driver-service:
+    build:
+      context: ./driver-service
+      dockerfile: Dockerfile
+    container_name: driver-service
+    restart: always
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      db:
+        condition: service_healthy
+      mq:
+        condition: service_healthy
+    networks:
+      - drive-ops-net
+
+networks:
+  drive-ops-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
