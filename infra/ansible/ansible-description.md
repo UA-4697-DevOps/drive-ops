@@ -6,13 +6,15 @@ This directory contains Ansible playbooks and roles designed to automate the dep
 For local deployment within the cloud environment (skips Docker engine re-installation):
 
 ```bash
-ansible-playbook -i inventory/localhost playbook.yaml --tags infrastructure
+# Deploying in Codespaces using relative paths
+ansible-playbook -i infra/ansible/inventory/localhost infra/ansible/playbook.yaml --tags infrastructure
 ```
 ### In Vagrant:
 For full provisioning of the virtual machine:
 
 ```bash
-ansible-playbook -i inventory/hosts playbook.yaml
+# From the project root
+ansible-playbook -i infra/ansible/inventory/localhost infra/ansible/playbook.yaml --tags infrastructure
 ```
 ### 🛠 Configuration (.env)
 The playbook implements a Fail-Fast pattern and requires a .env file to be present in the project root. The deployment will halt immediately if the file is missing or mandatory variables are not defined.
@@ -46,3 +48,12 @@ Client Gateway (Python) — The Orchestrator & Entry Point:
 * User Interface: Acts as the primary Telegram bot interface for all users.
 
 * System Orchestrator: In our automation logic, this is the "Master Service" that triggers the deployment of the entire stack. It ensures that infrastructure (DB, MQ) and backend services (Trip, Driver) are online and healthy before accepting user requests.
+## ✅ Verification
+
+Once the deployment is complete, verify the stack status:
+
+1. **Containers**: Run `docker ps` to ensure all 5 services are **(healthy)**.
+2. **RabbitMQ**: Access the Management UI via the **Ports** tab in Codespaces (port `15672`).
+3. **Logs**: Check the logs of the Go service to ensure DB connectivity:
+   ```bash
+   docker compose logs trip-service
