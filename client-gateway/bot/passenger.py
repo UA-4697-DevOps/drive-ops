@@ -303,6 +303,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             status_mapping = {
                 'PENDING': ('⏳ Очікує водія', 'Ваше замовлення в черзі. Очікуємо підтвердження від водія.'),
                 'CONFIRMED': ('✅ Підтверджено', 'Водій прийняв замовлення і прямує до вас.'),
+                'ACTIVE': ('🚗 В дорозі', 'Водій прийняв замовлення. Ви в дорозі!'),
                 'IN_PROGRESS': ('🚗 В дорозі', 'Ви в дорозі до місця призначення.'),
                 'COMPLETED': ('🏁 Завершено', 'Поїздка успішно завершена. Дякуємо!'),
                 'CANCELLED': ('❌ Скасовано', 'Цю поїздку було скасовано.'),
@@ -386,6 +387,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             status_mapping = {
                 'PENDING': ('⏳ Очікує водія', 'Ваше замовлення в черзі. Очікуємо підтвердження від водія.'),
                 'CONFIRMED': ('✅ Підтверджено', 'Водій прийняв замовлення і прямує до вас.'),
+                'ACTIVE': ('🚗 В дорозі', 'Водій прийняв замовлення. Ви в дорозі!'),
                 'IN_PROGRESS': ('🚗 В дорозі', 'Ви в дорозі до місця призначення.'),
                 'COMPLETED': ('🏁 Завершено', 'Поїздка успішно завершена. Дякуємо!'),
                 'CANCELLED': ('❌ Скасовано', 'Цю поїздку було скасовано.'),
@@ -407,7 +409,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                 f"💡 _{status_description}_"
             )
             
-            if status not in ('COMPLETED', 'CANCELLED'):
+            if status not in ('COMPLETED', 'CANCELLED', 'ACTIVE'):
                 markup = InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔄 Оновити статус", callback_data=f"refresh_status_{trip_id}")]
                 ])
