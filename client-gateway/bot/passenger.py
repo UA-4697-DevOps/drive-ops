@@ -289,8 +289,8 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         # Show loading message
         loading_msg = await update.message.reply_text("⏳ Завантаження статусу поїздки...")
         
-        # Fetch trip status from the service
-        result = await fetch_trip_status(trip_id)
+        # Fetch trip status from the service (passing chat_id for logging)
+        result = await fetch_trip_status(trip_id, user_id=chat_id)
         
         if result.get('success'):
             trip_data = result.get('trip', {})
@@ -298,6 +298,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             pickup = trip_data.get('pickup', 'Не вказано')
             dropoff = trip_data.get('dropoff', 'Не вказано')
             created_at = trip_data.get('created_at', '')
+            driver_id = trip_data.get('driver_id')
             
             # Map status to user-friendly text with emoji
             status_mapping = {
@@ -316,12 +317,20 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             if created_at:
                 created_info = f"\n🕐 *Створено:* {created_at}"
             
+            # Format driver info if assigned
+            driver_info = ""
+            if driver_id:
+                driver_info = f"\n🚕 *Водій:* {driver_id}"
+            else:
+                driver_info = "\n🚕 *Водій:* Не призначено"
+            
             response_text = (
                 f"📋 *Інформація про поїздку*\n\n"
                 f"🆔 *Trip ID:* `{trip_id}`\n"
                 f"📦 *Статус:* {status_emoji}\n"
                 f"📍 *Звідки:* {pickup}\n"
                 f"🏁 *Куди:* {dropoff}"
+                f"{driver_info}"
                 f"{created_info}\n\n"
                 f"💡 _{status_description}_"
             )
@@ -373,9 +382,10 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         query = update.callback_query
         await query.answer("Оновлення статусу...")
         
+        chat_id = query.message.chat.id
         trip_id = query.data.replace('refresh_status_', '')
         
-        result = await fetch_trip_status(trip_id)
+        result = await fetch_trip_status(trip_id, user_id=chat_id)
         
         if result.get('success'):
             trip_data = result.get('trip', {})
@@ -383,6 +393,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             pickup = trip_data.get('pickup', 'Не вказано')
             dropoff = trip_data.get('dropoff', 'Не вказано')
             created_at = trip_data.get('created_at', '')
+            driver_id = trip_data.get('driver_id')
             
             status_mapping = {
                 'PENDING': ('⏳ Очікує водія', 'Ваше замовлення в черзі. Очікуємо підтвердження від водія.'),
@@ -399,12 +410,20 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             if created_at:
                 created_info = f"\n🕐 *Створено:* {created_at}"
             
+            # Format driver info if assigned
+            driver_info = ""
+            if driver_id:
+                driver_info = f"\n🚕 *Водій:* {driver_id}"
+            else:
+                driver_info = "\n🚕 *Водій:* Не призначено"
+            
             response_text = (
                 f"📋 *Інформація про поїздку*\n\n"
                 f"🆔 *Trip ID:* `{trip_id}`\n"
                 f"📦 *Статус:* {status_emoji}\n"
                 f"📍 *Звідки:* {pickup}\n"
                 f"🏁 *Куди:* {dropoff}"
+                f"{driver_info}"
                 f"{created_info}\n\n"
                 f"💡 _{status_description}_"
             )

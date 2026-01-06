@@ -82,12 +82,13 @@ def is_valid_address(address):
     return address is not None and len(address) > 5
 
 
-async def fetch_trip_status(trip_id):
+async def fetch_trip_status(trip_id, user_id=None):
     """
     Fetch trip status from the trip service.
     
     Args:
         trip_id: The UUID of the trip to check
+        user_id: The ID of the user making the request (for logging)
     
     Returns:
         Dictionary with success status, trip data, error details, etc.
@@ -96,8 +97,8 @@ async def fetch_trip_status(trip_id):
     correlation_id = generate_correlation_id()
     
     logger.info(
-        "Trip status check initiated: trip_id=%s",
-        trip_id,
+        "Trip status check initiated: user_id=%s trip_id=%s",
+        user_id, trip_id,
         extra={'correlationId': correlation_id}
     )
     
@@ -117,8 +118,8 @@ async def fetch_trip_status(trip_id):
         if resp.status_code == 200:
             data = resp.json()
             logger.info(
-                "Trip status check SUCCESS: trip_id=%s status=%s latency=%dms",
-                trip_id, data.get('status'), latency,
+                "Trip status check SUCCESS: user_id=%s trip_id=%s status=%s latency=%dms",
+                user_id, trip_id, data.get('status'), latency,
                 extra={'correlationId': correlation_id}
             )
             
@@ -129,8 +130,8 @@ async def fetch_trip_status(trip_id):
             }
         elif resp.status_code == 404:
             logger.warning(
-                "Trip status check NOT_FOUND: trip_id=%s latency=%dms",
-                trip_id, latency,
+                "Trip status check NOT_FOUND: user_id=%s trip_id=%s latency=%dms",
+                user_id, trip_id, latency,
                 extra={'correlationId': correlation_id}
             )
             return {
@@ -144,8 +145,8 @@ async def fetch_trip_status(trip_id):
         else:
             response_preview = resp.text.encode('utf-8')[:200].decode('utf-8', errors='ignore')
             logger.error(
-                "Trip status check FAILED: trip_id=%s status_code=%s latency=%dms response=%s",
-                trip_id, resp.status_code, latency, response_preview,
+                "Trip status check FAILED: user_id=%s trip_id=%s status_code=%s latency=%dms response=%s",
+                user_id, trip_id, resp.status_code, latency, response_preview,
                 extra={'correlationId': correlation_id}
             )
             return {
@@ -159,8 +160,8 @@ async def fetch_trip_status(trip_id):
     except httpx.TimeoutException:
         latency = int((time.time() - start_time) * 1000)
         logger.error(
-            "Trip status check TIMEOUT: trip_id=%s latency=%dms",
-            trip_id, latency,
+            "Trip status check TIMEOUT: user_id=%s trip_id=%s latency=%dms",
+            user_id, trip_id, latency,
             extra={'correlationId': correlation_id}
         )
         return {
@@ -174,8 +175,8 @@ async def fetch_trip_status(trip_id):
     except httpx.ConnectError:
         latency = int((time.time() - start_time) * 1000)
         logger.error(
-            "Trip status check CONNECTION_ERROR: trip_id=%s latency=%dms",
-            trip_id, latency,
+            "Trip status check CONNECTION_ERROR: user_id=%s trip_id=%s latency=%dms",
+            user_id, trip_id, latency,
             extra={'correlationId': correlation_id}
         )
         return {
@@ -189,8 +190,8 @@ async def fetch_trip_status(trip_id):
     except Exception as e:
         latency = int((time.time() - start_time) * 1000)
         logger.exception(
-            "Trip status check UNEXPECTED_ERROR: trip_id=%s latency=%dms error=%s",
-            trip_id, latency, str(e),
+            "Trip status check UNEXPECTED_ERROR: user_id=%s trip_id=%s latency=%dms error=%s",
+            user_id, trip_id, latency, str(e),
             extra={'correlationId': correlation_id}
         )
         return {
