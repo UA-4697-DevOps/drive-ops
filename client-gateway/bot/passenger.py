@@ -9,6 +9,7 @@ logger = create_trip_request_logger()
 
 # Conversation states
 PICKUP, DROPOFF, COMMENT = range(3)
+CHECK_TRIP_ID = 10  # Separate state for check status flow
 
 
 def register_handlers(application, user_orders, user_roles, buttons, keyboards, helpers):
@@ -17,6 +18,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     BTN_ORDER_TAXI = buttons['BTN_ORDER_TAXI']
     BTN_RATES = buttons['BTN_RATES']
     BTN_SKIP = buttons['BTN_SKIP']
+    BTN_CHECK_STATUS = buttons['BTN_CHECK_STATUS']
     
     passenger_menu = keyboards['passenger_menu']
     skip_menu = keyboards['skip_menu']
@@ -25,6 +27,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     safe_send = helpers['safe_send']
     submit_trip_request = helpers['submit_trip_request']
     is_valid_address = helpers['is_valid_address']
+    fetch_trip_status = helpers['fetch_trip_status']
     
     async def select_passenger_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
@@ -245,6 +248,183 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         finally:
             user_orders.pop(query.message.chat.id, None)
 
+    # --- Check Trip Status Flow ---
+    async def start_check_status_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Start the check trip status conversation flow."""
+        chat_id = update.effective_chat.id
+        
+        if chat_id not in user_roles:
+            await update.message.reply_text("Спочатку оберіть вашу роль за допомогою команди /start")
+            return ConversationHandler.END
+        
+        await update.message.reply_text(
+            "\U0001F50D *Перевірка статусу поїздки*\n\n"
+            "Введіть ID поїздки (Trip ID), який ви отримали при замовленні:\n\n"
+            "_Наприклад: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`_\n\n"
+            "Для скасування введіть /cancel",
+            parse_mode='Markdown'
+        )
+        return CHECK_TRIP_ID
+    
+    async def process_trip_id_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Process the trip ID input and fetch status."""
+        chat_id = update.effective_chat.id
+        trip_id = update.message.text.strip()
+        
+        # Basic validation for UUID format
+        uuid_pattern = re.compile(
+            r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        )
+        
+        if not uuid_pattern.match(trip_id):
+            await update.message.reply_text(
+                "❌ *Невірний формат ID*\n\n"
+                "Trip ID має бути у форматі UUID:\n"
+                "`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`\n\n"
+                "Спробуйте ще раз або введіть /cancel для скасування.",
+                parse_mode='Markdown'
+            )
+            return CHECK_TRIP_ID
+        
+        # Show loading message
+        loading_msg = await update.message.reply_text("⏳ Завантаження статусу поїздки...")
+        
+        # Fetch trip status from the service
+        result = await fetch_trip_status(trip_id)
+        
+        if result.get('success'):
+            trip_data = result.get('trip', {})
+            status = trip_data.get('status', 'UNKNOWN').upper()
+            pickup = trip_data.get('pickup', 'Не вказано')
+            dropoff = trip_data.get('dropoff', 'Не вказано')
+            created_at = trip_data.get('created_at', '')
+            
+            # Map status to user-friendly text with emoji
+            status_mapping = {
+                'PENDING': ('⏳ Очікує водія', 'Ваше замовлення в черзі. Очікуємо підтвердження від водія.'),
+                'CONFIRMED': ('✅ Підтверджено', 'Водій прийняв замовлення і прямує до вас.'),
+                'IN_PROGRESS': ('🚗 В дорозі', 'Ви в дорозі до місця призначення.'),
+                'COMPLETED': ('🏁 Завершено', 'Поїздка успішно завершена. Дякуємо!'),
+                'CANCELLED': ('❌ Скасовано', 'Цю поїздку було скасовано.'),
+            }
+            
+            status_emoji, status_description = status_mapping.get(status, ('❓ Невідомий', 'Статус поїздки невідомий.'))
+            
+            # Format created_at if present
+            created_info = ""
+            if created_at:
+                created_info = f"\n🕐 *Створено:* {created_at}"
+            
+            response_text = (
+                f"📋 *Інформація про поїздку*\n\n"
+                f"🆔 *Trip ID:* `{trip_id}`\n"
+                f"📦 *Статус:* {status_emoji}\n"
+                f"📍 *Звідки:* {pickup}\n"
+                f"🏁 *Куди:* {dropoff}"
+                f"{created_info}\n\n"
+                f"💡 _{status_description}_"
+            )
+            
+            # Add refresh button for non-final statuses
+            if status not in ('COMPLETED', 'CANCELLED'):
+                markup = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔄 Оновити статус", callback_data=f"refresh_status_{trip_id}")]
+                ])
+                await loading_msg.edit_text(response_text, parse_mode='Markdown', reply_markup=markup)
+            else:
+                await loading_msg.edit_text(response_text, parse_mode='Markdown')
+        else:
+            error = result.get('error', {})
+            error_code = error.get('status_code', 500)
+            error_message = error.get('message', 'Невідома помилка')
+            
+            if error_code == 404:
+                await loading_msg.edit_text(
+                    f"❌ *Поїздку не знайдено*\n\n"
+                    f"Trip ID: `{trip_id}`\n\n"
+                    "Перевірте правильність введеного ID або зверніться до підтримки.",
+                    parse_mode='Markdown'
+                )
+            else:
+                await loading_msg.edit_text(
+                    f"❌ *Помилка отримання статусу*\n\n"
+                    f"Trip ID: `{trip_id}`\n"
+                    f"Причина: {error_message}\n\n"
+                    "Спробуйте пізніше або зверніться до підтримки.",
+                    parse_mode='Markdown'
+                )
+        
+        # Return to main menu
+        await context.bot.send_message(chat_id, "Головне меню:", reply_markup=get_user_menu(chat_id))
+        return ConversationHandler.END
+    
+    async def cancel_check_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Cancel the check status flow."""
+        chat_id = update.effective_chat.id
+        await update.message.reply_text(
+            "❌ Перевірку статусу скасовано.",
+            reply_markup=get_user_menu(chat_id)
+        )
+        return ConversationHandler.END
+    
+    async def handle_refresh_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle refresh status button callback."""
+        query = update.callback_query
+        await query.answer("Оновлення статусу...")
+        
+        trip_id = query.data.replace('refresh_status_', '')
+        
+        result = await fetch_trip_status(trip_id)
+        
+        if result.get('success'):
+            trip_data = result.get('trip', {})
+            status = trip_data.get('status', 'UNKNOWN').upper()
+            pickup = trip_data.get('pickup', 'Не вказано')
+            dropoff = trip_data.get('dropoff', 'Не вказано')
+            created_at = trip_data.get('created_at', '')
+            
+            status_mapping = {
+                'PENDING': ('⏳ Очікує водія', 'Ваше замовлення в черзі. Очікуємо підтвердження від водія.'),
+                'CONFIRMED': ('✅ Підтверджено', 'Водій прийняв замовлення і прямує до вас.'),
+                'IN_PROGRESS': ('🚗 В дорозі', 'Ви в дорозі до місця призначення.'),
+                'COMPLETED': ('🏁 Завершено', 'Поїздка успішно завершена. Дякуємо!'),
+                'CANCELLED': ('❌ Скасовано', 'Цю поїздку було скасовано.'),
+            }
+            
+            status_emoji, status_description = status_mapping.get(status, ('❓ Невідомий', 'Статус поїздки невідомий.'))
+            
+            created_info = ""
+            if created_at:
+                created_info = f"\n🕐 *Створено:* {created_at}"
+            
+            response_text = (
+                f"📋 *Інформація про поїздку*\n\n"
+                f"🆔 *Trip ID:* `{trip_id}`\n"
+                f"📦 *Статус:* {status_emoji}\n"
+                f"📍 *Звідки:* {pickup}\n"
+                f"🏁 *Куди:* {dropoff}"
+                f"{created_info}\n\n"
+                f"💡 _{status_description}_"
+            )
+            
+            if status not in ('COMPLETED', 'CANCELLED'):
+                markup = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔄 Оновити статус", callback_data=f"refresh_status_{trip_id}")]
+                ])
+                await query.edit_message_text(response_text, parse_mode='Markdown', reply_markup=markup)
+            else:
+                await query.edit_message_text(response_text, parse_mode='Markdown')
+        else:
+            error = result.get('error', {})
+            error_message = error.get('message', 'Невідома помилка')
+            await query.edit_message_text(
+                f"❌ *Помилка оновлення статусу*\n\n"
+                f"Trip ID: `{trip_id}`\n"
+                f"Причина: {error_message}\n\n"
+                "Спробуйте пізніше.",
+                parse_mode='Markdown'
+            )
+
     # Conversation handler for ordering taxi
     conv_handler = ConversationHandler(
         entry_points=[
@@ -259,7 +439,20 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         fallbacks=[CommandHandler("cancel_order", cancel_order_command)],
     )
 
+    # Check trip status conversation handler
+    check_status_conv_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex(f"^{re.escape(BTN_CHECK_STATUS)}$"), start_check_status_flow),
+        ],
+        states={
+            CHECK_TRIP_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_trip_id_step)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_check_status)],
+    )
+
     application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_PASSENGER)}$"), select_passenger_role))
     application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_RATES)}$"), show_rates))
     application.add_handler(conv_handler)
+    application.add_handler(check_status_conv_handler)
     application.add_handler(CallbackQueryHandler(handle_order_status, pattern="^order_"))
+    application.add_handler(CallbackQueryHandler(handle_refresh_status, pattern="^refresh_status_"))

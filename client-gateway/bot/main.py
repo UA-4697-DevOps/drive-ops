@@ -30,6 +30,7 @@ BTN_ORDER_TAXI = "\U0001F695 Замовити таксі"
 BTN_RATES = "\U0001F4B0 Тарифи"
 BTN_SKIP = "\u23E9 Пропустити"
 BTN_CHANGE_ROLE = "\U0001F504 Змінити роль"
+BTN_CHECK_STATUS = "\U0001F50D Перевірити статус"
 
 BUTTONS = {
     'BTN_PASSENGER': BTN_PASSENGER,
@@ -39,6 +40,7 @@ BUTTONS = {
     'BTN_RATES': BTN_RATES,
     'BTN_SKIP': BTN_SKIP,
     'BTN_CHANGE_ROLE': BTN_CHANGE_ROLE,
+    'BTN_CHECK_STATUS': BTN_CHECK_STATUS,
 }
 
 def role_selection_menu():
@@ -48,6 +50,7 @@ def role_selection_menu():
 def passenger_menu():
     keyboard = [
         [KeyboardButton(BTN_ORDER_TAXI), KeyboardButton(BTN_RATES)],
+        [KeyboardButton(BTN_CHECK_STATUS)],
         [KeyboardButton(BTN_CHANGE_ROLE)]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -77,6 +80,128 @@ KEYBOARDS = {
 
 def is_valid_address(address):
     return address is not None and len(address) > 5
+
+
+async def fetch_trip_status(trip_id):
+    """
+    Fetch trip status from the trip service.
+    
+    Args:
+        trip_id: The UUID of the trip to check
+    
+    Returns:
+        Dictionary with success status, trip data, error details, etc.
+    """
+    start_time = time.time()
+    correlation_id = generate_correlation_id()
+    
+    logger.info(
+        "Trip status check initiated: trip_id=%s",
+        trip_id,
+        extra={'correlationId': correlation_id}
+    )
+    
+    try:
+        url = f"{TRIP_SERVICE_URL}/trips/{trip_id}"
+        logger.info(
+            "Sending GET %s",
+            url,
+            extra={'correlationId': correlation_id}
+        )
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url)
+        
+        latency = int((time.time() - start_time) * 1000)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            logger.info(
+                "Trip status check SUCCESS: trip_id=%s status=%s latency=%dms",
+                trip_id, data.get('status'), latency,
+                extra={'correlationId': correlation_id}
+            )
+            
+            return {
+                'success': True,
+                'trip': data,
+                'error': None,
+            }
+        elif resp.status_code == 404:
+            logger.warning(
+                "Trip status check NOT_FOUND: trip_id=%s latency=%dms",
+                trip_id, latency,
+                extra={'correlationId': correlation_id}
+            )
+            return {
+                'success': False,
+                'trip': None,
+                'error': {
+                    'status_code': 404,
+                    'message': 'Поїздку не знайдено',
+                },
+            }
+        else:
+            response_preview = resp.text.encode('utf-8')[:200].decode('utf-8', errors='ignore')
+            logger.error(
+                "Trip status check FAILED: trip_id=%s status_code=%s latency=%dms response=%s",
+                trip_id, resp.status_code, latency, response_preview,
+                extra={'correlationId': correlation_id}
+            )
+            return {
+                'success': False,
+                'trip': None,
+                'error': {
+                    'status_code': resp.status_code,
+                    'message': resp.text or 'Помилка сервісу',
+                },
+            }
+    except httpx.TimeoutException:
+        latency = int((time.time() - start_time) * 1000)
+        logger.error(
+            "Trip status check TIMEOUT: trip_id=%s latency=%dms",
+            trip_id, latency,
+            extra={'correlationId': correlation_id}
+        )
+        return {
+            'success': False,
+            'trip': None,
+            'error': {
+                'status_code': 504,
+                'message': 'Сервіс не відповідає. Спробуйте пізніше.',
+            },
+        }
+    except httpx.ConnectError:
+        latency = int((time.time() - start_time) * 1000)
+        logger.error(
+            "Trip status check CONNECTION_ERROR: trip_id=%s latency=%dms",
+            trip_id, latency,
+            extra={'correlationId': correlation_id}
+        )
+        return {
+            'success': False,
+            'trip': None,
+            'error': {
+                'status_code': 503,
+                'message': 'Сервіс недоступний. Спробуйте пізніше.',
+            },
+        }
+    except Exception as e:
+        latency = int((time.time() - start_time) * 1000)
+        logger.exception(
+            "Trip status check UNEXPECTED_ERROR: trip_id=%s latency=%dms error=%s",
+            trip_id, latency, str(e),
+            extra={'correlationId': correlation_id}
+        )
+        return {
+            'success': False,
+            'trip': None,
+            'error': {
+                'status_code': 500,
+                'message': str(e),
+            },
+        }
+
 
 async def safe_send(chat_id, text, context, **kwargs):
     try:
@@ -232,6 +357,7 @@ HELPERS = {
     'safe_edit_message_text': safe_edit_message_text,
     'submit_trip_request': submit_trip_request,
     'is_valid_address': is_valid_address,
+    'fetch_trip_status': fetch_trip_status,
 }
 
 async def start_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
