@@ -1,0 +1,44 @@
+# Drive-Ops Ansible Infrastructure
+This directory contains Ansible playbooks and roles designed to automate the deployment of the drive-ops microservices stack.
+
+## 🚀 Quick Start
+### In GitHub Codespaces:
+For local deployment within the cloud environment (skips Docker engine re-installation):
+
+```bash
+ansible-playbook -i inventory/localhost playbook.yaml --tags infrastructure
+```
+### In Vagrant:
+For full provisioning of the virtual machine:
+
+```bash
+ansible-playbook -i inventory/hosts playbook.yaml
+```
+### 🛠 Configuration (.env)
+The playbook implements a Fail-Fast pattern and requires a .env file to be present in the project root. The deployment will halt immediately if the file is missing or mandatory variables are not defined.
+
+Mandatory variables:
+
+BOT_TOKEN — Telegram Bot API token for the Client Gateway.
+
+DB_USER / DB_PASSWORD — Credentials for the PostgreSQL database.
+
+RABBITMQ_USER / RABBITMQ_PASSWORD — Credentials for the RabbitMQ message broker.
+
+### 🏷 Using Tags
+infrastructure — Performs configuration validation and deploys the stack via Docker Compose.
+
+docker — Full cycle: installs the Docker Engine, dependencies, and starts services.
+
+### 🏗 Deployment Architecture
+The playbook orchestrates the following services as part of the drive-ops ecosystem:
+
+Database (PostgreSQL) — Handles data persistence with automated initialization of trip_db and driver_db.
+
+Message Broker (RabbitMQ) — Facilitates asynchronous communication between Go and Python microservices.
+
+Trip Service (Go) — Manages ride requests and trip logic.
+
+Driver Service (Python) — Handles driver availability and matching.
+
+Client Gateway (Python) — Serves as the primary Telegram bot interface for users.
