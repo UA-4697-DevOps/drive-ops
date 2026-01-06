@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"trip-service/internal/domain"
 	"trip-service/internal/repository"
 
@@ -32,8 +33,11 @@ func NewTripService(repo *repository.TripRepository) *TripService {
 }
 
 func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
-	if trip.Pickup == "" || trip.Dropoff == "" || trip.PassengerID == uuid.Nil {
+	if trip.Pickup == "" || trip.Dropoff == "" {
 		return ErrInvalidInput
+	}
+	if trip.PassengerID == uuid.Nil {
+		return errors.New("passenger_id is required")
 	}
 
 	trip.ID = uuid.New()
@@ -51,4 +55,17 @@ func (s *TripService) GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, 
 		return nil, fmt.Errorf("failed to get trip: %w", err)
 	}
 	return trip, nil
+}
+
+func (s *TripService) CheckHealth(ctx context.Context) error {
+	sqlDB, err := s.repo.DB().DB()
+	if err != nil {
+		return fmt.Errorf("failed to get database connection: %w", err)
+	}
+
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return fmt.Errorf("database health check failed: %w", err)
+	}
+
+	return nil
 }
