@@ -45,4 +45,4 @@ Client Gateway (Python) — The Orchestrator & Entry Point:
 
 * User Interface: Acts as the primary Telegram bot interface for all users.
 
-* System Orchestrator: In our automation logic, this is the "Master Service" that triggers the deployment of the entire stack. It ensures that infrastructure (DB, MQ) and backend   services (Trip, Driver) are online and healthy before accepting user requests.
+* System Orchestrator: In our automation logic, this is the "Master Service" that triggers the deployment of the entire stack. It ensures that infrastructure (DB, MQ) and backend services (Trip, Driver) are online and healthy before accepting user requests.
