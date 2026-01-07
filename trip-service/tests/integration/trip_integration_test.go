@@ -237,7 +237,7 @@ func TestTripRepository_Delete(t *testing.T) {
 func TestHealthEndpoint(t *testing.T) {
 	//t.Skip("Skipping health endpoint test - HTTP server not yet implemented")
 
-	resp, err := MakeHTTPRequest("GET", "http://localhost:5002/health")
+	resp, err := MakeHTTPRequest("GET", "http://localhost:8081/health")
 	if err != nil {
 		t.Fatalf("Failed to make health check request: %v", err)
 	}
