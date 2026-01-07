@@ -61,6 +61,6 @@ func main() {
 		r.Get("/{id}", handler.GetTrip)
 	})
 
-	log.Printf("Server is running on %s...", getEnv("SERVER_PORT", ":8080"))
-	log.Fatal(http.ListenAndServe(getEnv("SERVER_PORT", ":8080"), r))
+	log.Printf("Server is running on %s...", getEnv("TRIP_SERVICE_PORT", ":8081"))
+	log.Fatal(http.ListenAndServe(getEnv("TRIP_SERVICE_PORT", ":8081"), r))
 }
