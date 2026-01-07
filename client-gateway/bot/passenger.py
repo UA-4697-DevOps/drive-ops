@@ -1,5 +1,7 @@
 import logging
 import re
+import time
+from datetime import datetime
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters, CommandHandler
 from telegram.helpers import escape_markdown
@@ -196,7 +198,10 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     chat_id, order.get('pickup'), order.get('dropoff'), order.get('comment')
                 )
 
+                start_time = time.time()
                 result = await submit_trip_request(chat_id, order)
+                latency = int((time.time() - start_time) * 1000)  # в мілісекундах
+                
                 req_id = result.get('request_id')
                 trip_id = result.get('trip_id')
                 error = result.get('error')
@@ -385,6 +390,9 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         chat_id = query.message.chat.id
         trip_id = query.data.replace('refresh_status_', '')
         
+        # Get current timestamp with milliseconds to ensure unique message
+        updated_at = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        
         result = await fetch_trip_status(trip_id, user_id=chat_id)
         
         if result.get('success'):
@@ -425,16 +433,20 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                 f"🏁 *Куди:* {dropoff}"
                 f"{driver_info}"
                 f"{created_info}\n\n"
-                f"💡 _{status_description}_"
+                f"💡 _{status_description}_\n\n"
+                f"🕐 _Оновлено: {updated_at}_"
             )
             
-            if status not in ('COMPLETED', 'CANCELLED', 'ACTIVE'):
-                markup = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔄 Оновити статус", callback_data=f"refresh_status_{trip_id}")]
-                ])
-                await query.edit_message_text(response_text, parse_mode='Markdown', reply_markup=markup)
-            else:
-                await query.edit_message_text(response_text, parse_mode='Markdown')
+            try:
+                if status not in ('COMPLETED', 'CANCELLED', 'ACTIVE'):
+                    markup = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔄 Оновити статус", callback_data=f"refresh_status_{trip_id}")]
+                    ])
+                    await query.edit_message_text(response_text, parse_mode='Markdown', reply_markup=markup)
+                else:
+                    await query.edit_message_text(response_text, parse_mode='Markdown')
+            except Exception as e:
+                logger.warning("Failed to edit message (possibly same content): %s", e)
         else:
             error = result.get('error', {})
             error_message = error.get('message', 'Невідома помилка')
