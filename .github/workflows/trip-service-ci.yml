@@ -141,7 +141,7 @@ jobs:
           DB_PORT: 5432
           DB_USER: vagrant
           DB_PASSWORD: trips
-          TRIP_DB_NAME: trips
+          TRIP_DB_NAME: trip_db
 
       - name: Show logs on failure
         if: failure()
