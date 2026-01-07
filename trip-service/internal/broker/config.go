@@ -66,7 +66,16 @@ func LoadConfig() (*Config, error) {
 			return nil, fmt.Errorf("RABBITMQ_PASSWORD environment variable is required")
 		}
 
-		connURL = fmt.Sprintf("amqp://%s:%s@%s:%s/", user, password, host, port)
+		// Reject insecure default credentials
+		if user == "guest" && password == "guest" {
+			return nil, fmt.Errorf("default guest/guest credentials are not allowed for security reasons")
+		}
+
+		// URL-encode credentials to handle special characters
+		encodedUser := url.QueryEscape(user)
+		encodedPassword := url.QueryEscape(password)
+
+		connURL = fmt.Sprintf("amqp://%s:%s@%s:%s/", encodedUser, encodedPassword, host, port)
 	}
 
 	exchangeName := getEnv("RABBITMQ_EXCHANGE", "trip_events")
