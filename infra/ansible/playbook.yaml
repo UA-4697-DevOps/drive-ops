@@ -1,0 +1,39 @@
+---
+- name: Prepare Debian VM for Docker services
+  hosts: local_vm
+  become: true
+  gather_facts: true
+  
+  vars:
+    docker_users:
+      - vagrant
+  
+  pre_tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      tags: always
+    
+    - name: Upgrade all packages
+      apt:
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+      tags: upgrade
+
+  roles:
+    - role: docker
+    - role: client-gateway
+
+  post_tasks:
+    - name: Print completion message
+      debug:
+        msg: 
+          - "========================================"
+          - " VM is configured and ready!"
+          - "========================================"
+          - "{{ docker_version.stdout }}"
+          - "{{ docker_compose_version.stdout }}"
+          - "========================================"
+      tags: always
