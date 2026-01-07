@@ -78,7 +78,7 @@ func main() {
 	})
 
 	// Setup HTTP server with graceful shutdown
-	serverPort := getEnv("TRIP_SERVICE_PORT", ":8080")
+	serverPort := getEnv("TRIP_SERVICE_PORT", ":8081")
 	srv := &http.Server{
 		Addr:    serverPort,
 		Handler: r,
