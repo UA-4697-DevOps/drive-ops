@@ -1,4 +1,4 @@
-# === General ===
+# == General ===
 .DS_Store
 Thumbs.db
 *.log
@@ -7,6 +7,11 @@ Thumbs.db
 *~
 .vscode/
 .idea/
+node_modules/
+bin/
+dist/
+.env
+*.log
 
 # === Python ===
 __pycache__/
@@ -15,6 +20,7 @@ __pycache__/
 .venv/
 venv/
 ENV/
+.env
 build/
 develop-eggs/
 dist/
@@ -30,40 +36,35 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-.pytest_cache/
-*.cover
-htmlcov/
 
-# === Docker ===
-.docker/
-docker-compose.override.yml
 
 # === Infrastructure ===
 .terraform/
 *.tfstate
 *.tfstate.backup
 .terraform.lock.hcl
+<<<<<<< HEAD
 postgres_data/
 rabbitmq_data/
+=======
+.docker/
+*.log
+>>>>>>> parent of 1ae4b5a (Containerize driver-service and add Ansible deployment)
 
-# === Vagrant ===
-.vagrant/
-*.box
-
-# === JavaScript/Node ===
+# === Web ===
 node_modules/
 npm-debug.log*
 yarn-error.log*
 .next/
 .nuxt/
-package-lock.json
 
-# === Environment & Secrets ===
+# === Critical ===
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+<<<<<<< HEAD
 *.pem
 *.key
 *.crt
@@ -73,3 +74,6 @@ package-lock.json
 *.sqlite
 *.sqlite3
 db_data/
+=======
+*.pem
+>>>>>>> parent of 1ae4b5a (Containerize driver-service and add Ansible deployment)
