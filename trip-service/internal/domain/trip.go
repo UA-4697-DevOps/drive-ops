@@ -42,8 +42,3 @@ type AssignDriverRequest struct {
 	// Updated: Removed the "validate" tag because validation is handled in the service layer
 	DriverID uuid.UUID `json:"driver_id"`
 }
-
-// AssignDriverRequest represents the Data Transfer Object (DTO) for the API input
-type AssignDriverRequest struct {
-	DriverID uuid.UUID `json:"driver_id" validate:"required"`
-}
