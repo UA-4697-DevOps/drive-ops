@@ -7,6 +7,11 @@ Provides reusable fixtures for:
 - Test environment setup
 """
 
+# Make `client-gateway` package importable during tests (so `import bot` works)
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from telegram import Update, Message, Chat, User, CallbackQuery, Bot
@@ -294,24 +299,6 @@ def reset_global_state():
 # =============================================================================
 # HTTP Mocking Fixtures
 # =============================================================================
-
-
-@pytest.fixture
-def mock_http_success():
-    """Provide mock HTTP success response data."""
-    return {"status_code": 201, "json": {"trip_id": "trip-123", "status": "pending"}}
-
-
-@pytest.fixture
-def mock_http_error():
-    """Provide mock HTTP error response data."""
-    return {"status_code": 500, "text": "Internal Server Error"}
-
-
-@pytest.fixture
-def mock_http_bad_request():
-    """Provide mock HTTP 400 response data."""
-    return {"status_code": 400, "json": {"error": "Invalid pickup location"}}
 
 
 # =============================================================================
