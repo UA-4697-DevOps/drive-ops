@@ -11,6 +11,8 @@ import (
 var (
 	ErrTripNotFound      = errors.New("trip not found")
 	ErrInvalidTripStatus = errors.New("trip is not in PENDING status")
+	// Added to handle validation errors and return 400 Bad Request
+	ErrInvalidTripData   = errors.New("invalid trip data: pickup, dropoff and passenger_id are required")
 )
 
 // Trip status constants for lifecycle management
