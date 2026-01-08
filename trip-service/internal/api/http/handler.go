@@ -30,9 +30,15 @@ func (h *TripHandler) CreateTrip(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.CreateTrip(r.Context(), &trip); err != nil {
-		// Log actual error for debugging
+		// Check for validation error to return 400 Bad Request
+		if errors.Is(err, domain.ErrInvalidTripData) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Log actual error for debugging and return 500
 		log.Printf("Failed to create trip: %v", err)
-		http.Error(w, "Failed to create trip", http.StatusInternalServerError)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -89,10 +95,13 @@ func (h *TripHandler) AssignDriver(w http.ResponseWriter, r *http.Request) {
 	err = h.svc.AssignDriver(r.Context(), tripID, req.DriverID)
 	if err != nil {
 		switch {
+		case errors.Is(err, domain.ErrInvalidTripData):
+			// Return 400 Bad Request for validation errors
+			http.Error(w, err.Error(), http.StatusBadRequest)
 		case errors.Is(err, domain.ErrTripNotFound):
 			http.Error(w, "Trip not found", http.StatusNotFound)
 		case errors.Is(err, domain.ErrInvalidTripStatus):
-			// 409 Conflict is best for "already taken" or "invalid state"
+			// 409 Conflict for "already taken" or "invalid state"
 			http.Error(w, "Trip is no longer available for assignment", http.StatusConflict)
 		default:
 			log.Printf("Failed to assign driver: %v", err)
