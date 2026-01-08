@@ -29,11 +29,9 @@ func NewTripService(repo *repository.TripRepository) *TripService {
 
 // CreateTrip handles the logic for initiating a new trip request
 func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
-	if trip.Pickup == "" || trip.Dropoff == "" {
-		return fmt.Errorf("pickup and dropoff locations are required")
-	}
-	if trip.PassengerID == uuid.Nil {
-		return fmt.Errorf("passenger_id is required")
+	// Validation check using domain errors for 400 Bad Request responses
+	if trip.Pickup == "" || trip.Dropoff == "" || trip.PassengerID == uuid.Nil {
+		return domain.ErrInvalidTripData
 	}
 
 	trip.ID = uuid.New()
@@ -53,8 +51,9 @@ func (s *TripService) GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, 
 
 // AssignDriver handles the business logic for assigning a driver to an existing trip
 func (s *TripService) AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error {
+	// Validation check for driver_id using domain error
 	if driverID == uuid.Nil {
-		return fmt.Errorf("driver_id is required for assignment")
+		return domain.ErrInvalidTripData
 	}
 
 	// The repository handles the atomic update and state validation (status must be PENDING)
