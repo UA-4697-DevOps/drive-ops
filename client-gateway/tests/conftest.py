@@ -273,8 +273,16 @@ def custom_service_url(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def reset_global_state():
-    """Automatically reset global state before each test."""
+def reset_global_state(monkeypatch):
+    """Automatically reset global state before each test.
+
+    Ensure `BOT_TOKEN` is present in the environment to avoid
+    `sys.exit()` running at import time in `bot.main` when tests
+    import its module-level objects.
+    """
+    # Ensure BOT_TOKEN is set before importing bot.main (avoids hard exit)
+    monkeypatch.setenv("BOT_TOKEN", "test_token_123456789")
+
     from bot.main import user_orders, user_roles
 
     # Clear before test
