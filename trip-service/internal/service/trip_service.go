@@ -51,18 +51,14 @@ func (s *TripService) GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, 
 
 // AssignDriver handles the business logic for assigning a driver to an existing trip
 func (s *TripService) AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error {
-	// Validation check for driver_id using domain error
-	if driverID == uuid.Nil {
+	// Validating both tripID and driverID for consistency
+	// Providing earlier, clearer error handling if either ID is uuid.Nil
+	if tripID == uuid.Nil || driverID == uuid.Nil {
 		return domain.ErrInvalidTripData
 	}
 
-	// The repository handles the atomic update and state validation (status must be PENDING)
-	err := s.repo.AssignDriver(ctx, tripID, driverID)
-	if err != nil {
-		return err // Will return domain.ErrInvalidTripStatus if already taken
-	}
-
-	return nil
+	// Directly return the error from the repository to simplify the return statement
+	return s.repo.AssignDriver(ctx, tripID, driverID)
 }
 
 // CheckHealth verifies the database connection status
