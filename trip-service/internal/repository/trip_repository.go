@@ -43,7 +43,8 @@ func (r *TripRepository) Update(ctx context.Context, trip *domain.Trip) error {
 // AssignDriver atomically assigns a driver and updates status to CONFIRMED.
 // It differentiates between "Trip Not Found" and "Invalid Status" errors.
 func (r *TripRepository) AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error {
-	// Attempt atomic update with a guard on status and driver_id uniqueness
+	// 43-57: Attempt atomic update with a guard on status and unassigned status (driver_id IS NULL).
+	// This prevents concurrent drivers from accepting the same trip.
 	result := r.db.WithContext(ctx).
 		Model(&domain.Trip{}).
 		Where("id = ? AND status = ? AND driver_id IS NULL", tripID, domain.TripStatusPending).
