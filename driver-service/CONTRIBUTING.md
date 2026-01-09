@@ -7,16 +7,10 @@ This project utilizes a **Service-Integration Workflow**. This approach allows e
 The repository is organized into three tiers of branches. Please adhere to the naming conventions below.
 
 | Tier | Branch Name / Pattern | Description |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | **Production** | `main` | The stable, production-ready state of the system. |
-| **Integration** | `client-gateway`<br>
-
-<br>`driver-service`<br>
-
-<br>`trip-service` | Long-lived branches for each team. Features are accumulated here before release. |
-| **Development** | `feature/<service>/<name>`<br>
-
-<br>`fix/<service>/<name>` | Temporary branches for specific tasks. Created from the service branch. |
+| **Integration** | `client-gateway`, `driver-service`, `trip-service` | Long-lived branches for each team. Features are accumulated here before release. |
+| **Development** | `feature/<service>/<name>`, `fix/<service>/<name>` | Temporary branches for specific tasks. Created from the service branch. |
 
 > **Example:** A feature for the driver service should be named `feature/driver-service/jwt-auth`.
 
@@ -92,35 +86,35 @@ The following diagram illustrates the lifecycle of a feature, the release proces
 
 ```mermaid
 gitGraph
-   commit tag: "Initial"
-   branch driver-service
-   checkout driver-service
-   commit id: "Init Service"
-   
-   %% Feature Development Phase
-   branch feature/driver-service/login
-   checkout feature/driver-service/login
-   commit id: "wip: auth"
-   commit id: "fix: typo"
-   checkout driver-service
-   %% REMOVED "type: SQUASH" below to fix render error
-   merge feature/driver-service/login id: "feat: Login (#101)"
-   
-   %% Another Feature
-   branch feature/driver-service/calc
-   checkout feature/driver-service/calc
-   commit id: "wip: calc"
-   checkout driver-service
-   %% REMOVED "type: SQUASH" below to fix render error
-   merge feature/driver-service/calc id: "feat: Calc (#102)"
-
-   %% Release Phase (Service -> Main)
-   checkout main
-   merge driver-service type: NORMAL tag: "Release v1.0"
-   
-   %% Sync Phase (Main -> Service)
-   checkout driver-service
-   merge main id: "Sync Main"
+    commit tag: "Initial"
+    branch driver-service
+    checkout driver-service
+    commit id: "Init Service"
+    
+    %% Feature Development Phase
+    branch feature/driver-service/login
+    checkout feature/driver-service/login
+    commit id: "wip: auth"
+    checkout driver-service
+    merge feature/driver-service/login id: "feat: Login (#101)"
+    
+    %% Release PR Opened here. Cross-team review requests changes.
+    
+    %% Review & Fix Phase (The new addition)
+    branch fix/driver-service/review-1
+    checkout fix/driver-service/review-1
+    commit id: "fix: api contract"
+    checkout driver-service
+    merge fix/driver-service/review-1 id: "fix: review comments"
+    
+    %% Release Phase (Service -> Main)
+    %% Now merging the service branch (including the fix) to main
+    checkout main
+    merge driver-service type: NORMAL tag: "Release v1.0"
+    
+    %% Sync Phase (Main -> Service)
+    checkout driver-service
+    merge main id: "Sync Main"
 ```
 
 ## Summary Checklist
