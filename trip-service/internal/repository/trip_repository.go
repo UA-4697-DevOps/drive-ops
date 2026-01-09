@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors" // Added for proper error checking
 	"trip-service/internal/domain"
 
 	"github.com/google/uuid"
@@ -26,7 +27,8 @@ func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Tri
 	var trip domain.Trip
 	err := r.db.WithContext(ctx).First(&trip, "id = ?", id).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		// FIX: Use errors.Is to correctly identify wrapped GORM errors
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, domain.ErrTripNotFound
 		}
 		return nil, err
