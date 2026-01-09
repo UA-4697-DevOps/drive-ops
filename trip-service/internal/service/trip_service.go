@@ -29,7 +29,7 @@ func NewTripService(repo *repository.TripRepository) *TripService {
 
 // CreateTrip handles the logic for initiating a new trip request
 func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
-	// Validation check using domain errors for 400 Bad Request responses
+	// Validation check for mandatory trip fields
 	if trip.Pickup == "" || trip.Dropoff == "" || trip.PassengerID == uuid.Nil {
 		return domain.ErrInvalidTripData
 	}
@@ -51,10 +51,10 @@ func (s *TripService) GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, 
 
 // AssignDriver handles the business logic for assigning a driver to an existing trip
 func (s *TripService) AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error {
-	// Validating both tripID and driverID for consistency
-	// Providing earlier, clearer error handling if either ID is uuid.Nil
+	// 52-62: Fixed error message mismatch by using ErrInvalidID
+	// This provides a clear and accurate message to API consumers
 	if tripID == uuid.Nil || driverID == uuid.Nil {
-		return domain.ErrInvalidTripData
+		return domain.ErrInvalidID
 	}
 
 	// Directly return the error from the repository to simplify the return statement
