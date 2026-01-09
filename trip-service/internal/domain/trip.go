@@ -10,13 +10,14 @@ import (
 // Business logic errors
 var (
 	ErrTripNotFound      = errors.New("trip not found")
-	ErrInvalidTripStatus = errors.New("trip is not in PENDING status")
+	
+	// Updated: Clarified message to cover both wrong status and "already assigned" cases
+	ErrInvalidTripStatus = errors.New("trip is no longer available for assignment")
 	
 	// Split validation errors to ensure accurate API messages (400 Bad Request)
-	// ErrInvalidCreateTripData: Specific to Phase 1 (Order Creation)
 	ErrInvalidCreateTripData   = errors.New("invalid trip data: pickup, dropoff and passenger_id are required")
 	
-	// ErrInvalidID: Specific to identity validation (Phase 3 & 4)
+	// Specific to identity validation (Phase 3 & 4)
 	ErrInvalidID               = errors.New("invalid trip or driver identity")
 )
 
