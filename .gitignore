@@ -1,10 +1,5 @@
 # == General ===
 .DS_Store
-Thumbs.db
-*.log
-*.swp
-*.swo
-*~
 .vscode/
 .idea/
 node_modules/
@@ -43,13 +38,11 @@ wheels/
 *.tfstate
 *.tfstate.backup
 .terraform.lock.hcl
-<<<<<<< HEAD
-postgres_data/
-rabbitmq_data/
-=======
 .docker/
 *.log
->>>>>>> parent of 1ae4b5a (Containerize driver-service and add Ansible deployment)
+.vagrant/
+postgres_data/
+rabbitmq_data/
 
 # === Web ===
 node_modules/
@@ -64,16 +57,4 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
-<<<<<<< HEAD
 *.pem
-*.key
-*.crt
-
-# === Databases ===
-*.db
-*.sqlite
-*.sqlite3
-db_data/
-=======
-*.pem
->>>>>>> parent of 1ae4b5a (Containerize driver-service and add Ansible deployment)
