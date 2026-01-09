@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"errors" // Added for proper error checking
+	"errors"
 	"trip-service/internal/domain"
 
 	"github.com/google/uuid"
@@ -27,7 +27,6 @@ func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Tri
 	var trip domain.Trip
 	err := r.db.WithContext(ctx).First(&trip, "id = ?", id).Error
 	if err != nil {
-		// FIX: Use errors.Is to correctly identify wrapped GORM errors
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, domain.ErrTripNotFound
 		}
@@ -44,10 +43,10 @@ func (r *TripRepository) Update(ctx context.Context, trip *domain.Trip) error {
 // AssignDriver atomically assigns a driver and updates status to CONFIRMED.
 // It differentiates between "Trip Not Found" and "Invalid Status" errors.
 func (r *TripRepository) AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error {
-	// Attempt atomic update
+	// Attempt atomic update with a guard on status and driver_id uniqueness
 	result := r.db.WithContext(ctx).
 		Model(&domain.Trip{}).
-		Where("id = ? AND status = ?", tripID, domain.TripStatusPending).
+		Where("id = ? AND status = ? AND driver_id IS NULL", tripID, domain.TripStatusPending).
 		Updates(map[string]interface{}{
 			"driver_id": driverID,
 			"status":    domain.TripStatusConfirmed,
@@ -57,26 +56,26 @@ func (r *TripRepository) AssignDriver(ctx context.Context, tripID uuid.UUID, dri
 		return result.Error
 	}
 
-	// If no rows were updated, we need to find out why
+	// If no rows were updated, we need to determine the cause (404 vs 409)
 	if result.RowsAffected == 0 {
-		var exists bool
+		var count int64
+		// Robust and DB-agnostic existence check using Count()
 		err := r.db.WithContext(ctx).
 			Model(&domain.Trip{}).
-			Select("count(*) > 0").
 			Where("id = ?", tripID).
-			Find(&exists).
+			Count(&count).
 			Error
 
 		if err != nil {
 			return err
 		}
 
-		if !exists {
-			// Trip ID truly does not exist in the database
+		if count == 0 {
+			// Trip ID truly does not exist
 			return domain.ErrTripNotFound
 		}
 
-		// Trip exists, but its status was not PENDING (already taken or cancelled)
+		// Trip exists but is not PENDING or already has a driver assigned
 		return domain.ErrInvalidTripStatus
 	}
 
