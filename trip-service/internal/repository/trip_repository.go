@@ -16,12 +16,12 @@ func NewTripRepository(db *gorm.DB) *TripRepository {
 	return &TripRepository{db: db}
 }
 
-// CREATE: create new trip
+// Create persists a new trip record into the database
 func (r *TripRepository) Create(ctx context.Context, trip *domain.Trip) error {
 	return r.db.WithContext(ctx).Create(trip).Error
 }
 
-// READ: get trip by id
+// GetByID retrieves a trip by its unique identifier
 func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Trip, error) {
 	var trip domain.Trip
 	err := r.db.WithContext(ctx).First(&trip, "id = ?", id).Error
@@ -34,14 +34,15 @@ func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Tri
 	return &trip, nil
 }
 
-// UPDATE: update trip status (generic update)
+// Update performs a generic update of the trip record
 func (r *TripRepository) Update(ctx context.Context, trip *domain.Trip) error {
 	return r.db.WithContext(ctx).Save(trip).Error
 }
 
-// ASSIGN: Atomically assign a driver and update status to CONFIRMED
-// This method ensures we only update trips that are currently PENDING
+// AssignDriver atomically assigns a driver and updates status to CONFIRMED.
+// It differentiates between "Trip Not Found" and "Invalid Status" errors.
 func (r *TripRepository) AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error {
+	// Attempt atomic update
 	result := r.db.WithContext(ctx).
 		Model(&domain.Trip{}).
 		Where("id = ? AND status = ?", tripID, domain.TripStatusPending).
@@ -54,15 +55,33 @@ func (r *TripRepository) AssignDriver(ctx context.Context, tripID uuid.UUID, dri
 		return result.Error
 	}
 
+	// If no rows were updated, we need to find out why
 	if result.RowsAffected == 0 {
-		// Either the trip doesn't exist or it's no longer PENDING
+		var exists bool
+		err := r.db.WithContext(ctx).
+			Model(&domain.Trip{}).
+			Select("count(*) > 0").
+			Where("id = ?", tripID).
+			Find(&exists).
+			Error
+
+		if err != nil {
+			return err
+		}
+
+		if !exists {
+			// Trip ID truly does not exist in the database
+			return domain.ErrTripNotFound
+		}
+
+		// Trip exists, but its status was not PENDING (already taken or cancelled)
 		return domain.ErrInvalidTripStatus
 	}
 
 	return nil
 }
 
-// DELETE: delete trip by id
+// Delete removes a trip record by its id
 func (r *TripRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.db.WithContext(ctx).Delete(&domain.Trip{}, "id = ?", id).Error
 }
