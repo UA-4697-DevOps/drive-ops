@@ -11,9 +11,13 @@ import (
 var (
 	ErrTripNotFound      = errors.New("trip not found")
 	ErrInvalidTripStatus = errors.New("trip is not in PENDING status")
-	// ErrInvalidTripData handles validation errors to return 400 Bad Request
-	ErrInvalidTripData   = errors.New("invalid trip data: pickup, dropoff and passenger_id are required")
-  ErrInvalidID         = errors.New("invalid trip or driver identity")
+	
+	// Split validation errors to ensure accurate API messages (400 Bad Request)
+	// ErrInvalidCreateTripData: Specific to Phase 1 (Order Creation)
+	ErrInvalidCreateTripData   = errors.New("invalid trip data: pickup, dropoff and passenger_id are required")
+	
+	// ErrInvalidID: Specific to identity validation (Phase 3 & 4)
+	ErrInvalidID               = errors.New("invalid trip or driver identity")
 )
 
 // Trip status constants for lifecycle management
@@ -44,6 +48,6 @@ type Trip struct {
 
 // AssignDriverRequest represents the Data Transfer Object (DTO) for the API input
 type AssignDriverRequest struct {
-	// DriverID is validated in the service layer
+	// DriverID is validated in the service layer using domain.ErrInvalidID
 	DriverID uuid.UUID `json:"driver_id"`
 }
