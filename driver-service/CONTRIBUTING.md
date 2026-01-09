@@ -103,14 +103,16 @@ gitGraph
    commit id: "wip: auth"
    commit id: "fix: typo"
    checkout driver-service
-   merge feature/driver-service/login type: SQUASH id: "feat: Login (#101)"
+   %% REMOVED "type: SQUASH" below to fix render error
+   merge feature/driver-service/login id: "feat: Login (#101)"
    
    %% Another Feature
    branch feature/driver-service/calc
    checkout feature/driver-service/calc
    commit id: "wip: calc"
    checkout driver-service
-   merge feature/driver-service/calc type: SQUASH id: "feat: Calc (#102)"
+   %% REMOVED "type: SQUASH" below to fix render error
+   merge feature/driver-service/calc id: "feat: Calc (#102)"
 
    %% Release Phase (Service -> Main)
    checkout main
@@ -119,7 +121,6 @@ gitGraph
    %% Sync Phase (Main -> Service)
    checkout driver-service
    merge main id: "Sync Main"
-
 ```
 
 ## Summary Checklist
