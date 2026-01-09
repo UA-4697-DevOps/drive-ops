@@ -17,12 +17,11 @@ var (
 
 // Trip status constants for lifecycle management
 const (
-	TripStatusPending    = "PENDING"
-	TripStatusConfirmed  = "CONFIRMED"
-	TripStatusActive     = "ACTIVE"
-	TripStatusInProgress = "IN_PROGRESS"
-	TripStatusCompleted  = "COMPLETED"
-	TripStatusCancelled  = "CANCELLED"
+	TripStatusPending   = "PENDING"
+	TripStatusConfirmed = "CONFIRMED"
+	TripStatusActive    = "ACTIVE"
+	TripStatusCompleted = "COMPLETED"
+	TripStatusCancelled = "CANCELLED"
 )
 
 // Trip represents the main database model for a ride
@@ -39,6 +38,6 @@ type Trip struct {
 
 // AssignDriverRequest represents the Data Transfer Object (DTO) for the API input
 type AssignDriverRequest struct {
-	// Updated: Removed the "validate" tag because validation is handled in the service layer
+	// Updated: Removed unused "validate" tag and redundant "InProgress" constant reference
 	DriverID uuid.UUID `json:"driver_id"`
 }
