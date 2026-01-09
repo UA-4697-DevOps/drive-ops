@@ -63,7 +63,6 @@ func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		
-		// 52-75: Added internal error logging for debugging consistency
 		log.Printf("Failed to get trip %s: %v", id, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -106,8 +105,9 @@ func (h *TripHandler) AssignDriver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// FIX: Added Content-Type header before writing status and encoding JSON
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	// 115: Replaced discard (_) with proper error check for JSON encoding
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "driver_assigned"}); err != nil {
 		log.Printf("Failed to encode assign-driver response: %v", err)
 	}
