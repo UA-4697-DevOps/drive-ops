@@ -11,16 +11,21 @@ import (
 var (
 	ErrTripNotFound      = errors.New("trip not found")
 	ErrInvalidTripStatus = errors.New("trip is not in PENDING status")
-	// Added to handle validation errors and return 400 Bad Request
+	// ErrInvalidTripData handles validation errors to return 400 Bad Request
 	ErrInvalidTripData   = errors.New("invalid trip data: pickup, dropoff and passenger_id are required")
 )
 
 // Trip status constants for lifecycle management
 const (
+	// TripStatusPending: Passenger created a request, searching for drivers
 	TripStatusPending   = "PENDING"
+	// TripStatusConfirmed: Driver accepted the request, moving to pickup point
 	TripStatusConfirmed = "CONFIRMED"
+	// TripStatusActive: Trip is currently in progress (passenger is in the vehicle)
 	TripStatusActive    = "ACTIVE"
+	// TripStatusCompleted: Trip finished successfully
 	TripStatusCompleted = "COMPLETED"
+	// TripStatusCancelled: Trip was aborted by passenger or driver
 	TripStatusCancelled = "CANCELLED"
 )
 
@@ -38,6 +43,6 @@ type Trip struct {
 
 // AssignDriverRequest represents the Data Transfer Object (DTO) for the API input
 type AssignDriverRequest struct {
-	// Updated: Removed unused "validate" tag and redundant "InProgress" constant reference
+	// DriverID is validated in the service layer
 	DriverID uuid.UUID `json:"driver_id"`
 }
