@@ -30,6 +30,7 @@ func (h *TripHandler) CreateTrip(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.CreateTrip(r.Context(), &trip); err != nil {
+		// Handles validation errors (400) vs internal errors (500)
 		if errors.Is(err, domain.ErrInvalidTripData) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -63,6 +64,7 @@ func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		
+		// Consistency: Logged internal error for better debugging
 		log.Printf("Failed to get trip %s: %v", id, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -105,7 +107,7 @@ func (h *TripHandler) AssignDriver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// FIX: Added Content-Type header before writing status and encoding JSON
+	// Consistency: Added Content-Type and proper JSON error logging
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "driver_assigned"}); err != nil {
