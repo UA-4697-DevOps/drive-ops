@@ -13,6 +13,7 @@ var (
 	ErrInvalidTripStatus = errors.New("trip is not in PENDING status")
 	// ErrInvalidTripData handles validation errors to return 400 Bad Request
 	ErrInvalidTripData   = errors.New("invalid trip data: pickup, dropoff and passenger_id are required")
+  ErrInvalidID         = errors.New("invalid trip or driver identity")
 )
 
 // Trip status constants for lifecycle management
