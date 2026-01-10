@@ -6,9 +6,9 @@ import httpx
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from dotenv import load_dotenv
-import passenger
-import driver
-from logger_utils import create_trip_request_logger, generate_correlation_id
+from . import passenger
+from . import driver
+from .logger_utils import create_trip_request_logger, generate_correlation_id
 
 logger = create_trip_request_logger()
 

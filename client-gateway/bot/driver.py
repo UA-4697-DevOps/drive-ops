@@ -1,7 +1,7 @@
 import re
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import MessageHandler, CallbackQueryHandler, ContextTypes, filters
-from logger_utils import create_trip_request_logger
+from .logger_utils import create_trip_request_logger
 
 logger = create_trip_request_logger()
 
