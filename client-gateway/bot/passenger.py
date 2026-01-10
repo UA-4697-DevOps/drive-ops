@@ -1,8 +1,6 @@
-import logging
 import re
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters, CommandHandler
-from telegram.helpers import escape_markdown
 from logger_utils import create_trip_request_logger
 
 logger = create_trip_request_logger()
