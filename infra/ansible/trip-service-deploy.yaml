@@ -3,24 +3,14 @@
   hosts: local_vm
   become: no  
   vars:
-    app_path: "/home/vagrant/app/trip-service"
+    app_path: "/vagrant/trip-service"
 
   tasks:
-    - name: Create app directory
-      file:
-        path: "{{ app_path }}"
-        state: directory
-        mode: '0755'
-
-    - name: Copy service source code
-      copy:
-        src: "/vagrant/trip-service/"
-        dest: "{{ app_path }}/"
-
     - name: Build and Start containers
-      shell: "docker compose up -d --build"
-      args:
-        chdir: "{{ app_path }}"
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_path }}"
+        state: present
+        build: always 
       register: deploy_status
 
     - name: Show status
