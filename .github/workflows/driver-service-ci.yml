@@ -45,7 +45,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-          cache: 'pip'
+          cache: ${{ github.event_name == 'push' && 'pip' || '' }}
           cache-dependency-path: 'driver-service/requirements.txt'
 
       - name: Install dependencies
@@ -103,4 +103,4 @@ jobs:
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha,scope=driver-service
-        cache-to: type=gha,mode=max,scope=driver-service
+        cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=driver-service' || '' }}
