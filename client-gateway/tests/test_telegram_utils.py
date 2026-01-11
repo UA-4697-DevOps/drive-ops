@@ -1,3 +1,6 @@
+
+from bot.main import is_valid_address, role_selection_menu, passenger_menu, driver_menu, skip_menu
+
 """
 Unit tests for Telegram utility functions from main.py.
 
@@ -7,7 +10,6 @@ Tests helper functions for:
 - Keyboard generation
 """
 
-from bot.main import is_valid_address, role_selection_menu, passenger_menu, driver_menu, skip_menu
 
 
 class TestAddressValidation:
@@ -66,11 +68,3 @@ class TestKeyboardGenerators:
 
 
 
-import os
-import sys
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-if __name__ == "__main__":
-    if not BOT_TOKEN:
-        sys.exit("ERROR: BOT_TOKEN is not configured.")
-    # ... запуск бота ...
