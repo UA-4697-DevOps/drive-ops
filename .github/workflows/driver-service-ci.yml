@@ -1,17 +1,26 @@
 name: Driver Service CI
 
 on:
-  push:
-    paths:
-      - 'driver-service/**'
-      - '.github/workflows/driver-service-ci.yml'
   pull_request:
+    branches:
+      - 'driver-service'
+      - 'main'
     paths:
       - 'driver-service/**'
       - '.github/workflows/driver-service-ci.yml'
 
+  push:
+    branches:
+      - 'driver-service'
+      - 'main'
+    paths:
+      - 'driver-service/**'
+      - '.github/workflows/driver-service-ci.yml'
+    tags:
+      - 'driver-service/v*'
+
 env:
-  SHOULD_PUSH_IMAGE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+  SHOULD_PUSH_IMAGE: ${{ github.event_name == 'push' }}
 
 permissions:
   contents: read
@@ -70,7 +79,9 @@ jobs:
           ghcr.io/${{ github.repository_owner }}/driver-service
         tags: | 
           type=sha
-          type=raw,value=latest,enable=${{ env.SHOULD_PUSH_IMAGE == 'true' }}
+          type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+          type=raw,value=dev,enable=${{ github.ref == 'refs/heads/driver-service' }}
+          type=match,pattern=driver-service/v(.*),group=1
 
     - name: Login to GHCR
       if: ${{ env.SHOULD_PUSH_IMAGE == 'true' }}
