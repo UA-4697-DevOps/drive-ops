@@ -16,9 +16,13 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 TRIP_SERVICE_URL = os.getenv('TRIP_SERVICE_URL', 'http://localhost:8080')
 
-if not BOT_TOKEN:
-    logger.error("BOT_TOKEN is not set in the environment or .env file.")
-    sys.exit("ERROR: BOT_TOKEN is not configured.")
+
+def ensure_bot_token():
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN is not set in the environment or .env file.")
+        sys.exit("ERROR: BOT_TOKEN is not configured.")
+
+# Викликайте цю функцію лише у точці запуску бота, а не при імпорті
 
 user_orders = {}
 user_roles = {}

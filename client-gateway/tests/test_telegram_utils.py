@@ -7,7 +7,6 @@ Tests helper functions for:
 - Keyboard generation
 """
 
-import pytest
 from bot.main import is_valid_address, role_selection_menu, passenger_menu, driver_menu, skip_menu
 
 
@@ -64,3 +63,14 @@ class TestKeyboardGenerators:
         assert keyboard is not None
         assert keyboard.resize_keyboard is True
         assert keyboard.one_time_keyboard is True
+
+
+
+import os
+import sys
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+if __name__ == "__main__":
+    if not BOT_TOKEN:
+        sys.exit("ERROR: BOT_TOKEN is not configured.")
+    # ... запуск бота ...
