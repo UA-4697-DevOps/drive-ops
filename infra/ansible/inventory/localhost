@@ -1,0 +1,6 @@
+[local_vm]
+localhost ansible_connection=local ansible_python_interpreter=/usr/bin/python3
+
+[local_vm:vars]
+ansible_become=yes
+ansible_become_method=sudo

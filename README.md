@@ -53,19 +53,6 @@ Contribution Flow: [CONTRIBUTING.md](./CONTRIBUTING.md)
 - API docs: [driver-service/README.md](./driver-service/README.md)
 - Contributing: [driver-service/CONTRIBUTING.md](./driver-service/CONTRIBUTING.md)
 
-**Docker, Docker Compose**
-
-- Local run:
-  ```bash
-  cd driver-service && docker-compose up -d --build
-  ```
-
-- Deploy on Vagrant:
-  ```bash
-  ansible-playbook -i path/to/your/inventory driver-service/deploy.yml
-  ```
-- API docs & Troubleshooting: [driver-service/README.md](./driver-service/README.md)
-
 ### Trip Service
 - Prereqs: `<list>`
 - Env vars: `<LIST>`
@@ -78,3 +65,15 @@ Contribution Flow: [CONTRIBUTING.md](./CONTRIBUTING.md)
   <cmd>
   ```
 - API docs: `<link>`
+
+## 🛠 Git Hooks Setup
+
+To ensure consistent code quality (e.g., EOF newlines), we use shared Git hooks.
+
+### Installation
+
+Run the following command in the root of the repository to enable the shared hooks:
+
+```bash
+git config core.hooksPath scripts/hooks
+chmod +x scripts/hooks/pre-commit
