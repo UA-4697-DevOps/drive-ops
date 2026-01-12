@@ -208,7 +208,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     chat_id, order.get('pickup'), order.get('dropoff'), order.get('comment')
                 )
 
-                start_time = time.time()
+            
                 result = await submit_trip_request(chat_id, order)
                 
                 
