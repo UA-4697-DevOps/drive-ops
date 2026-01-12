@@ -65,6 +65,7 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 	}
 }
 
+// TestTripRepository_FullCycle tests basic CRUD operations
 func TestTripRepository_FullCycle(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -82,13 +83,13 @@ func TestTripRepository_FullCycle(t *testing.T) {
 		Status:      domain.TripStatusPending,
 	}
 
-	// Test 1: Creation (CREATE)
+	// Test: Creation
 	t.Run("Create Trip", func(t *testing.T) {
 		err := repo.Create(ctx, testTrip)
 		assert.NoError(t, err)
 	})
 
-	// Test 2: Retrieval by ID (READ)
+	// Test: Retrieval by ID
 	t.Run("Get Trip By ID", func(t *testing.T) {
 		found, err := repo.GetByID(ctx, tripID)
 		assert.NoError(t, err)
@@ -96,7 +97,7 @@ func TestTripRepository_FullCycle(t *testing.T) {
 		assert.Equal(t, tripID, found.ID)
 	})
 
-	// Test 3: Update (UPDATE)
+	// Test: Update
 	t.Run("Update Trip Status", func(t *testing.T) {
 		testTrip.Status = domain.TripStatusActive
 		driverID := uuid.New()
@@ -110,16 +111,65 @@ func TestTripRepository_FullCycle(t *testing.T) {
 		assert.Equal(t, driverID, *found.DriverID)
 	})
 
-	// Test 4: Deletion (DELETE)
+	// Test: Deletion
 	t.Run("Delete Trip", func(t *testing.T) {
 		err := repo.Delete(ctx, tripID)
 		assert.NoError(t, err)
 
-		// Verify that the record is truly deleted
+		// Verify that the record is truly deleted using our domain error
 		found, err := repo.GetByID(ctx, tripID)
-		
-		// FIX: Now we verify our domain error instead of a raw GORM string
 		assert.ErrorIs(t, err, domain.ErrTripNotFound)
 		assert.Nil(t, found)
+	})
+}
+
+// TestTripRepository_AssignDriver tests the atomic driver assignment logic
+func TestTripRepository_AssignDriver(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewTripRepository(db)
+	ctx := context.Background()
+
+	// 1. Seed a PENDING trip
+	tripID := uuid.New()
+	testTrip := &domain.Trip{
+		ID:          tripID,
+		PassengerID: uuid.New(),
+		Pickup:      "Start Point",
+		Dropoff:     "End Point",
+		Status:      domain.TripStatusPending,
+	}
+	_ = repo.Create(ctx, testTrip)
+
+	// Test: Successful assignment
+	t.Run("Success Assignment", func(t *testing.T) {
+		driverID := uuid.New()
+		err := repo.AssignDriver(ctx, tripID, driverID)
+		
+		assert.NoError(t, err)
+		
+		found, _ := repo.GetByID(ctx, tripID)
+		assert.Equal(t, domain.TripStatusConfirmed, found.Status)
+		assert.NotNil(t, found.DriverID)
+		assert.Equal(t, driverID, *found.DriverID)
+	})
+
+	// Test: Conflict (Already assigned)
+	t.Run("Conflict - Already Assigned", func(t *testing.T) {
+		// Attempt to assign another driver to the same trip (now in CONFIRMED status)
+		newDriverID := uuid.New()
+		err := repo.AssignDriver(ctx, tripID, newDriverID)
+		
+		// Must return ErrInvalidTripStatus (atomic guard triggered)
+		assert.ErrorIs(t, err, domain.ErrInvalidTripStatus)
+	})
+
+	// Test: Not Found
+	t.Run("Trip Not Found", func(t *testing.T) {
+		nonExistentID := uuid.New()
+		err := repo.AssignDriver(ctx, nonExistentID, uuid.New())
+		
+		assert.ErrorIs(t, err, domain.ErrTripNotFound)
 	})
 }
