@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package repository
 
@@ -21,9 +20,8 @@ import (
 )
 
 // setupTestDB initializes a temporary Postgres container using t.Cleanup for reliability.
-// It uses a build tag to prevent breaking non-Docker environments.
 func setupTestDB(t *testing.T) *gorm.DB {
-	// 1. Setup bounded context for container startup to avoid infinite hangs.
+	// Use a bounded context for container startup to avoid infinite hangs in CI
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -41,9 +39,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("Failed to start postgres container: %v", err)
 	}
 
-	// 2. Register cleanup via t.Cleanup for robust resource management.
+	// Register cleanup via t.Cleanup to ensure container is terminated properly
 	t.Cleanup(func() {
-		// Use a fresh background context to ensure termination completes.
 		terminateCtx, terminateCancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer terminateCancel()
 		if err := pgContainer.Terminate(terminateCtx); err != nil {
@@ -56,13 +53,12 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("Failed to get connection string: %v", err)
 	}
 
-	// 3. Connect GORM and apply schema
 	db, err := gorm.Open(gormPostgres.Open(connStr), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// Dynamic Enum Creation to prevent drift from domain constants.
+	// Dynamic Enum Creation: Stays in sync with domain constants automatically
 	if err := setupEnums(db); err != nil {
 		t.Fatalf("Failed to setup enums: %v", err)
 	}
@@ -74,7 +70,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// setupEnums centralizes DDL logic to stay in sync with domain constants.
+// setupEnums centralizes DDL logic to stay in sync with domain constants
 func setupEnums(db *gorm.DB) error {
 	_ = db.Exec("DROP TYPE IF EXISTS trip_status").Error
 	enumSQL := fmt.Sprintf("CREATE TYPE trip_status AS ENUM ('%s', '%s', '%s', '%s', '%s')",
@@ -106,6 +102,13 @@ func TestTripRepository_FullCycle(t *testing.T) {
 		assert.NoError(t, err, "Seeding test trip must not fail")
 	})
 
+	t.Run("Get Trip By ID", func(t *testing.T) {
+		found, err := repo.GetByID(ctx, tripID)
+		assert.NoError(t, err)
+		assert.NotNil(t, found)
+		assert.Equal(t, tripID, found.ID)
+	})
+
 	t.Run("Update Trip Status", func(t *testing.T) {
 		testTrip.Status = domain.TripStatusActive
 		driverID := uuid.New()
@@ -114,10 +117,18 @@ func TestTripRepository_FullCycle(t *testing.T) {
 		err := repo.Update(ctx, testTrip)
 		assert.NoError(t, err)
 
-		// Verify result while checking for errors to avoid misleading failures.
 		found, err := repo.GetByID(ctx, tripID)
-		assert.NoError(t, err)
+		assert.NoError(t, err, "Error from GetByID must be handled")
 		assert.Equal(t, domain.TripStatusActive, found.Status)
+	})
+
+	t.Run("Delete Trip", func(t *testing.T) {
+		err := repo.Delete(ctx, tripID)
+		assert.NoError(t, err)
+
+		found, err := repo.GetByID(ctx, tripID)
+		assert.ErrorIs(t, err, domain.ErrTripNotFound)
+		assert.Nil(t, found)
 	})
 }
 
@@ -126,14 +137,14 @@ func TestTripRepository_AssignDriver(t *testing.T) {
 	repo := NewTripRepository(db)
 	ctx := context.Background()
 
-	// Subtests now seed their own data to ensure isolation.
+	// Subtests seed their own data to ensure isolation
 	t.Run("Success Assignment", func(t *testing.T) {
 		tripID := uuid.New()
 		trip := &domain.Trip{
 			ID:          tripID,
 			PassengerID: uuid.New(),
-			Pickup:      "Station A", // Required field
-			Dropoff:     "Station B", // Required field
+			Pickup:      "Station A", // Required NOT NULL field
+			Dropoff:     "Station B", // Required NOT NULL field
 			Status:      domain.TripStatusPending,
 		}
 		assert.NoError(t, repo.Create(ctx, trip))
@@ -145,6 +156,7 @@ func TestTripRepository_AssignDriver(t *testing.T) {
 		found, err := repo.GetByID(ctx, tripID)
 		assert.NoError(t, err, "Error from GetByID must be handled")
 		assert.Equal(t, domain.TripStatusConfirmed, found.Status)
+		assert.Equal(t, driverID, *found.DriverID)
 	})
 
 	t.Run("Conflict - Already Assigned", func(t *testing.T) {
