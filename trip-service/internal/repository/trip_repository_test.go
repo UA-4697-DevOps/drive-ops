@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 	"trip-service/internal/domain"
@@ -46,8 +47,13 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 	}
 
 	// 3. Create trip_status enum type
+	// NOTE: Hardcoded values must stay in sync with domain.TripStatus constants
 	_ = db.Exec("DROP TYPE IF EXISTS trip_status").Error
-	err = db.Exec("CREATE TYPE trip_status AS ENUM ('PENDING', 'CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED')").Error
+	enumSQL := fmt.Sprintf("CREATE TYPE trip_status AS ENUM ('%s', '%s', '%s', '%s', '%s')",
+		domain.TripStatusPending, domain.TripStatusConfirmed, domain.TripStatusActive, 
+		domain.TripStatusCompleted, domain.TripStatusCancelled)
+	
+	err = db.Exec(enumSQL).Error
 	if err != nil {
 		t.Fatalf("Failed to create trip_status enum: %v", err)
 	}
@@ -59,7 +65,6 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 	}
 
 	return db, func() {
-		// Use Background context to ensure termination completes
 		_ = pgContainer.Terminate(context.Background())
 	}
 }
@@ -101,7 +106,9 @@ func TestTripRepository_FullCycle(t *testing.T) {
 		err := repo.Update(ctx, testTrip)
 		assert.NoError(t, err)
 
-		found, _ := repo.GetByID(ctx, tripID)
+		// FIXED: Check error from GetByID to avoid confusing nil failures
+		found, err := repo.GetByID(ctx, tripID)
+		assert.NoError(t, err)
 		assert.Equal(t, domain.TripStatusActive, found.Status)
 		assert.Equal(t, driverID, *found.DriverID)
 	})
@@ -124,35 +131,39 @@ func TestTripRepository_AssignDriver(t *testing.T) {
 	repo := NewTripRepository(db)
 	ctx := context.Background()
 
-	// 1. Seed a PENDING trip
-	tripID := uuid.New()
-	testTrip := &domain.Trip{
-		ID:          tripID,
-		PassengerID: uuid.New(),
-		Pickup:      "Start Point",
-		Dropoff:     "End Point",
-		Status:      domain.TripStatusPending,
-	}
+	// FIXED: Subtests now seed their own data to ensure isolation
 	
-	// FIXED: Verify that seeding succeeded to avoid misleading failures later
-	err := repo.Create(ctx, testTrip)
-	assert.NoError(t, err, "Seeding test trip must not fail")
-
 	t.Run("Success Assignment", func(t *testing.T) {
+		tripID := uuid.New()
+		trip := &domain.Trip{
+			ID:          tripID,
+			PassengerID: uuid.New(),
+			Status:      domain.TripStatusPending,
+		}
+		assert.NoError(t, repo.Create(ctx, trip))
+
 		driverID := uuid.New()
 		err := repo.AssignDriver(ctx, tripID, driverID)
-		
 		assert.NoError(t, err)
 		
-		found, _ := repo.GetByID(ctx, tripID)
+		// FIXED: Check error from GetByID
+		found, err := repo.GetByID(ctx, tripID)
+		assert.NoError(t, err)
 		assert.Equal(t, domain.TripStatusConfirmed, found.Status)
-		assert.NotNil(t, found.DriverID)
 		assert.Equal(t, driverID, *found.DriverID)
 	})
 
 	t.Run("Conflict - Already Assigned", func(t *testing.T) {
-		newDriverID := uuid.New()
-		err := repo.AssignDriver(ctx, tripID, newDriverID)
+		tripID := uuid.New()
+		trip := &domain.Trip{
+			ID:          tripID,
+			PassengerID: uuid.New(),
+			Status:      domain.TripStatusConfirmed, // Already assigned
+			DriverID:    &[]uuid.UUID{uuid.New()}[0],
+		}
+		assert.NoError(t, repo.Create(ctx, trip))
+
+		err := repo.AssignDriver(ctx, tripID, uuid.New())
 		assert.ErrorIs(t, err, domain.ErrInvalidTripStatus)
 	})
 
