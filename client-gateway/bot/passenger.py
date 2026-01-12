@@ -341,7 +341,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             )
             
             # Add refresh button for non-final statuses
-            if status not in ('COMPLETED', 'CANCELLED'):
+            if status not in ('COMPLETED', 'CANCELLED', 'ACTIVE'):
                 markup = InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔄 Оновити статус", callback_data=f"refresh_status_{trip_id}")]
                 ])
