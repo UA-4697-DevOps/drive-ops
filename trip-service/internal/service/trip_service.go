@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 
+	"trip-service/internal/broker"
 	"trip-service/internal/domain"
 	"trip-service/internal/repository"
 
@@ -19,17 +21,28 @@ type TripServiceInterface interface {
 }
 
 type TripService struct {
-	repo *repository.TripRepository
+	repo      *repository.TripRepository
+	publisher broker.Publisher
 }
 
-// NewTripService creates a new instance of TripService
-func NewTripService(repo *repository.TripRepository) *TripService {
-	return &TripService{repo: repo}
+// NewTripService creates a new instance of TripService with RabbitMQ publisher.
+// We keep the version from 'main' as it includes mandatory dependency checks.
+func NewTripService(repo *repository.TripRepository, publisher broker.Publisher) *TripService {
+	if repo == nil {
+		panic("repository cannot be nil")
+	}
+	if publisher == nil {
+		panic("publisher cannot be nil")
+	}
+	return &TripService{
+		repo:      repo,
+		publisher: publisher,
+	}
 }
 
-// CreateTrip handles the logic for initiating a new trip request
+// CreateTrip handles the logic for initiating a new trip request (Phase 1)
 func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
-	// Updated: Using specific error for trip creation validation
+	// 1. Validation using new domain error from feat branch
 	if trip.Pickup == "" || trip.Dropoff == "" || trip.PassengerID == uuid.Nil {
 		return domain.ErrInvalidCreateTripData
 	}
@@ -37,26 +50,41 @@ func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
 	trip.ID = uuid.New()
 	trip.Status = domain.TripStatusPending
 
-	return s.repo.Create(ctx, trip)
+	// 2. Save trip to database
+	if err := s.repo.Create(ctx, trip); err != nil {
+		return err
+	}
+
+	// 3. Publish trip.event.created event (Phase 2)
+	// We use the publisher logic from 'main' to notify other services
+	event := broker.BuildTripCreatedEvent(trip, trip.ID.String())
+	if err := s.publisher.PublishTripCreated(ctx, event); err != nil {
+		log.Printf("ERROR: Failed to publish trip.event.created for trip_id=%s: %v", trip.ID, err)
+		// We don't return error here to maintain eventual consistency
+	} else {
+		log.Printf("Successfully published trip.event.created for trip_id=%s", trip.ID)
+	}
+
+	return nil
 }
 
-// GetTrip retrieves a trip by its unique identifier
+// GetTrip retrieves a trip by its unique identifier (Phase 4)
 func (s *TripService) GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, error) {
 	trip, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, err // Returns domain.ErrTripNotFound if not found in repo
+		return nil, err // Returns domain.ErrTripNotFound if not found
 	}
 	return trip, nil
 }
 
-// AssignDriver handles the business logic for assigning a driver to an existing trip
+// AssignDriver handles the business logic for assigning a driver (Phase 3)
 func (s *TripService) AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error {
-	// Simplified: Removed stale development comments and line number references.
-	// We validate both IDs to ensure they are present before proceeding.
+	// Validation check for UUIDs to prevent 400 errors
 	if tripID == uuid.Nil || driverID == uuid.Nil {
 		return domain.ErrInvalidID
 	}
 
+	// The repository handles the atomic update and state validation
 	return s.repo.AssignDriver(ctx, tripID, driverID)
 }
 
