@@ -3,6 +3,7 @@ FROM python:3.13-slim-trixie
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/app/src \
     PATH="/app/venv/bin:$PATH"
 
 WORKDIR /app
@@ -23,4 +24,6 @@ COPY --chown=app:app ./src ./src
 
 EXPOSE 8082
 
-CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8082"]
+WORKDIR /app/src
+
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8082"]
