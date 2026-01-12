@@ -3,12 +3,13 @@ import sys
 import time
 import re
 import httpx
+import warnings
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from dotenv import load_dotenv
-import passenger
-import driver
-from logger_utils import create_trip_request_logger, generate_correlation_id
+from . import passenger
+from . import driver
+from .logger_utils import create_trip_request_logger, generate_correlation_id
 
 logger = create_trip_request_logger()
 
@@ -16,9 +17,13 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 TRIP_SERVICE_URL = os.getenv('TRIP_SERVICE_URL', 'http://localhost:8080')
 
-if not BOT_TOKEN:
-    logger.error("BOT_TOKEN is not set in the environment or .env file.")
-    sys.exit("ERROR: BOT_TOKEN is not configured.")
+
+def ensure_bot_token():
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN is not set in the environment or .env file.")
+        sys.exit("ERROR: BOT_TOKEN is not configured.")
+
+# Викликайте цю функцію лише у точці запуску бота, а не при імпорті
 
 user_orders = {}
 user_roles = {}
@@ -253,6 +258,12 @@ async def change_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 def main():
+    ensure_bot_token()
+    # Suppress PTBUserWarning about mixing CallbackQueryHandler entry points
+    warnings.filterwarnings(
+        "ignore",
+        message="If 'per_message=False', 'CallbackQueryHandler' will not be tracked for every message.*",
+    )
     application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start_message))

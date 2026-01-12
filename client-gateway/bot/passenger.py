@@ -1,9 +1,7 @@
-import logging
 import re
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters, CommandHandler
-from telegram.helpers import escape_markdown
-from logger_utils import create_trip_request_logger
+from .logger_utils import create_trip_request_logger
 
 logger = create_trip_request_logger()
 
@@ -257,6 +255,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_comment_step)],
         },
         fallbacks=[CommandHandler("cancel_order", cancel_order_command)],
+        per_chat=True,
     )
 
     application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_PASSENGER)}$"), select_passenger_role))
