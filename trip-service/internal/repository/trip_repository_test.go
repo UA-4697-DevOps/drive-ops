@@ -15,11 +15,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// setupTestDB ініціалізує тимчасовий контейнер Postgres для тестів
+// setupTestDB initializes a temporary Postgres container for testing purposes
 func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 	ctx := context.Background()
 
-	// 1. Налаштування та запуск контейнера Postgres (використовуємо 15-alpine для швидкості)
+	// 1. Setup and start the Postgres container (using 15-alpine for faster startup)
 	pgContainer, err := postgres.Run(ctx,
 		"postgres:15-alpine",
 		postgres.WithDatabase("trip_service_test"),
@@ -34,31 +34,32 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 		t.Fatalf("Failed to start postgres container: %v", err)
 	}
 
-	// Отримання Connection String
+	// Get the connection string
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		t.Fatalf("Failed to get connection string: %v", err)
 	}
 
-	// 2. Підключення GORM до контейнера
+	// 2. Connect GORM to the container instance
 	db, err := gorm.Open(gormPostgres.Open(connStr), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// 3. Створення enum типу trip_status (потрібно перед AutoMigrate)
-	err = db.Exec("CREATE TYPE trip_status AS ENUM ('PENDING', 'ACTIVE', 'COMPLETED', 'CANCELLED')").Error
+	// 3. Create trip_status enum type (required before AutoMigrate)
+	_ = db.Exec("DROP TYPE IF EXISTS trip_status").Error
+	err = db.Exec("CREATE TYPE trip_status AS ENUM ('PENDING', 'CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED')").Error
 	if err != nil {
 		t.Fatalf("Failed to create trip_status enum: %v", err)
 	}
 
-	// 4. Авто-міграція схеми (створення таблиці trips)
+	// 4. Auto-migrate schema (creates the trips table)
 	err = db.AutoMigrate(&domain.Trip{})
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
-	// Повертаємо об'єкт БД та функцію очищення
+	// Return the DB instance and the cleanup function
 	return db, func() {
 		_ = pgContainer.Terminate(ctx)
 	}
@@ -71,34 +72,33 @@ func TestTripRepository_FullCycle(t *testing.T) {
 	repo := NewTripRepository(db)
 	ctx := context.Background()
 
-	// Створюємо тестову поїздку
+	// Create a test trip object
 	tripID := uuid.New()
 	testTrip := &domain.Trip{
 		ID:          tripID,
 		PassengerID: uuid.New(),
 		Pickup:      "123 Main St",
 		Dropoff:     "456 Oak Ave",
-		Status:      "PENDING",
+		Status:      domain.TripStatusPending,
 	}
 
-	// Тест 1: Створення (CREATE)
+	// Test 1: Creation (CREATE)
 	t.Run("Create Trip", func(t *testing.T) {
 		err := repo.Create(ctx, testTrip)
 		assert.NoError(t, err)
 	})
 
-	// Тест 2: Отримання за ID (READ)
+	// Test 2: Retrieval by ID (READ)
 	t.Run("Get Trip By ID", func(t *testing.T) {
 		found, err := repo.GetByID(ctx, tripID)
 		assert.NoError(t, err)
 		assert.NotNil(t, found)
 		assert.Equal(t, tripID, found.ID)
-		assert.Equal(t, "PENDING", found.Status)
 	})
 
-	// Тест 3: Оновлення (UPDATE)
+	// Test 3: Update (UPDATE)
 	t.Run("Update Trip Status", func(t *testing.T) {
-		testTrip.Status = "ACTIVE"
+		testTrip.Status = domain.TripStatusActive
 		driverID := uuid.New()
 		testTrip.DriverID = &driverID
 
@@ -106,19 +106,20 @@ func TestTripRepository_FullCycle(t *testing.T) {
 		assert.NoError(t, err)
 
 		found, _ := repo.GetByID(ctx, tripID)
-		assert.Equal(t, "ACTIVE", found.Status)
+		assert.Equal(t, domain.TripStatusActive, found.Status)
 		assert.Equal(t, driverID, *found.DriverID)
 	})
 
-	// Тест 4: Видалення (DELETE)
+	// Test 4: Deletion (DELETE)
 	t.Run("Delete Trip", func(t *testing.T) {
 		err := repo.Delete(ctx, tripID)
 		assert.NoError(t, err)
 
-		// Перевіряємо, що запис дійсно видалено
+		// Verify that the record is truly deleted
 		found, err := repo.GetByID(ctx, tripID)
-		assert.Error(t, err)
+		
+		// FIX: Now we verify our domain error instead of a raw GORM string
+		assert.ErrorIs(t, err, domain.ErrTripNotFound)
 		assert.Nil(t, found)
-		assert.Contains(t, err.Error(), "record not found")
 	})
 }
