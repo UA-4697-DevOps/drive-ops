@@ -88,7 +88,7 @@ async def lifespan(app: FastAPI):
 
 
 def seed_test_drivers():
-    """Seed in-memory storage with test drivers"""
+    # Seed some test drivers into in-memory storage
     test_drivers = [
         {
             "id": "driver_001",

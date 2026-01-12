@@ -1,11 +1,7 @@
-"""
-Configuration settings for Driver Service
-"""
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """Application settings"""
     
     # Application
     APP_NAME: str = "Driver Service"

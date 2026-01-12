@@ -1,13 +1,9 @@
-"""
-Pydantic schemas for trip requests
-"""
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
 
 class Location(BaseModel):
-    """Location with coordinates and address"""
     address: str
     lat: float = Field(..., ge=-90, le=90)
     lng: float = Field(..., ge=-180, le=180)
