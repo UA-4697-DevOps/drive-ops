@@ -1,40 +1,29 @@
 ---
-# 0. Define a single project root variable to avoid repetitive relative paths
-- name: Set project root path
-  ansible.builtin.set_fact:
-    project_root: "{{ playbook_dir }}/../.."
-  tags: [ infrastructure, docker ]
+# Tasks to deploy shared infrastructure (DB and MQ)
 
-# 1. Check if the environment configuration file exists
-- name: Verify .env file existence
-  ansible.builtin.stat:
-    path: "{{ project_root }}/.env"
-  register: env_file
-  tags: [ infrastructure, docker ]
+- name: Create project root directory
+  ansible.builtin.file:
+    path: "/opt/drive-ops"
+    state: directory
+    mode: '0755'
+  tags: [ infra ]
 
-# 2. Comprehensive Fail-Fast check: existence + mandatory keys (Bot, DB, MQ)
-- name: Validate .env file availability and content
-  ansible.builtin.fail:
-    msg: |
-      CRITICAL CONFIGURATION ERROR: The .env file is missing or incomplete!
-      Please ensure {{ project_root }}/.env contains:
-      - BOT_TOKEN (for Telegram gateway)
-      - DB_USER & DB_PASSWORD (for Postgres)
-      - RABBITMQ_USER & RABBITMQ_PASSWORD (for message broker)
-  when: >
-    not env_file.stat.exists or 
-    'BOT_TOKEN' not in lookup('file', project_root + '/.env') or
-    'RABBITMQ_USER' not in lookup('file', project_root + '/.env') or
-    'DB_USER' not in lookup('file', project_root + '/.env')
-  tags: [ infrastructure, docker ]
+- name: Copy central .env file
+  ansible.builtin.copy:
+    src: "../../../../../.env"
+    dest: "/opt/drive-ops/.env"
+    mode: '0600'
+  tags: [ infra ]
 
-# 3. Orchestrate the deployment of the entire drive-ops microservices stack
-# This includes: db (Postgres), mq (RabbitMQ), trip-service (Go), and python services
-- name: Deploy drive-ops stack via Docker Compose
+- name: Copy infrastructure docker-compose
+  ansible.builtin.copy:
+    src: "../../../../../docker-compose.yml"
+    dest: "/opt/drive-ops/docker-compose.yml"
+  tags: [ infra ]
+
+- name: Start shared infrastructure
   community.docker.docker_compose_v2:
-    project_src: "{{ project_root }}"
+    project_src: "/opt/drive-ops"
     state: present
-    build: policy
-    pull: missing
     wait: yes
-  tags: [ infrastructure, docker ]
+  tags: [ infra ]
