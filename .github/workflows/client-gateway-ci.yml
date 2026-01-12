@@ -2,7 +2,9 @@ name: Client Gateway CI
 
 on:
   push:
-    branches: [ feature/client-gateway-ci, main ]
+    branches:
+      - 'feature/client/*'
+      - 'main'
     paths:
       - 'client-gateway/**'
       - '.github/workflows/client-gateway-ci.yml'
