@@ -1,6 +1,3 @@
-"""
-Geographical utilities
-"""
 import math
 from typing import List, Dict, Any
 

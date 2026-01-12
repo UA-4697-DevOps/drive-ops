@@ -1,6 +1,3 @@
-"""
-Driver Service - FastAPI Application with Trip Request functionality
-"""
 import asyncio
 import logging
 from contextlib import asynccontextmanager
