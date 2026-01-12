@@ -30,8 +30,8 @@ func (h *TripHandler) CreateTrip(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.CreateTrip(r.Context(), &trip); err != nil {
-		// Handles validation errors (400) vs internal errors (500)
-		if errors.Is(err, domain.ErrInvalidTripData) {
+		// FIX: Changed from ErrInvalidTripData to ErrInvalidCreateTripData
+		if errors.Is(err, domain.ErrInvalidCreateTripData) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -64,7 +64,6 @@ func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		
-		// Consistency: Logged internal error for better debugging
 		log.Printf("Failed to get trip %s: %v", id, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
@@ -94,12 +93,13 @@ func (h *TripHandler) AssignDriver(w http.ResponseWriter, r *http.Request) {
 	err = h.svc.AssignDriver(r.Context(), tripID, req.DriverID)
 	if err != nil {
 		switch {
-		case errors.Is(err, domain.ErrInvalidTripData):
+		// FIX: Changed from ErrInvalidTripData to ErrInvalidID
+		case errors.Is(err, domain.ErrInvalidID):
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		case errors.Is(err, domain.ErrTripNotFound):
 			http.Error(w, "Trip not found", http.StatusNotFound)
 		case errors.Is(err, domain.ErrInvalidTripStatus):
-			http.Error(w, "Trip is no longer available for assignment", http.StatusConflict)
+			http.Error(w, err.Error(), http.StatusConflict)
 		default:
 			log.Printf("Failed to assign driver: %v", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -107,7 +107,6 @@ func (h *TripHandler) AssignDriver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Consistency: Added Content-Type and proper JSON error logging
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "driver_assigned"}); err != nil {
