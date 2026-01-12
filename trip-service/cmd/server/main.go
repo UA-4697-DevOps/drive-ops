@@ -30,6 +30,9 @@ func getEnv(key, fallback string) string {
 }
 
 func main() {
+	// Simple wait for dependencies to spin up in docker-compose
+	time.Sleep(5 * time.Second)
+
 	if err := godotenv.Load(); err != nil {
 		log.Println("Note: .env file not found, using system env variables")
 	}
@@ -67,18 +70,29 @@ func main() {
 	// 3. Dependency Injection: Repository -> Service -> Handler
 	repo := repository.NewTripRepository(db)
 	// Passing publisher to service as required for events (Phase 2 & 3)
-	svc := service.NewTripService(repo, publisher) 
+	svc := service.NewTripService(repo, publisher)
 	handler := api.NewTripHandler(svc)
+
+	// Initialize RabbitMQ Consumer
+	consumer, err := broker.NewRabbitMQConsumer(brokerConfig, svc)
+	if err != nil {
+		log.Fatalf("Failed to initialize RabbitMQ consumer: %v", err)
+	}
+
+	// Start consumer in background
+	if err := consumer.Start(context.Background()); err != nil {
+		log.Fatalf("Failed to start consumer: %v", err)
+	}
 
 	// 4. Router setup
 	r := chi.NewRouter()
 
 	r.Get("/health", handler.HealthCheck)
-	
+
 	r.Route("/trips", func(r chi.Router) {
 		r.Post("/", handler.CreateTrip)
 		r.Get("/{id}", handler.GetTrip)
-		
+
 		// New endpoint for driver assignment (integrated from feature branch)
 		r.Patch("/{id}/assign-driver", handler.AssignDriver)
 	})
@@ -117,6 +131,10 @@ func main() {
 	// Close publisher after server has stopped to ensure no data loss
 	if err := publisher.Close(); err != nil {
 		log.Printf("Error closing publisher: %v", err)
+	}
+
+	if err := consumer.Close(); err != nil {
+		log.Printf("Error closing consumer: %v", err)
 	}
 
 	log.Println("Server stopped gracefully")
