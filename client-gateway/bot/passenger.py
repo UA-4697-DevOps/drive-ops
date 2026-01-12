@@ -244,10 +244,11 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     err_text = (error or {}).get('message')
                     code = (error or {}).get('status_code')
                     local_req = req_id if req_id is not None else 'N/A'
+                    escaped_err = (err_text or 'сервіс недоступний.').replace('_', r'\_')
                     await query.edit_message_text(
                         text=(
                             "❌ Не вдалося створити поїздку.\n"
-                            f"Причина: {(err_text or 'сервіс недоступний.').replace('_', '\\_')}\n"
+                            f"Причина: {escaped_err}\n"
                             + (f"Код: {code}\n" if code is not None else "")
                             + f"\nЛокальний запит: {local_req}"
                         ),
