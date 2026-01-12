@@ -4,10 +4,20 @@ import time
 from datetime import datetime
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters, CommandHandler
-from telegram.helpers import escape_markdown
+
 from logger_utils import create_trip_request_logger
 
 logger = create_trip_request_logger()
+
+# Status mapping for trip statuses
+STATUS_MAPPING = {
+    'PENDING': ('⏳ Очікує водія', 'Ваше замовлення в черзі. Очікуємо підтвердження від водія.'),
+    'CONFIRMED': ('✅ Підтверджено', 'Водій прийняв замовлення і прямує до вас.'),
+    'ACTIVE': ('🚗 В дорозі', 'Водій прийняв замовлення. Ви в дорозі!'),
+    'IN_PROGRESS': ('🚗 В дорозі', 'Ви в дорозі до місця призначення.'),
+    'COMPLETED': ('🏁 Завершено', 'Поїздка успішно завершена. Дякуємо!'),
+    'CANCELLED': ('❌ Скасовано', 'Цю поїздку було скасовано.'),
+}
 
 # Conversation states
 PICKUP, DROPOFF, COMMENT = range(3)
@@ -200,7 +210,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
 
                 start_time = time.time()
                 result = await submit_trip_request(chat_id, order)
-                latency = int((time.time() - start_time) * 1000)  # в мілісекундах
+                
                 
                 req_id = result.get('request_id')
                 trip_id = result.get('trip_id')
@@ -305,17 +315,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             created_at = trip_data.get('created_at', '')
             driver_id = trip_data.get('driver_id')
             
-            # Map status to user-friendly text with emoji
-            status_mapping = {
-                'PENDING': ('⏳ Очікує водія', 'Ваше замовлення в черзі. Очікуємо підтвердження від водія.'),
-                'CONFIRMED': ('✅ Підтверджено', 'Водій прийняв замовлення і прямує до вас.'),
-                'ACTIVE': ('🚗 В дорозі', 'Водій прийняв замовлення. Ви в дорозі!'),
-                'IN_PROGRESS': ('🚗 В дорозі', 'Ви в дорозі до місця призначення.'),
-                'COMPLETED': ('🏁 Завершено', 'Поїздка успішно завершена. Дякуємо!'),
-                'CANCELLED': ('❌ Скасовано', 'Цю поїздку було скасовано.'),
-            }
-            
-            status_emoji, status_description = status_mapping.get(status, ('❓ Невідомий', 'Статус поїздки невідомий.'))
+            status_emoji, status_description = STATUS_MAPPING.get(status, ('❓ Невідомий', 'Статус поїздки невідомий.'))
             
             # Format created_at if present
             created_info = ""
@@ -403,16 +403,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             created_at = trip_data.get('created_at', '')
             driver_id = trip_data.get('driver_id')
             
-            status_mapping = {
-                'PENDING': ('⏳ Очікує водія', 'Ваше замовлення в черзі. Очікуємо підтвердження від водія.'),
-                'CONFIRMED': ('✅ Підтверджено', 'Водій прийняв замовлення і прямує до вас.'),
-                'ACTIVE': ('🚗 В дорозі', 'Водій прийняв замовлення. Ви в дорозі!'),
-                'IN_PROGRESS': ('🚗 В дорозі', 'Ви в дорозі до місця призначення.'),
-                'COMPLETED': ('🏁 Завершено', 'Поїздка успішно завершена. Дякуємо!'),
-                'CANCELLED': ('❌ Скасовано', 'Цю поїздку було скасовано.'),
-            }
-            
-            status_emoji, status_description = status_mapping.get(status, ('❓ Невідомий', 'Статус поїздки невідомий.'))
+            status_emoji, status_description = STATUS_MAPPING.get(status, ('❓ Невідомий', 'Статус поїздки невідомий.'))
             
             created_info = ""
             if created_at:
