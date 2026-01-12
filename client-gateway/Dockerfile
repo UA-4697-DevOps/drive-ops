@@ -13,4 +13,4 @@ COPY --chown=appuser:appuser bot/ ./bot/
 
 USER appuser
 
-ENTRYPOINT ["python", "bot/main.py"]
+ENTRYPOINT ["python", "-m", "bot.main"]
