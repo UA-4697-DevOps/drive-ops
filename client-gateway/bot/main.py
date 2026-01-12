@@ -257,6 +257,7 @@ async def change_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 def main():
+    ensure_bot_token()
     application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start_message))

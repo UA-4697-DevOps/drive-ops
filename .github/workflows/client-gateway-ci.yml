@@ -42,7 +42,7 @@ jobs:
       - name: Run Client Gateway Tests
         working-directory: ./client-gateway
         # allow exit code 5 (no tests collected) while client-gateway is a stub; remove/update when tests are added or discovery is expected
-        run: python -m pytest -q # allow exit code 5: no tests collected; remove this when tests are present
+        run: bash -lc "python -m pytest -q || [ $? -eq 5 ]" # allow exit code 5: no tests collected; remove this when tests are present
 
   build:
     name: Build Docker Image
