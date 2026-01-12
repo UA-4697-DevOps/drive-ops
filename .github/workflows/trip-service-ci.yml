@@ -132,6 +132,12 @@ jobs:
 
           echo "Health check passed!"
 
+      - name: Prepare test database
+        run: |
+          docker compose exec -T db psql -U vagrant -d postgres -c "DROP DATABASE IF EXISTS trip_db;"
+          docker compose exec -T db psql -U vagrant -d postgres -c "CREATE DATABASE trip_db;"
+          echo "Database recreated for integration tests"
+
       - name: Run Go integration tests
         working-directory: trip-service
         run: go test -v -race ./tests/integration/...
