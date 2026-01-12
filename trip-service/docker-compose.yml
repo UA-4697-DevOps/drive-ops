@@ -1,0 +1,32 @@
+services:
+  trip-service:
+    # Build configuration for the Go service
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trip-service
+    restart: always
+    
+    # Load environment variables from the root .env file
+    env_file: ../.env
+    
+    # Expose service port to the host
+    ports:
+      - "8081:8081"
+    
+    # Ensure the service is healthy by checking the /health endpoint
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    
+    # Connect to the pre-existing shared network
+    networks:
+      - drive-ops-net
+
+networks:
+  # Define the shared bridge network as an external resource
+  drive-ops-net:
+    external: true
