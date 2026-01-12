@@ -61,7 +61,9 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 
 	// Return the DB instance and the cleanup function
 	return db, func() {
-		_ = pgContainer.Terminate(ctx)
+		// FIX: Use context.Background() instead of the outer ctx
+		// to ensure termination completes even if the original context was canceled
+		_ = pgContainer.Terminate(context.Background())
 	}
 }
 
