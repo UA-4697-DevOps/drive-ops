@@ -26,7 +26,6 @@ type TripService struct {
 }
 
 // NewTripService creates a new instance of TripService with RabbitMQ publisher.
-// We keep the version from 'main' as it includes mandatory dependency checks.
 func NewTripService(repo *repository.TripRepository, publisher broker.Publisher) *TripService {
 	if repo == nil {
 		panic("repository cannot be nil")
@@ -42,7 +41,6 @@ func NewTripService(repo *repository.TripRepository, publisher broker.Publisher)
 
 // CreateTrip handles the logic for initiating a new trip request (Phase 1)
 func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
-	// 1. Validation using new domain error from feat branch
 	if trip.Pickup == "" || trip.Dropoff == "" || trip.PassengerID == uuid.Nil {
 		return domain.ErrInvalidCreateTripData
 	}
@@ -50,17 +48,14 @@ func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
 	trip.ID = uuid.New()
 	trip.Status = domain.TripStatusPending
 
-	// 2. Save trip to database
 	if err := s.repo.Create(ctx, trip); err != nil {
 		return err
 	}
 
-	// 3. Publish trip.event.created event (Phase 2)
-	// We use the publisher logic from 'main' to notify other services
+	// Phase 2: Notify other services about new trip
 	event := broker.BuildTripCreatedEvent(trip, trip.ID.String())
 	if err := s.publisher.PublishTripCreated(ctx, event); err != nil {
 		log.Printf("ERROR: Failed to publish trip.event.created for trip_id=%s: %v", trip.ID, err)
-		// We don't return error here to maintain eventual consistency
 	} else {
 		log.Printf("Successfully published trip.event.created for trip_id=%s", trip.ID)
 	}
@@ -72,32 +67,25 @@ func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
 func (s *TripService) GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, error) {
 	trip, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, err // Returns domain.ErrTripNotFound if not found
+		return nil, err
 	}
 	return trip, nil
 }
 
 // AssignDriver handles the business logic for assigning a driver (Phase 3)
 func (s *TripService) AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error {
-	// Validation check for UUIDs to prevent 400 errors
 	if tripID == uuid.Nil || driverID == uuid.Nil {
 		return domain.ErrInvalidID
 	}
 
-	// The repository handles the atomic update and state validation
 	return s.repo.AssignDriver(ctx, tripID, driverID)
 }
 
-// CheckHealth verifies the database connection status
+// CheckHealth verifies the database connection status.
+// FIX: Now uses the encapsulated Ping() method from the repository.
 func (s *TripService) CheckHealth(ctx context.Context) error {
-	sqlDB, err := s.repo.DB().DB()
-	if err != nil {
-		return fmt.Errorf("failed to get database connection: %w", err)
-	}
-
-	if err := sqlDB.PingContext(ctx); err != nil {
+	if err := s.repo.Ping(ctx); err != nil {
 		return fmt.Errorf("database health check failed: %w", err)
 	}
-
 	return nil
 }
