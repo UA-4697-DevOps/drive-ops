@@ -1,0 +1,30 @@
+---
+# Main tasks for Trip Service deployment
+
+- name: Create root directory for the whole project
+  file:
+    path: "/opt/drive-ops"
+    state: directory
+    mode: '0755'
+
+- name: Copy central .env file to the root directory
+  copy:
+    # This assumes your .env is in the project root on your local machine
+    src: "../../../../../.env" 
+    dest: "/opt/drive-ops/.env"
+    mode: '0600' # Restricted permissions for security
+
+- name: Create service-specific directory
+  file:
+    path: "/opt/drive-ops/trip-service"
+    state: directory
+
+- name: Copy service docker-compose
+  copy:
+    src: "../../../../../trip-service/docker-compose.yml"
+    dest: "/opt/drive-ops/trip-service/docker-compose.yml"
+
+- name: Start the service
+  community.docker.docker_compose:
+    project_src: "/opt/drive-ops/trip-service"
+    state: present
