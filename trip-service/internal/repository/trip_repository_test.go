@@ -21,7 +21,6 @@ import (
 
 // setupTestDB initializes a temporary Postgres container using t.Cleanup for reliability.
 func setupTestDB(t *testing.T) *gorm.DB {
-	// Use a bounded context for container startup to avoid infinite hangs in CI
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -39,7 +38,6 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("Failed to start postgres container: %v", err)
 	}
 
-	// Register cleanup via t.Cleanup to ensure container is terminated properly
 	t.Cleanup(func() {
 		terminateCtx, terminateCancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer terminateCancel()
@@ -58,7 +56,6 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// Dynamic Enum Creation: Stays in sync with domain constants automatically
 	if err := setupEnums(db); err != nil {
 		t.Fatalf("Failed to setup enums: %v", err)
 	}
@@ -70,7 +67,6 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// setupEnums centralizes DDL logic to stay in sync with domain constants
 func setupEnums(db *gorm.DB) error {
 	_ = db.Exec("DROP TYPE IF EXISTS trip_status").Error
 	enumSQL := fmt.Sprintf("CREATE TYPE trip_status AS ENUM ('%s', '%s', '%s', '%s', '%s')",
@@ -92,14 +88,14 @@ func TestTripRepository_FullCycle(t *testing.T) {
 	testTrip := &domain.Trip{
 		ID:          tripID,
 		PassengerID: uuid.New(),
-		Pickup:      "123 Main St", // Required NOT NULL field
-		Dropoff:     "456 Oak Ave", // Required NOT NULL field
+		Pickup:      "123 Main St",
+		Dropoff:     "456 Oak Ave",
 		Status:      domain.TripStatusPending,
 	}
 
 	t.Run("Create Trip", func(t *testing.T) {
 		err := repo.Create(ctx, testTrip)
-		assert.NoError(t, err, "Seeding test trip must not fail")
+		assert.NoError(t, err)
 	})
 
 	t.Run("Get Trip By ID", func(t *testing.T) {
@@ -118,7 +114,7 @@ func TestTripRepository_FullCycle(t *testing.T) {
 		assert.NoError(t, err)
 
 		found, err := repo.GetByID(ctx, tripID)
-		assert.NoError(t, err, "Error from GetByID must be handled")
+		assert.NoError(t, err)
 		assert.Equal(t, domain.TripStatusActive, found.Status)
 	})
 
@@ -137,14 +133,13 @@ func TestTripRepository_AssignDriver(t *testing.T) {
 	repo := NewTripRepository(db)
 	ctx := context.Background()
 
-	// Subtests seed their own data to ensure isolation
 	t.Run("Success Assignment", func(t *testing.T) {
 		tripID := uuid.New()
 		trip := &domain.Trip{
 			ID:          tripID,
 			PassengerID: uuid.New(),
-			Pickup:      "Station A", // Required NOT NULL field
-			Dropoff:     "Station B", // Required NOT NULL field
+			Pickup:      "Station A",
+			Dropoff:     "Station B",
 			Status:      domain.TripStatusPending,
 		}
 		assert.NoError(t, repo.Create(ctx, trip))
@@ -154,24 +149,32 @@ func TestTripRepository_AssignDriver(t *testing.T) {
 		assert.NoError(t, err)
 		
 		found, err := repo.GetByID(ctx, tripID)
-		assert.NoError(t, err, "Error from GetByID must be handled")
+		assert.NoError(t, err)
 		assert.Equal(t, domain.TripStatusConfirmed, found.Status)
 		assert.Equal(t, driverID, *found.DriverID)
 	})
 
 	t.Run("Conflict - Already Assigned", func(t *testing.T) {
 		tripID := uuid.New()
+		existingDriverID := uuid.New() // FIXED: Extract to local variable for idiomatic pointer
 		trip := &domain.Trip{
 			ID:          tripID,
 			PassengerID: uuid.New(),
 			Pickup:      "Point C",
 			Dropoff:     "Point D",
 			Status:      domain.TripStatusConfirmed,
-			DriverID:    &[]uuid.UUID{uuid.New()}[0],
+			DriverID:    &existingDriverID,
 		}
 		assert.NoError(t, repo.Create(ctx, trip))
 
 		err := repo.AssignDriver(ctx, tripID, uuid.New())
 		assert.ErrorIs(t, err, domain.ErrInvalidTripStatus)
+	})
+
+	// NEW: Added test case for non-existent trip ID to cover 404 scenarios
+	t.Run("Trip Not Found", func(t *testing.T) {
+		nonExistentID := uuid.New()
+		err := repo.AssignDriver(ctx, nonExistentID, uuid.New())
+		assert.ErrorIs(t, err, domain.ErrTripNotFound)
 	})
 }
