@@ -34,7 +34,7 @@ func main() {
 		log.Println("Note: .env file not found, using system env variables")
 	}
 
-	// Support both DB_URL (from docker-compose) and individual env vars (for local dev)
+	// 1. Database Connection setup
 	var dsn string
 	if dbURL := os.Getenv("DB_URL"); dbURL != "" {
 		dsn = dbURL
@@ -53,7 +53,7 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// Initialize RabbitMQ publisher
+	// 2. Initialize RabbitMQ publisher (Keep from main)
 	brokerConfig, err := broker.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load broker config: %v", err)
@@ -64,20 +64,26 @@ func main() {
 		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
 	}
 
-	// Dependency Injection
+	// 3. Dependency Injection: Repository -> Service -> Handler
 	repo := repository.NewTripRepository(db)
-	svc := service.NewTripService(repo, publisher)
+	// Passing publisher to service as required for events (Phase 2 & 3)
+	svc := service.NewTripService(repo, publisher) 
 	handler := api.NewTripHandler(svc)
 
+	// 4. Router setup
 	r := chi.NewRouter()
 
 	r.Get("/health", handler.HealthCheck)
+	
 	r.Route("/trips", func(r chi.Router) {
 		r.Post("/", handler.CreateTrip)
 		r.Get("/{id}", handler.GetTrip)
+		
+		// New endpoint for driver assignment (integrated from feature branch)
+		r.Patch("/{id}/assign-driver", handler.AssignDriver)
 	})
 
-	// Setup HTTP server with graceful shutdown
+	// 5. Setup HTTP server with graceful shutdown (Preferred production way)
 	serverPort := getEnv("TRIP_SERVICE_PORT", ":8081")
 	srv := &http.Server{
 		Addr:    serverPort,
@@ -90,7 +96,7 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("Server is running on %s...", serverPort)
+		log.Printf("Trip Service is running on %s...", serverPort)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed: %v", err)
 		}
@@ -100,7 +106,7 @@ func main() {
 	<-stop
 	log.Println("Shutting down server...")
 
-	// Graceful shutdown with timeout
+	// 6. Graceful shutdown logic
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -108,7 +114,7 @@ func main() {
 		log.Printf("Server shutdown error: %v", err)
 	}
 
-	// Close publisher after server has stopped
+	// Close publisher after server has stopped to ensure no data loss
 	if err := publisher.Close(); err != nil {
 		log.Printf("Error closing publisher: %v", err)
 	}
