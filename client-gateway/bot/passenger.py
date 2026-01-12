@@ -247,7 +247,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     await query.edit_message_text(
                         text=(
                             "❌ Не вдалося створити поїздку.\n"
-                            f"Причина: {err_text or 'сервіс недоступний.'}\n"
+                            f"Причина: {(err_text or 'сервіс недоступний.').replace('_', '\\_')}\n"
                             + (f"Код: {code}\n" if code is not None else "")
                             + f"\nЛокальний запит: {local_req}"
                         ),
