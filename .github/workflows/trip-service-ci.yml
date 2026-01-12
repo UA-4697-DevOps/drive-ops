@@ -146,6 +146,26 @@ jobs:
 
           echo "Database recreated for integration tests"
 
+      - name: Run migrations and restart service
+        run: |
+          docker compose up -d trip-migrations
+          docker compose logs trip-migrations
+
+          docker compose up -d trip-service
+
+          echo "Waiting for trip-service to be healthy..."
+          timeout 60 bash -c 'until docker compose ps | grep -E "trip-service.*healthy"; do
+            echo "$(date): Waiting for trip-service..."
+            docker compose ps trip-service
+            sleep 3
+          done' || {
+            echo "Service failed to become healthy after database recreation"
+            docker compose logs trip-service
+            exit 1
+          }
+
+          echo "Trip-service is healthy and ready for tests!"
+
       - name: Run Go integration tests
         working-directory: trip-service
         run: go test -v -race ./tests/integration/...
