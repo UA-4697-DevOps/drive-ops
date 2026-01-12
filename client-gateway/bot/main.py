@@ -3,6 +3,7 @@ import sys
 import time
 import re
 import httpx
+import warnings
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from dotenv import load_dotenv
@@ -258,6 +259,11 @@ async def change_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     ensure_bot_token()
+    # Suppress PTBUserWarning about mixing CallbackQueryHandler entry points
+    warnings.filterwarnings(
+        "ignore",
+        message="If 'per_message=False', 'CallbackQueryHandler' will not be tracked for every message.*",
+    )
     application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start_message))

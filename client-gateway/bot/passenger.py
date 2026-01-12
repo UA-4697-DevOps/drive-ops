@@ -255,6 +255,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_comment_step)],
         },
         fallbacks=[CommandHandler("cancel_order", cancel_order_command)],
+        per_chat=True,
     )
 
     application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_PASSENGER)}$"), select_passenger_role))
