@@ -1,5 +1,5 @@
 ---
-- name: Prepare Debian VM for Docker services
+- name: Prepare Debian VM for Independent Docker services
   hosts: local_vm
   become: true
   gather_facts: true
@@ -23,8 +23,16 @@
       tags: upgrade
 
   roles:
-    - role: docker
-    - role: client-gateway
+    # 1. Base Docker installation (Always run or via 'docker' tag)
+    - { role: docker, tags: [ always, docker ] }
+
+    # 2. Shared Infrastructure (DB & MQ)
+    - { role: infra, tags: [ infra ] }
+
+    # 3. Independent Services
+    - { role: trip-service, tags: [ trip ] }
+    - { role: client-gateway, tags: [ gateway ] }
+    # - { role: driver-service, tags: [ driver ] } # For the future team
 
   post_tasks:
     - name: Print completion message
@@ -32,8 +40,6 @@
         msg: 
           - "========================================"
           - " VM is configured and ready!"
-          - "========================================"
-          - "{{ docker_version.stdout }}"
-          - "{{ docker_compose_version.stdout }}"
+          - " Deployment of {{ ansible_run_tags | join(', ') }} completed!"
           - "========================================"
       tags: always
