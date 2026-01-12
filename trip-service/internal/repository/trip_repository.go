@@ -41,10 +41,9 @@ func (r *TripRepository) Update(ctx context.Context, trip *domain.Trip) error {
 }
 
 // AssignDriver atomically assigns a driver and updates status to CONFIRMED.
-// It differentiates between "Trip Not Found" and "Invalid Status" errors.
+// It prevents race conditions using atomic SQL updates.
 func (r *TripRepository) AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error {
-	// 43-57: Attempt atomic update with a guard on status and unassigned status (driver_id IS NULL).
-	// This prevents concurrent drivers from accepting the same trip.
+	// Atomic update with guard: only update if trip is PENDING and has no driver
 	result := r.db.WithContext(ctx).
 		Model(&domain.Trip{}).
 		Where("id = ? AND status = ? AND driver_id IS NULL", tripID, domain.TripStatusPending).
@@ -57,10 +56,9 @@ func (r *TripRepository) AssignDriver(ctx context.Context, tripID uuid.UUID, dri
 		return result.Error
 	}
 
-	// If no rows were updated, we need to determine the cause (404 vs 409)
+	// If no rows were affected, differentiate between 404 (Not Found) and 409 (Conflict)
 	if result.RowsAffected == 0 {
 		var count int64
-		// Robust and DB-agnostic existence check using Count()
 		err := r.db.WithContext(ctx).
 			Model(&domain.Trip{}).
 			Where("id = ?", tripID).
@@ -72,11 +70,9 @@ func (r *TripRepository) AssignDriver(ctx context.Context, tripID uuid.UUID, dri
 		}
 
 		if count == 0 {
-			// Trip ID truly does not exist
 			return domain.ErrTripNotFound
 		}
 
-		// Trip exists but is not PENDING or already has a driver assigned
 		return domain.ErrInvalidTripStatus
 	}
 
@@ -88,7 +84,12 @@ func (r *TripRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return r.db.WithContext(ctx).Delete(&domain.Trip{}, "id = ?", id).Error
 }
 
-// DB returns the underlying database connection for health checks
-func (r *TripRepository) DB() *gorm.DB {
-	return r.db
+// Ping verifies the database connection status.
+// This replaces the old DB() method to maintain encapsulation.
+func (r *TripRepository) Ping(ctx context.Context) error {
+	sqlDB, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.PingContext(ctx)
 }
