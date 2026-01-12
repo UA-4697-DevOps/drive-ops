@@ -224,9 +224,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/trip-service
           tags: |
-            type=sha,prefix={{branch}}-
-            type=ref,event=branch
             type=ref,event=pr
+            type=ref,event=branch
+            type=sha,prefix=sha-
 
       - name: Build Docker image
         uses: docker/build-push-action@v5
