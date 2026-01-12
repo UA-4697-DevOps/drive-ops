@@ -17,11 +17,10 @@ USER 10001:10001
 RUN python -m venv /app/venv
 
 COPY --chown=app:app requirements.txt .
-
 RUN pip install -r requirements.txt
 
 COPY --chown=app:app ./src ./src
 
-EXPOSE 8080
+EXPOSE 8082
 
-CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8082"]
