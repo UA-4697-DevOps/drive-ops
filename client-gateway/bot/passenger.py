@@ -385,8 +385,30 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         query = update.callback_query
         await query.answer("Оновлення статусу...")
         
+        # Validate callback data prefix
+        if not query.data.startswith('refresh_status_'):
+            await query.answer("Невірний запит.")
+            logger.warning("Invalid callback data for refresh_status: %s", query.data)
+            return
+        
+        trip_id = query.data[len('refresh_status_'):]
+        
+        # Validate trip_id is non-empty
+        if not trip_id:
+            await query.answer("Невірний ID поїздки.")
+            logger.warning("Empty trip_id in refresh_status callback")
+            return
+        
+        # Validate UUID format
+        uuid_pattern = re.compile(
+            r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        )
+        if not uuid_pattern.match(trip_id):
+            await query.edit_message_text("❌ Невірний ID поїздки.")
+            logger.warning("Invalid trip_id format in refresh_status: %s", trip_id)
+            return
+        
         chat_id = query.message.chat.id
-        trip_id = query.data.replace('refresh_status_', '')
         
         # Get current timestamp with milliseconds to ensure unique message
         updated_at = datetime.now().strftime("%H:%M:%S.%f")[:-3]
@@ -459,7 +481,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_comment_step)],
         },
         fallbacks=[CommandHandler("cancel_order", cancel_order_command)],
-        #per_chat=True,
+        # per_chat=True,
     )
 
     # Check trip status conversation handler
