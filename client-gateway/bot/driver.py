@@ -1,4 +1,3 @@
-import os
 import re
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters
@@ -23,7 +22,6 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     driver_menu_unregistered = keyboards['driver_menu_unregistered']
     driver_menu_registered = keyboards['driver_menu_registered']
     
-    safe_send = helpers['safe_send']
     register_driver_in_service = helpers['register_driver_in_service']
     update_driver_status = helpers['update_driver_status']
     
@@ -53,8 +51,6 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             )
 
     async def start_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        chat_id = update.effective_chat.id
-        
         await update.message.reply_text(
             "\U0001F4DD *Реєстрація водія*\n\n"
             "\U0001F464 *Крок 1/2*: Введіть ваше ім'я:",
@@ -64,7 +60,6 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         return DRIVER_NAME
 
     async def process_driver_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        chat_id = update.effective_chat.id
         name = update.message.text
         
         if len(name) < 2:
@@ -166,7 +161,6 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         return ConversationHandler.END
 
     async def cancel_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        chat_id = update.effective_chat.id
         await update.message.reply_text(
             "\u274C Реєстрацію скасовано.",
             reply_markup=driver_menu_unregistered()

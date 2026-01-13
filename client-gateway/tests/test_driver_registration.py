@@ -4,8 +4,6 @@ Tests for driver registration and status management functionality.
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from telegram import Update
-from telegram.ext import ContextTypes
 
 # Import bot modules
 from bot import main
