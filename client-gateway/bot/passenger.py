@@ -383,6 +383,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     async def handle_refresh_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle refresh status button callback."""
         query = update.callback_query
+        await query.answer()
         
         trip_id = query.data[len('refresh_status_'):]
         
