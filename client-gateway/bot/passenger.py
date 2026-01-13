@@ -1,10 +1,9 @@
 import logging
 import re
-import time
 from datetime import datetime
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters, CommandHandler
-
+from telegram.error import BadRequest
 from logger_utils import create_trip_request_logger
 
 logger = create_trip_request_logger()
@@ -342,7 +341,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             )
             
             # Add refresh button for non-final statuses
-            if status not in ('COMPLETED', 'CANCELLED', 'ACTIVE'):
+            if status not in ('COMPLETED', 'CANCELLED'):
                 markup = InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔄 Оновити статус", callback_data=f"refresh_status_{trip_id}")]
                 ])
@@ -430,14 +429,14 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             )
             
             try:
-                if status not in ('COMPLETED', 'CANCELLED', 'ACTIVE'):
+                if status not in ('COMPLETED', 'CANCELLED'):
                     markup = InlineKeyboardMarkup([
                         [InlineKeyboardButton("🔄 Оновити статус", callback_data=f"refresh_status_{trip_id}")]
                     ])
                     await query.edit_message_text(response_text, parse_mode='Markdown', reply_markup=markup)
                 else:
                     await query.edit_message_text(response_text, parse_mode='Markdown')
-            except Exception as e:
+            except BadRequest as e:
                 logger.warning("Failed to edit message (possibly same content): %s", e)
         else:
             error = result.get('error', {})
