@@ -15,7 +15,7 @@ logger = create_trip_request_logger()
 
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-TRIP_SERVICE_URL = os.getenv('TRIP_SERVICE_URL', 'http://localhost:8080')
+TRIP_SERVICE_URL = os.getenv('TRIP_SERVICE_URL', 'http://localhost:8081')
 
 
 def ensure_bot_token():
@@ -113,7 +113,7 @@ async def fetch_trip_status(trip_id, user_id=None):
             extra={'correlationId': correlation_id}
         )
         
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(url)
         
         latency = int((time.time() - start_time) * 1000)
@@ -259,7 +259,7 @@ async def submit_trip_request(chat_id, order):
             extra={'correlationId': correlation_id}
         )
         
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(url, json=payload)
         
         latency = int((time.time() - start_time) * 1000)
