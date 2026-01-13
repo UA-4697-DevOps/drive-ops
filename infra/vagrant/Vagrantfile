@@ -18,13 +18,17 @@ Vagrant.configure("2") do |config|
 
     # Port forwarding template
     # Client Gateway
-    config.vm.network "forwarded_port", guest: 3000, host: 3000, host_ip: "127.0.0.1"
+    config.vm.network "forwarded_port", guest: 8080, host: 8080, host_ip: "127.0.0.1"
     # Driver Service
-    config.vm.network "forwarded_port", guest: 5001, host: 5001, host_ip: "127.0.0.1"
+    config.vm.network "forwarded_port", guest: 8082, host: 8082, host_ip: "127.0.0.1"
     # Trip Service
-    config.vm.network "forwarded_port", guest: 5002, host: 5002, host_ip: "127.0.0.1"
+    config.vm.network "forwarded_port", guest: 8081, host: 8081, host_ip: "127.0.0.1"
     # PostgreSQL
     config.vm.network "forwarded_port", guest: 5432, host: 5432, host_ip: "127.0.0.1"
+    # RabbitMQ AMQP
+    config.vm.network "forwarded_port", guest: 5672, host: 5672, host_ip: "127.0.0.1"
+    # RabbitMQ Management UI (Web UI)
+     config.vm.network "forwarded_port", guest: 15672, host: 15672, host_ip: "127.0.0.1"
 
     config.vm.synced_folder "../..", "/vagrant", 
         type: "virtualbox",
@@ -45,10 +49,13 @@ Vagrant.configure("2") do |config|
         sudo apt-get update
         sudo apt-get install -y ansible
         
+        echo "Installing community.docker collection..."
+        ansible-galaxy collection install community.docker
         echo "Running Ansible playbook..."
         cd /vagrant/infra/ansible
         ansible-playbook -i inventory/localhost playbook.yaml
-        
+        #Trip service playbook
+        ansible-playbook -i inventory/localhost trip-service-deploy.yaml
         echo ""
         echo "Provisioning complete!"
         echo ""
@@ -60,9 +67,13 @@ Vagrant.configure("2") do |config|
     ======================================
     
     Services will be available at:
-    - Client Gateway: http://localhost:3000
-    - Driver Service: http://localhost:5001
-    - Trip Service: http://localhost:5002
+    - Client Gateway: http://localhost:8080
+    - Driver Service: http://localhost:8082
+    - Trip Service: http://localhost:8081
+    
+    Infrastructure:
+    - RabbitMQ UI:    http://localhost:15672 (use credentials from your .env)
+    - PostgreSQL:     localhost:5432 (use credentials from your .env)
     ======================================
     MESSAGE
 end

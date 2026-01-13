@@ -1,11 +1,9 @@
-import logging
 import re
 from datetime import datetime
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters, CommandHandler
+from .logger_utils import create_trip_request_logger
 from telegram.error import BadRequest
-from logger_utils import create_trip_request_logger
-
 logger = create_trip_request_logger()
 
 # Status mapping for trip statuses
@@ -461,6 +459,18 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_comment_step)],
         },
         fallbacks=[CommandHandler("cancel_order", cancel_order_command)],
+        #per_chat=True,
+    )
+
+    # Check trip status conversation handler
+    check_status_conv_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex(f"^{re.escape(BTN_CHECK_STATUS)}$"), start_check_status_flow),
+        ],
+        states={
+            CHECK_TRIP_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_trip_id_step)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_check_status)],
     )
 
     # Check trip status conversation handler

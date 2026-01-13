@@ -6,11 +6,13 @@ on:
     paths:
       - 'trip-service/**'
       - '.github/workflows/trip-service-ci.yml'
+      - 'docker-compose.yml'
   pull_request:
     branches: [main]
     paths:
       - 'trip-service/**'
       - '.github/workflows/trip-service-ci.yml'
+      - 'docker-compose.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -77,6 +79,26 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: trip-service/go.sum
 
+      - name: Create .env file for docker-compose
+        run: |
+          cat > .env << EOF
+          # Database
+          DB_HOST=db
+          DB_PORT=5432
+          DB_USER=vagrant
+          DB_PASSWORD=trips
+          TRIP_DB_NAME=trip_db
+
+          # RabbitMQ
+          RABBITMQ_HOST=mq
+          RABBITMQ_PORT=5672
+          RABBITMQ_USER=testuser
+          RABBITMQ_PASSWORD=testpass
+
+          # Server
+          TRIP_SERVICE_PORT=:8081
+          EOF
+
       - name: Start trip-service stack
         run: docker compose up -d trip-service --build
 
@@ -100,7 +122,7 @@ jobs:
         run: |
           echo "Testing /health endpoint..."
 
-          response=$(curl -f -s http://localhost:5002/health)
+          response=$(curl -f -s http://localhost:8081/health)
           echo "Response: $response"
 
           if ! echo "$response" | jq -e '.status' > /dev/null 2>&1; then
@@ -110,16 +132,50 @@ jobs:
 
           echo "Health check passed!"
 
+      - name: Prepare test database
+        run: |
+          docker compose stop trip-service
+
+          docker compose exec -T db psql -U vagrant -d postgres -c "
+            SELECT pg_terminate_backend(pid)
+            FROM pg_stat_activity
+            WHERE datname = 'trip_db' AND pid <> pg_backend_pid();
+          "
+          docker compose exec -T db psql -U vagrant -d postgres -c "DROP DATABASE IF EXISTS trip_db;"
+          docker compose exec -T db psql -U vagrant -d postgres -c "CREATE DATABASE trip_db;"
+
+          echo "Database recreated for integration tests"
+
+      - name: Run migrations and restart service
+        run: |
+          docker compose up -d trip-migrations
+          docker compose logs trip-migrations
+
+          docker compose up -d trip-service
+
+          echo "Waiting for trip-service to be healthy..."
+          timeout 60 bash -c 'until docker compose ps | grep -E "trip-service.*healthy"; do
+            echo "$(date): Waiting for trip-service..."
+            docker compose ps trip-service
+            sleep 3
+          done' || {
+            echo "Service failed to become healthy after database recreation"
+            docker compose logs trip-service
+            exit 1
+          }
+
+          echo "Trip-service is healthy and ready for tests!"
+
       - name: Run Go integration tests
         working-directory: trip-service
         run: go test -v -race ./tests/integration/...
         env:
-          SERVICE_URL: http://localhost:5002
+          SERVICE_URL: http://localhost:8081
           DB_HOST: localhost
           DB_PORT: 5432
           DB_USER: vagrant
           DB_PASSWORD: trips
-          DB_NAME: trips
+          TRIP_DB_NAME: trip_db
 
       - name: Show logs on failure
         if: failure()
@@ -168,9 +224,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/trip-service
           tags: |
-            type=sha,prefix={{branch}}-
-            type=ref,event=branch
             type=ref,event=pr
+            type=ref,event=branch
+            type=sha,prefix=sha-
 
       - name: Build Docker image
         uses: docker/build-push-action@v5
