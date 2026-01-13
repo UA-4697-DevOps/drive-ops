@@ -30,11 +30,22 @@ func getEnv(key, fallback string) string {
 }
 
 func main() {
-	// Simple wait for dependencies to spin up in docker-compose
-	time.Sleep(5 * time.Second)
-
 	if err := godotenv.Load(); err != nil {
 		log.Println("Note: .env file not found, using system env variables")
+	}
+
+	// Helper for retry logic
+	connectWithRetry := func(desc string, fn func() error) error {
+		var err error
+		for i := 0; i < 10; i++ {
+			if err = fn(); err == nil {
+				log.Printf("Successfully connected to %s", desc)
+				return nil
+			}
+			log.Printf("Failed to connect to %s (attempt %d/10): %v", desc, i+1, err)
+			time.Sleep(time.Duration(i+1) * time.Second) // Exponential backoff: 1s, 2s, 3s... (actually linear here but sufficient)
+		}
+		return fmt.Errorf("failed to connect to %s after retries: %w", desc, err)
 	}
 
 	// 1. Database Connection setup
@@ -51,32 +62,46 @@ func main() {
 		)
 	}
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	var db *gorm.DB
+	err := connectWithRetry("Postgres", func() error {
+		var err error
+		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		return err
+	})
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatalf("Fatal: %v", err)
 	}
 
-	// 2. Initialize RabbitMQ publisher (Keep from main)
+	// 2. Initialize RabbitMQ publisher
 	brokerConfig, err := broker.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load broker config: %v", err)
 	}
 
-	publisher, err := broker.NewRabbitMQPublisher(brokerConfig)
+	var publisher *broker.RabbitMQPublisher
+	err = connectWithRetry("RabbitMQ Publisher", func() error {
+		var err error
+		publisher, err = broker.NewRabbitMQPublisher(brokerConfig)
+		return err
+	})
 	if err != nil {
-		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
+		log.Fatalf("Fatal: %v", err)
 	}
 
 	// 3. Dependency Injection: Repository -> Service -> Handler
 	repo := repository.NewTripRepository(db)
-	// Passing publisher to service as required for events (Phase 2 & 3)
 	svc := service.NewTripService(repo, publisher)
 	handler := api.NewTripHandler(svc)
 
 	// Initialize RabbitMQ Consumer
-	consumer, err := broker.NewRabbitMQConsumer(brokerConfig, svc)
+	var consumer *broker.RabbitMQConsumer
+	err = connectWithRetry("RabbitMQ Consumer", func() error {
+		var err error
+		consumer, err = broker.NewRabbitMQConsumer(brokerConfig, svc)
+		return err
+	})
 	if err != nil {
-		log.Fatalf("Failed to initialize RabbitMQ consumer: %v", err)
+		log.Fatalf("Fatal: %v", err)
 	}
 
 	// Create a cancellable context for consumer
