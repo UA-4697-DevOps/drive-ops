@@ -106,8 +106,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                 'status': 'offline'
             }
             
-            logger.info("Driver registered successfully: chat_id=%s driver_id=%s name=%s", 
-                       chat_id, driver_id, name)
+            logger.info("Driver registered successfully: chat_id=%s driver_id=%s name=%s", chat_id, driver_id, name)
             
             await update.message.reply_text(
                 "\u2705 *Реєстрацію завершено!*\n\n"
@@ -397,6 +396,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     # Expose inner handlers to module-level so tests can invoke them directly.
     # They close over the `user_orders` and `user_roles` passed to `register_handlers`.
     globals()['process_driver_car_handler'] = process_driver_car
+    globals()['process_driver_name_handler'] = process_driver_name
     globals()['start_registration_handler'] = start_registration
     globals()['go_online_handler'] = go_online
     globals()['go_offline_handler'] = go_offline
