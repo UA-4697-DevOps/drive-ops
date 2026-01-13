@@ -382,14 +382,6 @@ async def change_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=role_selection_menu()
     )
 
-status_mapping = {
-    'PENDING': ('⏳ Очікує водія', 'Ваше замовлення в черзі...'),
-    'CONFIRMED': ('✅ Підтверджено', 'Водій прийняв замовлення...'),
-    'IN_PROGRESS': ('🚗 В дорозі', 'Ви в дорозі...'),
-    'COMPLETED': ('🏁 Завершено', 'Поїздка успішно завершена...'),
-    'CANCELLED': ('❌ Скасовано', 'Цю поїздку було скасовано.'),
-}
-
 def main():
     ensure_bot_token()
     # Suppress PTBUserWarning about mixing CallbackQueryHandler entry points
