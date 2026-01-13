@@ -134,8 +134,20 @@ func main() {
 	// Cancel consumer context to signal shutdown
 	consumerCancel()
 
-	if err := consumer.Close(); err != nil {
-		log.Printf("Error closing consumer: %v", err)
+	// Give consumer time to finish in-flight messages
+	consumerShutdownDone := make(chan struct{})
+	go func() {
+		if err := consumer.Close(); err != nil {
+			log.Printf("Error closing consumer: %v", err)
+		}
+		close(consumerShutdownDone)
+	}()
+
+	select {
+	case <-consumerShutdownDone:
+		log.Println("Consumer closed gracefully")
+	case <-time.After(10 * time.Second):
+		log.Println("Consumer close timed out")
 	}
 
 	// Close publisher last - both HTTP handlers and consumer may use it
