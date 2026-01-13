@@ -7,8 +7,13 @@ Provides reusable fixtures for:
 - Test environment setup
 """
 
-# Make `client-gateway` package importable during tests (so `import bot` works)
+# Set environment variables BEFORE any imports to prevent load_dotenv() from using .env file
 import os
+os.environ.setdefault("BOT_TOKEN", "test_token_123456789")
+os.environ.setdefault("TRIP_SERVICE_URL", "http://localhost:8080")
+os.environ.setdefault("DRIVER_SERVICE_URL", "http://localhost:8081")
+
+# Make `client-gateway` package importable during tests (so `import bot` works)
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -280,8 +285,10 @@ def reset_global_state(monkeypatch):
     `sys.exit()` running at import time in `bot.main` when tests
     import its module-level objects.
     """
-    # Ensure BOT_TOKEN is set before importing bot.main (avoids hard exit)
+    # Set environment variables before importing bot.main to prevent load_dotenv() overrides
     monkeypatch.setenv("BOT_TOKEN", "test_token_123456789")
+    monkeypatch.setenv("TRIP_SERVICE_URL", "http://localhost:8080")
+    monkeypatch.setenv("DRIVER_SERVICE_URL", "http://localhost:8081")
 
     from bot.main import user_orders, user_roles
 
