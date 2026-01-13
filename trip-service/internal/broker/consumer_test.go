@@ -25,6 +25,9 @@ func (m *MockTripService) CreateTrip(ctx context.Context, trip *domain.Trip) err
 
 func (m *MockTripService) GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, error) {
 	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).(*domain.Trip), args.Error(1)
 }
 

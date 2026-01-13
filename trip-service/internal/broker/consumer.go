@@ -49,6 +49,16 @@ func NewRabbitMQConsumer(config *Config, svc TripAssigner) (*RabbitMQConsumer, e
 		return nil, fmt.Errorf("failed to open channel: %w", err)
 	}
 
+	cleanup := func() {
+		if channel != nil {
+			if err := channel.Close(); err != nil {
+				log.Printf("Error closing channel during cleanup: %v", err)
+			}
+		}
+		if err := conn.Close(); err != nil {
+			log.Printf("Error closing connection during cleanup: %v", err)
+		}
+	}
 	// Declare exchange to ensure it exists
 	err = channel.ExchangeDeclare(
 		config.ExchangeName, // name
@@ -60,9 +70,9 @@ func NewRabbitMQConsumer(config *Config, svc TripAssigner) (*RabbitMQConsumer, e
 		nil,                 // arguments
 	)
 	if err != nil {
+		cleanup()
 		return nil, fmt.Errorf("failed to declare exchange: %w", err)
 	}
-
 	// Declare a queue
 	q, err := channel.QueueDeclare(
 		"trip_service_consumer", // name
@@ -73,18 +83,19 @@ func NewRabbitMQConsumer(config *Config, svc TripAssigner) (*RabbitMQConsumer, e
 		nil,                     // arguments
 	)
 	if err != nil {
+		cleanup()
 		return nil, fmt.Errorf("failed to declare queue: %w", err)
 	}
-
 	// Bind queue to exchange
 	err = channel.QueueBind(
-		q.Name,              // queue name
+		q.Name,                       // queue name
 		"trip.event.driver_assigned", // routing key
-		config.ExchangeName, // exchange
+		config.ExchangeName,          // exchange
 		false,
 		nil,
 	)
 	if err != nil {
+		cleanup()
 		return nil, fmt.Errorf("failed to bind queue: %w", err)
 	}
 

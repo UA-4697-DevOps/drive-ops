@@ -79,8 +79,11 @@ func main() {
 		log.Fatalf("Failed to initialize RabbitMQ consumer: %v", err)
 	}
 
+	// Create a cancellable context for consumer
+	consumerCtx, consumerCancel := context.WithCancel(context.Background())
+
 	// Start consumer in background
-	if err := consumer.Start(context.Background()); err != nil {
+	if err := consumer.Start(consumerCtx); err != nil {
 		log.Fatalf("Failed to start consumer: %v", err)
 	}
 
@@ -132,6 +135,9 @@ func main() {
 	if err := publisher.Close(); err != nil {
 		log.Printf("Error closing publisher: %v", err)
 	}
+
+	// Cancel consumer context to signal shutdown
+	consumerCancel()
 
 	if err := consumer.Close(); err != nil {
 		log.Printf("Error closing consumer: %v", err)
