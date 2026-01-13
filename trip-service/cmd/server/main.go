@@ -131,16 +131,16 @@ func main() {
 		log.Printf("Server shutdown error: %v", err)
 	}
 
-	// Close publisher after server has stopped to ensure no data loss
-	if err := publisher.Close(); err != nil {
-		log.Printf("Error closing publisher: %v", err)
-	}
-
 	// Cancel consumer context to signal shutdown
 	consumerCancel()
 
 	if err := consumer.Close(); err != nil {
 		log.Printf("Error closing consumer: %v", err)
+	}
+
+	// Close publisher last - both HTTP handlers and consumer may use it
+	if err := publisher.Close(); err != nil {
+		log.Printf("Error closing publisher: %v", err)
 	}
 
 	log.Println("Server stopped gracefully")
