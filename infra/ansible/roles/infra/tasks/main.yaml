@@ -1,0 +1,34 @@
+---
+# Tasks to deploy shared infrastructure (DB and MQ)
+
+- name: Create project root directory
+  ansible.builtin.file:
+    path: "/opt/drive-ops"
+    state: directory
+    mode: '0755'
+
+- name: Copy central .env file
+  ansible.builtin.copy:
+    src: "../../../../../.env"
+    dest: "/opt/drive-ops/.env"
+    mode: '0600'
+
+- name: Copy central docker-compose.yml
+  ansible.builtin.copy:
+    src: "../../../../../docker-compose.yml"
+    dest: "/opt/drive-ops/docker-compose.yml"
+
+- name: Ensure postgres init directory exists
+  ansible.builtin.file:
+    path: "/opt/drive-ops/infra/postgres/init-db"
+    state: directory
+    mode: '0755'
+
+- name: Start database and message broker only
+  community.docker.docker_compose_v2:
+    project_src: "/opt/drive-ops"
+    state: present
+    # We explicitly list ONLY infra services here
+    services:
+      - "db"
+      - "mq"
