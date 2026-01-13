@@ -42,25 +42,6 @@ services:
     networks:
       - drive-ops-net
 
-  client-gateway:
-    build:
-      context: ./client-gateway
-      dockerfile: Dockerfile
-    container_name: client-gateway-bot
-    restart: always
-    env_file: .env
-    environment:
-      - PYTHONUNBUFFERED=1
-    ports:
-      - "8080:8080"
-    depends_on:
-      trip-service:
-        condition: service_healthy
-      #driver-service:
-      #  condition: service_healthy
-    networks:
-      - drive-ops-net
-
   trip-migrations:
     build:
       context: ./trip-service
@@ -93,6 +74,25 @@ services:
       db:
         condition: service_healthy
       mq:
+        condition: service_healthy
+      trip-migrations:
+        condition: service_completed_successfully
+    networks:
+      - drive-ops-net
+
+  client-gateway:
+    build:
+      context: ./client-gateway
+      dockerfile: Dockerfile
+    container_name: client-gateway-bot
+    restart: always
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8080:8080"
+    depends_on:
+      trip-service:
         condition: service_healthy
     networks:
       - drive-ops-net
