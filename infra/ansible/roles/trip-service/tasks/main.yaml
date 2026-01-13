@@ -1,0 +1,33 @@
+---
+# Main tasks for Trip Service deployment using centralized configuration
+
+- name: Ensure project root directory exists
+  ansible.builtin.file:
+    path: "/opt/drive-ops"
+    state: directory
+    mode: '0755'
+
+- name: Copy central configuration files
+  ansible.builtin.copy:
+    src: "../../../../../{{ item }}"
+    dest: "/opt/drive-ops/{{ item }}"
+    mode: '0644'
+  loop:
+    - ".env"
+    - "docker-compose.yml"
+
+- name: Sync trip-service source code
+  # Required for the 'build: context: ./trip-service' in central compose
+  ansible.builtin.copy:
+    src: "../../../../../trip-service/"
+    dest: "/opt/drive-ops/trip-service/"
+
+- name: Start trip-service and migrations only
+  community.docker.docker_compose_v2:
+    project_src: "/opt/drive-ops"
+    state: present
+    # We specify only relevant services to ensure independent deployment
+    services:
+      - "trip-migrations"
+      - "trip-service"
+    build: always
