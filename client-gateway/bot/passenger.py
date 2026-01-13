@@ -383,19 +383,12 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     async def handle_refresh_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle refresh status button callback."""
         query = update.callback_query
-        await query.answer("Оновлення статусу...")
-        
-        # Validate callback data prefix
-        if not query.data.startswith('refresh_status_'):
-            await query.answer("Невірний запит.")
-            logger.warning("Invalid callback data for refresh_status: %s", query.data)
-            return
         
         trip_id = query.data[len('refresh_status_'):]
         
         # Validate trip_id is non-empty
         if not trip_id:
-            await query.answer("Невірний ID поїздки.")
+            await query.edit_message_text("❌ Невірний ID поїздки.")
             logger.warning("Empty trip_id in refresh_status callback")
             return
         
@@ -407,6 +400,8 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             await query.edit_message_text("❌ Невірний ID поїздки.")
             logger.warning("Invalid trip_id format in refresh_status: %s", trip_id)
             return
+        
+        await query.answer("Оновлення статусу...")
         
         chat_id = query.message.chat.id
         
