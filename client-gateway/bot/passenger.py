@@ -1,4 +1,5 @@
 import re
+import html
 from datetime import datetime
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters, CommandHandler
@@ -18,6 +19,10 @@ STATUS_MAPPING = {
 
 # Conversation states
 PICKUP, DROPOFF, COMMENT = range(3)
+
+def escape_html(text: str) -> str:
+    """Escape HTML special characters in text."""
+    return html.escape(str(text))
 CHECK_TRIP_ID = 10  # Separate state for check status flow
 
 
@@ -144,11 +149,16 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         order = user_orders[chat_id]
         logger.info("Order data: pickup=%s, dropoff=%s, comment=%s", order.get('pickup'), order.get('dropoff'), order.get('comment'))
         
+        # Escape HTML special characters
+        pickup = escape_html(order['pickup'])
+        dropoff = escape_html(order['dropoff'])
+        comment = escape_html(order['comment'])
+        
         summary = (
-            f"\U0001F695 *Підтвердження замовлення*\n\n"
-            f"\U0001F4CD *Звідки:* {order['pickup']}\n"
-            f"\U0001F3C1 *Куди:* {order['dropoff']}\n"
-            f"\U0001F4AC *Коментар:* {order['comment']}\n\n"
+            f"\U0001F695 <b>Підтвердження замовлення</b>\n\n"
+            f"\U0001F4CD <b>Звідки:</b> {pickup}\n"
+            f"\U0001F3C1 <b>Куди:</b> {dropoff}\n"
+            f"\U0001F4AC <b>Коментар:</b> {comment}\n\n"
             f"\U0001F4B0 Вартість буде розрахована після підтвердження."
         )
 
@@ -160,7 +170,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         ])
         
         logger.info("Sending confirmation message to chat_id=%s", chat_id)
-        await update.message.reply_text(summary, parse_mode='Markdown', reply_markup=markup)
+        await update.message.reply_text(summary, parse_mode='HTML', reply_markup=markup)
         return ConversationHandler.END
 
     async def handle_quick_order_taxi(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -241,7 +251,8 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     err_text = (error or {}).get('message')
                     code = (error or {}).get('status_code')
                     local_req = req_id if req_id is not None else 'N/A'
-                    escaped_err = (err_text or 'сервіс недоступний.').replace('_', r'\_')
+                    escaped_err = escape_html(err_text or 'сервіс недоступний.')
+                    local_req = escape_html(str(local_req))
                     await query.edit_message_text(
                         text=(
                             "❌ Не вдалося створити поїздку.\n"
@@ -249,7 +260,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                             + (f"Код: {code}\n" if code is not None else "")
                             + f"\nЛокальний запит: {local_req}"
                         ),
-                        parse_mode='Markdown'
+                        parse_mode='HTML'
                     )
             elif query.data == "order_cancel":
                 await query.edit_message_text(
@@ -313,29 +324,40 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             created_at = trip_data.get('created_at', '')
             driver_id = trip_data.get('driver_id')
             
+            # Escape HTML special characters in dynamic fields
+            pickup = escape_html(pickup)
+            dropoff = escape_html(dropoff)
+            trip_id = escape_html(trip_id)
+            if driver_id:
+                driver_id = escape_html(driver_id)
+            if created_at:
+                created_at = escape_html(created_at)
+            
             status_emoji, status_description = STATUS_MAPPING.get(status, ('❓ Невідомий', 'Статус поїздки невідомий.'))
+            
+            status_description = escape_html(status_description)
             
             # Format created_at if present
             created_info = ""
             if created_at:
-                created_info = f"\n🕐 *Створено:* {created_at}"
+                created_info = f"\n🕐 <b>Створено:</b> {created_at}"
             
             # Format driver info if assigned
             driver_info = ""
             if driver_id:
-                driver_info = f"\n🚕 *Водій:* {driver_id}"
+                driver_info = f"\n🚕 <b>Водій:</b> {driver_id}"
             else:
-                driver_info = "\n🚕 *Водій:* Не призначено"
+                driver_info = "\n🚕 <b>Водій:</b> Не призначено"
             
             response_text = (
-                f"📋 *Інформація про поїздку*\n\n"
-                f"🆔 *Trip ID:* `{trip_id}`\n"
-                f"📦 *Статус:* {status_emoji}\n"
-                f"📍 *Звідки:* {pickup}\n"
-                f"🏁 *Куди:* {dropoff}"
+                f"📋 <b>Інформація про поїздку</b>\n\n"
+                f"🆔 <b>Trip ID:</b> <code>{trip_id}</code>\n"
+                f"📦 <b>Статус:</b> {status_emoji}\n"
+                f"📍 <b>Звідки:</b> {pickup}\n"
+                f"🏁 <b>Куди:</b> {dropoff}"
                 f"{driver_info}"
                 f"{created_info}\n\n"
-                f"💡 _{status_description}_"
+                f"💡 <i>{status_description}</i>"
             )
             
             # Add refresh button for non-final statuses
@@ -343,9 +365,9 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                 markup = InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔄 Оновити статус", callback_data=f"refresh_status_{trip_id}")]
                 ])
-                await loading_msg.edit_text(response_text, parse_mode='Markdown', reply_markup=markup)
+                await loading_msg.edit_text(response_text, parse_mode='HTML', reply_markup=markup)
             else:
-                await loading_msg.edit_text(response_text, parse_mode='Markdown')
+                await loading_msg.edit_text(response_text, parse_mode='HTML')
         else:
             error = result.get('error', {})
             error_code = error.get('status_code', 500)
@@ -353,18 +375,19 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             
             if error_code == 404:
                 await loading_msg.edit_text(
-                    f"❌ *Поїздку не знайдено*\n\n"
-                    f"Trip ID: `{trip_id}`\n\n"
+                    f"❌ <b>Поїздку не знайдено</b>\n\n"
+                    f"Trip ID: <code>{trip_id}</code>\n\n"
                     "Перевірте правильність введеного ID або зверніться до підтримки.",
-                    parse_mode='Markdown'
+                    parse_mode='HTML'
                 )
             else:
+                error_message = escape_html(error_message)
                 await loading_msg.edit_text(
-                    f"❌ *Помилка отримання статусу*\n\n"
-                    f"Trip ID: `{trip_id}`\n"
+                    f"❌ <b>Помилка отримання статусу</b>\n\n"
+                    f"Trip ID: <code>{trip_id}</code>\n"
                     f"Причина: {error_message}\n\n"
                     "Спробуйте пізніше або зверніться до підтримки.",
-                    parse_mode='Markdown'
+                    parse_mode='HTML'
                 )
         
         # Return to main menu
@@ -383,7 +406,6 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     async def handle_refresh_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle refresh status button callback."""
         query = update.callback_query
-        await query.answer()
         
         trip_id = query.data[len('refresh_status_'):]
         
@@ -419,29 +441,40 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             created_at = trip_data.get('created_at', '')
             driver_id = trip_data.get('driver_id')
             
+            # Escape HTML special characters in dynamic fields
+            pickup = escape_html(pickup)
+            dropoff = escape_html(dropoff)
+            trip_id = escape_html(trip_id)
+            if driver_id:
+                driver_id = escape_html(driver_id)
+            if created_at:
+                created_at = escape_html(created_at)
+            
             status_emoji, status_description = STATUS_MAPPING.get(status, ('❓ Невідомий', 'Статус поїздки невідомий.'))
+            
+            status_description = escape_html(status_description)
             
             created_info = ""
             if created_at:
-                created_info = f"\n🕐 *Створено:* {created_at}"
+                created_info = f"\n🕐 <b>Створено:</b> {created_at}"
             
             # Format driver info if assigned
             driver_info = ""
             if driver_id:
-                driver_info = f"\n🚕 *Водій:* {driver_id}"
+                driver_info = f"\n🚕 <b>Водій:</b> {driver_id}"
             else:
-                driver_info = "\n🚕 *Водій:* Не призначено"
+                driver_info = "\n🚕 <b>Водій:</b> Не призначено"
             
             response_text = (
-                f"📋 *Інформація про поїздку*\n\n"
-                f"🆔 *Trip ID:* `{trip_id}`\n"
-                f"📦 *Статус:* {status_emoji}\n"
-                f"📍 *Звідки:* {pickup}\n"
-                f"🏁 *Куди:* {dropoff}"
+                f"📋 <b>Інформація про поїздку</b>\n\n"
+                f"🆔 <b>Trip ID:</b> <code>{trip_id}</code>\n"
+                f"📦 <b>Статус:</b> {status_emoji}\n"
+                f"📍 <b>Звідки:</b> {pickup}\n"
+                f"🏁 <b>Куди:</b> {dropoff}"
                 f"{driver_info}"
                 f"{created_info}\n\n"
-                f"💡 _{status_description}_\n\n"
-                f"🕐 _Оновлено: {updated_at}_"
+                f"💡 <i>{status_description}</i>\n\n"
+                f"🕐 <i>Оновлено: {updated_at}</i>"
             )
             
             try:
@@ -449,20 +482,21 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     markup = InlineKeyboardMarkup([
                         [InlineKeyboardButton("🔄 Оновити статус", callback_data=f"refresh_status_{trip_id}")]
                     ])
-                    await query.edit_message_text(response_text, parse_mode='Markdown', reply_markup=markup)
+                    await query.edit_message_text(response_text, parse_mode='HTML', reply_markup=markup)
                 else:
-                    await query.edit_message_text(response_text, parse_mode='Markdown')
+                    await query.edit_message_text(response_text, parse_mode='HTML')
             except BadRequest as e:
                 logger.warning("Failed to edit message (possibly same content): %s", e)
         else:
             error = result.get('error', {})
             error_message = error.get('message', 'Невідома помилка')
+            error_message = escape_html(error_message)
             await query.edit_message_text(
-                f"❌ *Помилка оновлення статусу*\n\n"
-                f"Trip ID: `{trip_id}`\n"
+                f"❌ <b>Помилка оновлення статусу</b>\n\n"
+                f"Trip ID: <code>{trip_id}</code>\n"
                 f"Причина: {error_message}\n\n"
                 "Спробуйте пізніше.",
-                parse_mode='Markdown'
+                parse_mode='HTML'
             )
 
     # Conversation handler for ordering taxi
