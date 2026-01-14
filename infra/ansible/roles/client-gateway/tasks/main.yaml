@@ -2,8 +2,8 @@
 # Tasks for Client Gateway (Python-based Telegram Bot)
 
 - name: Link client-gateway source code (Flexible Environment)
-  # FIXED: Removed redundant directory creation as it's handled by the 'infra' role
-  # FIXED: Replaced hardcoded /vagrant with a variable for better portability (CI/CD, Prod)
+  # Links Python source code to the project root for development hot-reloading
+  # Redundant directory creation is skipped as it is handled by the 'infra' role
   ansible.builtin.file:
     src: "{{ drive_ops_src_root }}/client-gateway"
     dest: "/opt/drive-ops/client-gateway"
@@ -12,11 +12,12 @@
   tags: [ infrastructure, gateway ]
 
 - name: Start Client Gateway service
+  # Deploys the Telegram bot container via Docker Compose
+  # Uses the centralized build strategy to optimize deployment time
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
     services:
       - "client-gateway"
-    # FIXED: Using a variable for build policy to avoid unnecessary rebuilds
     build: "{{ docker_build_strategy | default('policy') }}"
   tags: [ infrastructure, gateway ]
