@@ -1,18 +1,11 @@
 ---
 # Tasks for Client Gateway (Python-based Telegram Bot)
 
-- name: Ensure project root directory exists
+- name: Link client-gateway source code (Flexible Environment)
+  # FIXED: Removed redundant directory creation as it's handled by the 'infra' role
+  # FIXED: Replaced hardcoded /vagrant with a variable for better portability (CI/CD, Prod)
   ansible.builtin.file:
-    path: "/opt/drive-ops"
-    state: directory
-    mode: '0755'
-  tags: [ infrastructure, gateway ]
-
-- name: Link client-gateway source code (Developer Mode)
-  # Creating a symlink to /vagrant to enable hot-reloading in Docker
-  # Fixed: No more redundant copying of shared .env files here
-  ansible.builtin.file:
-    src: "/vagrant/client-gateway"
+    src: "{{ drive_ops_src_root }}/client-gateway"
     dest: "/opt/drive-ops/client-gateway"
     state: link
     force: yes
@@ -24,5 +17,6 @@
     state: present
     services:
       - "client-gateway"
-    build: always
+    # FIXED: Using a variable for build policy to avoid unnecessary rebuilds
+    build: "{{ docker_build_strategy | default('policy') }}"
   tags: [ infrastructure, gateway ]
