@@ -2,9 +2,8 @@
 # Tasks for Trip Service (Go-based microservice)
 
 - name: Link trip-service source code (Flexible Environment)
-  # FIXED: Removed redundant directory creation as it's handled by the 'infra' role
-  # FIXED: Replaced hardcoded /vagrant with a variable for better portability (CI/CD, Prod)
-  # This addresses peer review feedback regarding slow development iterations
+  # Uses symlinks to allow instant code updates from host to VM/Container
+  # Replaces hardcoded paths with 'drive_ops_src_root' for CI/CD and WSL portability
   ansible.builtin.file:
     src: "{{ drive_ops_src_root }}/trip-service"
     dest: "/opt/drive-ops/trip-service"
@@ -13,8 +12,8 @@
   tags: [ infrastructure, trip ]
 
 - name: Start trip-service and migrations
-  # FIXED: Using a variable for build strategy to avoid unnecessary rebuilds
-  # This allows switching between 'always' for dev and 'policy' for prod
+  # Orchestrates both the migration container and the main service
+  # 'docker_build_strategy' variable controls whether to rebuild images on every run
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
