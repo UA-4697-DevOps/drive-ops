@@ -1,13 +1,18 @@
 ---
 # Playbook to prepare environment for Drive-Ops services
-# Fixed: Targeting 'local_vm' specifically instead of 'all' for safety and clarity
+# Target group 'local_vm' is used for explicit and safer targeting per peer review
 - name: Prepare Local VM for Independent Docker services
   hosts: local_vm
   become: true
   gather_facts: true
   
   vars:
-    # Adding current user and vagrant to docker group for permission management
+    # Default source root for Vagrant, can be overridden for CI/CD, Prod, or WSL
+    drive_ops_src_root: "/vagrant"
+    # Strategy for docker builds (always, missing, or policy)
+    # Using 'always' for development to ensure code updates are reflected
+    docker_build_strategy: "always"
+    # Managing permissions for both the vagrant user and current system user
     docker_users:
       - vagrant
       - "{{ ansible_user_id }}"
@@ -30,8 +35,8 @@
       tags: always
 
     - name: Install kernel headers (Skip on WSL)
-      # WSL 2 uses a custom Microsoft kernel; standard headers are unavailable in apt
-      # This task runs on Vagrant/Real VM but skips on WSL environments
+      # WSL 2 kernels are customized by Microsoft and don't use standard apt headers.
+      # This task correctly runs on Vagrant but skips on WSL environments.
       ansible.builtin.apt:
         name: "linux-headers-{{ ansible_kernel }}"
         state: present
@@ -45,15 +50,15 @@
       tags: upgrade
 
   roles:
-    # 1. Base Docker Engine installation
+    # 1. Base Docker Engine installation using native Ansible modules
     - { role: docker, tags: [ docker ] }
 
     # 2. Shared Infrastructure (DB, MQ, and Centralized Configs)
-    # This role now handles the single source of truth for .env and docker-compose
+    # Handles shared files once to ensure a single source of truth
     - { role: infra, tags: [ infrastructure, infra ] }
 
     # 3. Independent Services (Microservices stack)
-    # Linked via symlinks to /vagrant for instant code updates during development
+    # Now using variables for flexible source paths and build strategies
     - { role: trip-service, tags: [ infrastructure, trip ] }
     - { role: client-gateway, tags: [ infrastructure, gateway ] }
     - { role: driver-service, tags: [ infrastructure, driver ] }
@@ -65,6 +70,7 @@
           - "========================================"
           - " Infrastructure is ready!"
           - " Target group: {{ ansible_limit | default('local_vm') }}"
+          - " Source root: {{ drive_ops_src_root }}"
           - " Deployment of {{ ansible_run_tags | default(['all']) | join(', ') }} completed!"
           - "========================================"
       tags: always
