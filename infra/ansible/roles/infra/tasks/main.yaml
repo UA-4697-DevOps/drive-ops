@@ -6,29 +6,41 @@
     path: "/opt/drive-ops"
     state: directory
     mode: '0755'
+  tags: [ infrastructure, infra ]
 
 - name: Copy central .env file
   ansible.builtin.copy:
     src: "../../../../../.env"
     dest: "/opt/drive-ops/.env"
     mode: '0600'
+  tags: [ infrastructure, infra ]
 
 - name: Copy central docker-compose.yml
   ansible.builtin.copy:
     src: "../../../../../docker-compose.yml"
     dest: "/opt/drive-ops/docker-compose.yml"
+    mode: '0644'
+  tags: [ infrastructure, infra ]
 
 - name: Ensure postgres init directory exists
   ansible.builtin.file:
     path: "/opt/drive-ops/infra/postgres/init-db"
     state: directory
     mode: '0755'
+  tags: [ infrastructure, infra ]
+
+- name: Copy postgres init scripts
+  ansible.builtin.copy:
+    src: "../../../../../infra/postgres/init-db/init.sql"
+    dest: "/opt/drive-ops/infra/postgres/init-db/init.sql"
+    mode: '0644'
+  tags: [ infrastructure, infra ]
 
 - name: Start database and message broker only
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
-    # We explicitly list ONLY infra services here
     services:
       - "db"
       - "mq"
+  tags: [ infrastructure, infra ]
