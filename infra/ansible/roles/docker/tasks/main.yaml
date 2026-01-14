@@ -1,16 +1,6 @@
 ---
 # Tasks for Docker Engine installation and configuration
 
-- name: Install general development utilities
-  ansible.builtin.apt:
-    name:
-      - git
-      - vim
-      - htop
-      - net-tools
-    state: present
-  tags: [ docker, tools ]
-
 - name: Install Docker-specific prerequisites
   ansible.builtin.apt:
     name:
@@ -28,18 +18,29 @@
     mode: '0755'
   tags: docker
 
-- name: Add Docker GPG key using native module
-  # FIXED: Dynamically selects ubuntu or debian based on system facts
+- name: Download Docker GPG key (ASCII armored)
+  # FIXED: Downloading the raw ASCII key to a temporary location first
   ansible.builtin.get_url:
     url: "https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}/gpg"
-    dest: /etc/apt/keyrings/docker.gpg
+    dest: /tmp/docker.gpg.asc
     mode: '0644'
   tags: docker
 
+- name: Dearmor Docker GPG key to binary format
+  # FIXED: Best practice - converting ASCII armored key to binary for apt compatibility
+  ansible.builtin.command:
+    cmd: gpg --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg.asc
+    creates: /etc/apt/keyrings/docker.gpg
+  tags: docker
+
 - name: Add Docker repository using native module
-  # FIXED: Uses ansible_facts to avoid deprecation warnings and correctly sets the repo URL
+  # FIXED: Mapping 'aarch64' to 'arm64' for full ARM system support (Apple Silicon/RPi)
   ansible.builtin.apt_repository:
-    repo: "deb [arch={{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else ansible_facts['architecture'] }} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }} {{ ansible_facts['distribution_release'] }} stable"
+    repo: >
+      deb [arch={{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else 'arm64' if ansible_facts['architecture'] == 'aarch64' else ansible_facts['architecture'] }} 
+      signed-by=/etc/apt/keyrings/docker.gpg] 
+      https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }} 
+      {{ ansible_facts['distribution_release'] }} stable
     filename: docker
     state: present
   tags: docker
@@ -73,10 +74,12 @@
     name: docker
     state: started
     enabled: yes
+  # Using ansible_facts for modern syntax consistency
   when: ansible_facts['service_mgr'] == 'systemd'
   tags: docker
 
 - name: Install Python Docker SDK
+  # Necessary for Ansible community.docker modules to function
   ansible.builtin.apt:
     name: python3-docker
     state: present
@@ -87,4 +90,3 @@
   register: docker_version
   changed_when: false
   tags: verify
-
