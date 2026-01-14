@@ -2,7 +2,6 @@
 # Tasks for Docker Engine installation and configuration
 
 - name: Install general development utilities
-  # FIXED: Split into a separate task to avoid misleading names
   ansible.builtin.apt:
     name:
       - git
@@ -13,7 +12,6 @@
   tags: [ docker, tools ]
 
 - name: Install Docker-specific prerequisites
-  # FIXED: Keeping only essential packages for Docker's apt repository
   ansible.builtin.apt:
     name:
       - apt-transport-https
@@ -31,17 +29,17 @@
   tags: docker
 
 - name: Add Docker GPG key using native module
-  # FIXED: Replaced 'shell' with 'get_url' for better error handling and idempotency
+  # FIXED: Dynamically selects ubuntu or debian based on system facts
   ansible.builtin.get_url:
-    url: https://download.docker.com/linux/debian/gpg
+    url: "https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}/gpg"
     dest: /etc/apt/keyrings/docker.gpg
     mode: '0644'
   tags: docker
 
 - name: Add Docker repository using native module
-  # FIXED: Replaced 'shell' with 'apt_repository' for idiomatic Ansible usage
+  # FIXED: Uses ansible_facts to avoid deprecation warnings and correctly sets the repo URL
   ansible.builtin.apt_repository:
-    repo: "deb [arch={{ 'amd64' if ansible_architecture == 'x86_64' else ansible_architecture }} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+    repo: "deb [arch={{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else ansible_facts['architecture'] }} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }} {{ ansible_facts['distribution_release'] }} stable"
     filename: docker
     state: present
   tags: docker
@@ -75,7 +73,7 @@
     name: docker
     state: started
     enabled: yes
-  when: ansible_service_mgr == 'systemd'
+  when: ansible_facts['service_mgr'] == 'systemd'
   tags: docker
 
 - name: Install Python Docker SDK
@@ -89,3 +87,4 @@
   register: docker_version
   changed_when: false
   tags: verify
+
