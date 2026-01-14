@@ -1,5 +1,5 @@
 ---
-# Tasks to deploy shared infrastructure (DB and MQ)
+# Main tasks for Shared Infrastructure (DB, MQ, and Common Configs)
 
 - name: Create project root directory
   ansible.builtin.file:
@@ -8,8 +8,9 @@
     mode: '0755'
   tags: [ infrastructure, infra ]
 
-- name: Copy central .env file
-  # Fixed: Using playbook_dir for stable paths and 0600 for secret security
+- name: Copy central .env file (Secure permissions)
+  # Centralized here to avoid duplication in service roles
+  # Using 0600 mode to protect sensitive tokens and passwords
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../.env"
     dest: "/opt/drive-ops/.env"
@@ -17,7 +18,7 @@
   tags: [ infrastructure, infra ]
 
 - name: Copy central docker-compose.yml
-  # Fixed: Explicit mode 0644 and playbook_dir as recommended by CodeRabbitAI
+  # Shared orchestration file for all services
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../docker-compose.yml"
     dest: "/opt/drive-ops/docker-compose.yml"
@@ -26,16 +27,16 @@
 
 - name: Ensure postgres init directory exists
   ansible.builtin.file:
-    path: "/opt/drive-ops/infra/postgres/init-db"
+    path: "/opt/drive-ops/infra/postgres"
     state: directory
     mode: '0755'
   tags: [ infrastructure, infra ]
 
 - name: Copy postgres init scripts
-  # Fixed: Reliable path to init.sql and explicit permissions
+  # Handles multi-db initialization (trip_db and driver_db)
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../infra/postgres/init-db/init.sql"
-    dest: "/opt/drive-ops/infra/postgres/init-db/init.sql"
+    src: "{{ playbook_dir }}/roles/infra/files/init.sql"
+    dest: "/opt/drive-ops/infra/postgres/init.sql"
     mode: '0644'
   tags: [ infrastructure, infra ]
 
@@ -44,7 +45,6 @@
     project_src: "/opt/drive-ops"
     state: present
     services:
-      - "db"
-      - "mq"
+      - "drive-ops-db"
+      - "drive-ops-mq"
   tags: [ infrastructure, infra ]
-  
