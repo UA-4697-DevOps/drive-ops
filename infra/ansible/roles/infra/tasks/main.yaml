@@ -9,6 +9,8 @@
   tags: [ infrastructure, infra ]
 
 - name: Copy central .env file (Secure permissions)
+  # Centralized configuration as a single source of truth for all services
+  # 0600 mode ensures only the owner can read/write the environment secrets
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../.env"
     dest: "/opt/drive-ops/.env"
@@ -16,6 +18,7 @@
   tags: [ infrastructure, infra ]
 
 - name: Copy central docker-compose.yml
+  # Shared orchestration file to manage all microservices in drive-ops
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../docker-compose.yml"
     dest: "/opt/drive-ops/docker-compose.yml"
@@ -23,6 +26,7 @@
   tags: [ infrastructure, infra ]
 
 - name: Ensure postgres init directory exists
+  # Matches the volume mount in docker-compose: ./infra/postgres/init-db
   ansible.builtin.file:
     path: "/opt/drive-ops/infra/postgres/init-db"
     state: directory
@@ -30,8 +34,10 @@
   tags: [ infrastructure, infra ]
 
 - name: Copy postgres init scripts
+  # Source path adjusted to find init.sql in the neighboring infra/postgres folder
+  # This script initializes driver_db while trip_db is handled by env variables
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/roles/infra/files/init.sql"
+    src: "{{ playbook_dir }}/../postgres/init-db/init.sql"
     dest: "/opt/drive-ops/infra/postgres/init-db/init.sql"
     mode: '0644'
   tags: [ infrastructure, infra ]
@@ -46,8 +52,7 @@
   tags: [ infrastructure, infra ]
 
 - name: Wait for PostgreSQL to be ready
-  # Addresses CodeRabbitAI feedback: Ensure DB is accepting connections 
-  # before starting dependent microservices (trip-service, etc.)
+  # Health check to prevent dependent services from crashing on startup
   ansible.builtin.wait_for:
     host: localhost
     port: 5432
@@ -57,7 +62,7 @@
   tags: [ infrastructure, infra ]
 
 - name: Wait for RabbitMQ to be ready
-  # Ensures the message broker is fully operational
+  # Ensures the message broker is accepting connections
   ansible.builtin.wait_for:
     host: localhost
     port: 5672
