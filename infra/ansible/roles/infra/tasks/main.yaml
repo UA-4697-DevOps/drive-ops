@@ -9,15 +9,17 @@
   tags: [ infrastructure, infra ]
 
 - name: Copy central .env file
+  # Fixed: Using playbook_dir for stable paths and 0600 for secret security
   ansible.builtin.copy:
-    src: "../../../../../.env"
+    src: "{{ playbook_dir }}/../../.env"
     dest: "/opt/drive-ops/.env"
     mode: '0600'
   tags: [ infrastructure, infra ]
 
 - name: Copy central docker-compose.yml
+  # Fixed: Explicit mode 0644 and playbook_dir as recommended by CodeRabbitAI
   ansible.builtin.copy:
-    src: "../../../../../docker-compose.yml"
+    src: "{{ playbook_dir }}/../../docker-compose.yml"
     dest: "/opt/drive-ops/docker-compose.yml"
     mode: '0644'
   tags: [ infrastructure, infra ]
@@ -30,8 +32,9 @@
   tags: [ infrastructure, infra ]
 
 - name: Copy postgres init scripts
+  # Fixed: Reliable path to init.sql and explicit permissions
   ansible.builtin.copy:
-    src: "../../../../../infra/postgres/init-db/init.sql"
+    src: "{{ playbook_dir }}/../../infra/postgres/init-db/init.sql"
     dest: "/opt/drive-ops/infra/postgres/init-db/init.sql"
     mode: '0644'
   tags: [ infrastructure, infra ]
@@ -44,3 +47,4 @@
       - "db"
       - "mq"
   tags: [ infrastructure, infra ]
+  
