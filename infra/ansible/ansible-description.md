@@ -1,59 +1,72 @@
 # Drive-Ops Ansible Infrastructure
 This directory contains Ansible playbooks and roles designed to automate the deployment of the drive-ops microservices stack.
 
-## 🚀 Quick Start
-### In GitHub Codespaces:
-For local deployment within the cloud environment (skips Docker engine re-installation):
-
+## 📋 Prerequisites
+Before running the playbook, ensure the following requirements are met:
+* Docker Desktop is running on your OS.
+* Ansible is installed.
+* .env file with your credentials is created
+### If dont want to search or create bot_token. write  me (Davlit) in discord to get token
 ```bash
-# Deploying in Codespaces using relative paths
-ansible-playbook -i infra/ansible/inventory/localhost infra/ansible/playbook.yaml --tags infrastructure
+cp .env.example .env
+vi .env
 ```
-### In Vagrant:
-For full provisioning of the virtual machine:
-
+* The Docker community collection is installed:
 ```bash
-# From the project root
-ansible-playbook -i infra/ansible/inventory/localhost infra/ansible/playbook.yaml --tags infrastructure
+ansible-galaxy collection install community.docker
+```
+## 🚀 Quick Start
+```bash
+# Navigate to the project root
+cd <path_to_project>
+# Execute the deployment
+ansible-playbook -i infra/ansible/inventory/localhost infra/ansible/playbook.yaml -e "drive_ops_src_root=$(pwd)" -K
 ```
 ### 🛠 Configuration (.env)
-The playbook implements a Fail-Fast pattern and requires a .env file to be present in the project root. The deployment will halt immediately if the file is missing or mandatory variables are not defined.
+The playbook implements a Fail-Fast pattern and requires a .env file to be present in the project root. Deployment will halt if mandatory variables are missing.
 
 Mandatory variables:
 
-BOT_TOKEN — Telegram Bot API token for the Client Gateway.
+* BOT_TOKEN — Valid Telegram API token obtained from @BotFather.
 
-DB_USER / DB_PASSWORD — Credentials for the PostgreSQL database.
+* DB_USER / DB_PASSWORD — Credentials for the PostgreSQL database.
 
-RABBITMQ_USER / RABBITMQ_PASSWORD — Credentials for the RabbitMQ message broker.
+* RABBITMQ_USER / RABBITMQ_PASSWORD — Credentials for the RabbitMQ message broker.
 
 ### 🏷 Using Tags
-infrastructure — Performs configuration validation and deploys the stack via Docker Compose.
 
-docker — Full cycle: installs the Docker Engine, dependencies, and starts services.
+* **`infrastructure`** — This is a "group" tag. It runs everything related to the application stack, including the shared infrastructure (DB/MQ) and all microservices (infra, trip-service, and client-gateway).
+* **`infra`** — Deploys the shared infrastructure (PostgreSQL and RabbitMQ) and copies core configuration files.
+* **`docker`** — Installs the Docker Engine and system-level dependencies.
+* **`trip` / `gateway`** — Deploy specific microservices (Go Trip Service or Python Gateway) individually.
+* **`always`** — Tasks that run every time (e.g., updating the package cache and printing the final status report).
+* **`upgrade`** — Explicitly used to perform a sudo apt upgrade on the host machine.
 
 ### 🏗 Deployment Architecture
-The playbook orchestrates the following services as part of the drive-ops ecosystem:
+The playbook orchestrates 5 key components within a dedicated Docker network:
 
-Database (PostgreSQL) — Handles data persistence with automated initialization of trip_db and driver_db.
+* PostgreSQL (db): The primary database for persisting trip and driver data.
 
-Message Broker (RabbitMQ) — Facilitates asynchronous communication between Go and Python microservices.
+* RabbitMQ (mq): The message broker facilitating asynchronous communication between Go and Python microservices.
 
-Trip Service (Go) — Manages ride requests and trip logic.
+* Trip Migrations: A standalone container that automatically applies SQL schemas and ENUM types to the database.
 
-Driver Service (Python) — Handles driver availability and matching.
+* Trip Service (Go): The backend microservice handling core ride-sharing logic.
 
-Client Gateway (Python) — The Orchestrator & Entry Point:
-
-* User Interface: Acts as the primary Telegram bot interface for all users.
-
-* System Orchestrator: In our automation logic, this is the "Master Service" that triggers the deployment of the entire stack. It ensures that infrastructure (DB, MQ) and backend services (Trip, Driver) are online and healthy before accepting user requests.
+* Client Gateway (Python): The Telegram bot interface and primary entry point for users.
 ## ✅ Verification
 
-Once the deployment is complete, verify the stack status:
+Once the playbook finishes successfully (failed=0), perform the following checks:
 
-1. **Containers**: Run `docker ps` to ensure all 5 services are **(healthy)**.
-2. **RabbitMQ**: Access the Management UI via the **Ports** tab in Codespaces (port `15672`).
-3. **Logs**: Check the logs of the Go service to ensure DB connectivity:
-   ```bash
-   docker compose logs trip-service
+* Container Status: Run command. All containers should be Up or healthy.
+```bash
+ docker ps
+```
+* Bot Logs: Run command to verify Telegram API authorization.
+```bash
+docker logs client-gateway-bot
+```
+* Migration Logs: Run command to ensure the database schema was applied correctly.
+```bash
+docker logs trip-migrations
+```

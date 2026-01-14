@@ -2,78 +2,63 @@
 # vi: set ft=ruby :
 
 Vagrant.configure("2") do |config|
-    config.vm.box = "bento/debian-12"
+  config.vm.box = "bento/debian-12"
 
-    config.vm.provider "virtualbox" do |vb|
-        vb.name = "drive-ops-vm"
-        vb.memory = "4096"
-        vb.cpus = 2
+  config.vm.provider "virtualbox" do |vb|
+    vb.name = "drive-ops-vm"
+    vb.memory = "4096"
+    vb.cpus = 2
+    vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+    vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+    vb.customize ["modifyvm", :id, "--ioapic", "on"]
+  end
+
+  config.vm.network "private_network", ip: "192.168.56.10"
+
+  # Port forwarding
+  [8080, 8081, 8082, 5432, 5672, 15672].each do |port|
+    config.vm.network "forwarded_port", guest: port, host: port, host_ip: "127.0.0.1"
+  end
+
+  config.vm.synced_folder "../..", "/vagrant", 
+    type: "virtualbox",
+    owner: "vagrant",
+    group: "vagrant",
+    mount_options: ["dmode=775,fmode=664"]
+
+  config.vm.hostname = "drive-ops"
+
+  # STEP 1: Bootstrap - Install only what is needed to run Ansible
+  config.vm.provision "shell", inline: <<-SHELL
+    set -e  # Fixed as per CodeRabbitAI: Fail immediately if any command fails
+    apt-get update
+    apt-get install -y python3 python3-pip ansible
+  SHELL
+
+  # STEP 2: Orchestration - Let Ansible handle the rest
+  config.vm.provision "shell", privileged: false, inline: <<-SHELL
+    set -e  # Ensure failure in Galaxy or Playbook stops the provisioning
+    echo "Installing required Ansible collections..."
+    ansible-galaxy collection install community.docker
     
-        vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
-        vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
-        vb.customize ["modifyvm", :id, "--ioapic", "on"]
-    end
+    echo "Starting full system provisioning..."
+    cd /vagrant/infra/ansible
+    # Running the main playbook with optimized tags logic
+    ansible-playbook -i inventory/localhost playbook.yaml
+  SHELL
 
-    config.vm.network "private_network", ip: "192.168.56.10"
-
-    # Port forwarding template
-    # Client Gateway
-    config.vm.network "forwarded_port", guest: 8080, host: 8080, host_ip: "127.0.0.1"
-    # Driver Service
-    config.vm.network "forwarded_port", guest: 8082, host: 8082, host_ip: "127.0.0.1"
-    # Trip Service
-    config.vm.network "forwarded_port", guest: 8081, host: 8081, host_ip: "127.0.0.1"
-    # PostgreSQL
-    config.vm.network "forwarded_port", guest: 5432, host: 5432, host_ip: "127.0.0.1"
-    # RabbitMQ AMQP
-    config.vm.network "forwarded_port", guest: 5672, host: 5672, host_ip: "127.0.0.1"
-    # RabbitMQ Management UI (Web UI)
-     config.vm.network "forwarded_port", guest: 15672, host: 15672, host_ip: "127.0.0.1"
-
-    config.vm.synced_folder "../..", "/vagrant", 
-        type: "virtualbox",
-        owner: "vagrant",
-        group: "vagrant",
-        mount_options: ["dmode=775,fmode=664"]
-
-    config.vm.hostname = "drive-ops"
-
-    config.vm.provision "shell", inline: <<-SHELL
-        apt-get update
-        apt-get install -y python3 python3-pip linux-headers-$(uname -r) build-essential dkms
-    SHELL
-
-
-    config.vm.provision "shell", privileged: false, inline: <<-SHELL
-        echo "Installing Ansible..."
-        sudo apt-get update
-        sudo apt-get install -y ansible
-        
-        echo "Installing community.docker collection..."
-        ansible-galaxy collection install community.docker
-        echo "Running Ansible playbook..."
-        cd /vagrant/infra/ansible
-        ansible-playbook -i inventory/localhost playbook.yaml
-        #Trip service playbook
-        ansible-playbook -i inventory/localhost trip-service-deploy.yaml
-        echo ""
-        echo "Provisioning complete!"
-        echo ""
-    SHELL
-
-    config.vm.post_up_message = <<-MESSAGE
+  config.vm.post_up_message = <<-MESSAGE
     ======================================
-    Drive-Ops VM is ready!
+    Drive-Ops VM is ready via Ansible!
     ======================================
-    
-    Services will be available at:
+    Web Services:
     - Client Gateway: http://localhost:8080
+    - Trip Service:   http://localhost:8081
     - Driver Service: http://localhost:8082
-    - Trip Service: http://localhost:8081
     
     Infrastructure:
-    - RabbitMQ UI:    http://localhost:15672 (use credentials from your .env)
-    - PostgreSQL:     localhost:5432 (use credentials from your .env)
+    - RabbitMQ UI:    http://localhost:15672
+    - PostgreSQL:      localhost:5432
     ======================================
-    MESSAGE
+  MESSAGE
 end
