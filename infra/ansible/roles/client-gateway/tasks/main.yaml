@@ -1,44 +1,27 @@
 ---
-# Tasks to deploy Client Gateway (Python Bot) using central configuration
+# Tasks for Client Gateway (Python-based Telegram Bot)
 
-- name: Create project root directory
+- name: Ensure project root directory exists
   ansible.builtin.file:
     path: "/opt/drive-ops"
     state: directory
     mode: '0755'
   tags: [ infrastructure, gateway ]
 
-- name: Copy central .env file
-  # Fixed: Using playbook_dir and secure 0600 permissions as per CodeRabbitAI
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../.env"
-    dest: "/opt/drive-ops/.env"
-    mode: '0600'
+- name: Link client-gateway source code (Developer Mode)
+  # Creating a symlink to /vagrant to enable hot-reloading in Docker
+  # Fixed: No more redundant copying of shared .env files here
+  ansible.builtin.file:
+    src: "/vagrant/client-gateway"
+    dest: "/opt/drive-ops/client-gateway"
+    state: link
+    force: yes
   tags: [ infrastructure, gateway ]
 
-- name: Copy central docker-compose.yml
-  # Fixed: Explicit 0644 mode for consistency
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../docker-compose.yml"
-    dest: "/opt/drive-ops/docker-compose.yml"
-    mode: '0644'
-  tags: [ infrastructure, gateway ]
-
-- name: Sync client-gateway source code
-  # Required because docker-compose uses 'build' context
-  # Note: For very large projects, 'ansible.posix.synchronize' is better, 
-  # but 'copy' is reliable for small microservices.
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../client-gateway/"
-    dest: "/opt/drive-ops/client-gateway/"
-    mode: '0644'
-  tags: [ infrastructure, gateway ]
-
-- name: Start Client Gateway service only
+- name: Start Client Gateway service
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
-    # This ensures only the bot is managed by this role
     services:
       - "client-gateway"
     build: always
