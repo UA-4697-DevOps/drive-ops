@@ -56,7 +56,20 @@ services:
     depends_on:
       trip-service:
         condition: service_healthy
-      driver-service:
+      #driver-service:
+      #  condition: service_healthy
+    networks:
+      - drive-ops-net
+
+  trip-migrations:
+    build:
+      context: ./trip-service
+      dockerfile: Dockerfile.migrations
+    container_name: trip-migrations
+    env_file: .env
+    command: -path=/migrations/ -database "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${TRIP_DB_NAME}?sslmode=disable" up
+    depends_on:
+      db:
         condition: service_healthy
     networks:
       - drive-ops-net

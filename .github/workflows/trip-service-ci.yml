@@ -132,6 +132,40 @@ jobs:
 
           echo "Health check passed!"
 
+      - name: Prepare test database
+        run: |
+          docker compose stop trip-service
+
+          docker compose exec -T db psql -U vagrant -d postgres -c "
+            SELECT pg_terminate_backend(pid)
+            FROM pg_stat_activity
+            WHERE datname = 'trip_db' AND pid <> pg_backend_pid();
+          "
+          docker compose exec -T db psql -U vagrant -d postgres -c "DROP DATABASE IF EXISTS trip_db;"
+          docker compose exec -T db psql -U vagrant -d postgres -c "CREATE DATABASE trip_db;"
+
+          echo "Database recreated for integration tests"
+
+      - name: Run migrations and restart service
+        run: |
+          docker compose up -d trip-migrations
+          docker compose logs trip-migrations
+
+          docker compose up -d trip-service
+
+          echo "Waiting for trip-service to be healthy..."
+          timeout 60 bash -c 'until docker compose ps | grep -E "trip-service.*healthy"; do
+            echo "$(date): Waiting for trip-service..."
+            docker compose ps trip-service
+            sleep 3
+          done' || {
+            echo "Service failed to become healthy after database recreation"
+            docker compose logs trip-service
+            exit 1
+          }
+
+          echo "Trip-service is healthy and ready for tests!"
+
       - name: Run Go integration tests
         working-directory: trip-service
         run: go test -v -race ./tests/integration/...
@@ -190,9 +224,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/trip-service
           tags: |
-            type=sha,prefix={{branch}}-
-            type=ref,event=branch
             type=ref,event=pr
+            type=ref,event=branch
+            type=sha,prefix=sha-
 
       - name: Build Docker image
         uses: docker/build-push-action@v5

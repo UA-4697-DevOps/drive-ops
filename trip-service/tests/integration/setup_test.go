@@ -197,7 +197,7 @@ func getTestDSN() string {
 	port := getEnv("DB_PORT", "5433")
 	user := getEnv("DB_USER", "testuser")
 	password := getEnv("DB_PASSWORD", "testpass")
-	dbname := getEnv("DB_NAME", "trip_service_test")
+	dbname := getEnv("TRIP_DB_NAME", "trip_service_test")
 
 	return fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
