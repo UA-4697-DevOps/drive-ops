@@ -34,16 +34,19 @@
       tags: upgrade
 
   roles:
-    # 1. Base Docker installation (Only when explicitly called)
+    # 1. Base Docker installation 
+    # Fixed: Clarified that this runs by default unless skipped (e.g., --skip-tags docker)
     - { role: docker, tags: [ docker ] }
 
     # 2. Shared Infrastructure (DB & MQ)
-    - { role: infra, tags: [ infra ] }
+    # Standardized: Added 'infrastructure' master tag
+    - { role: infra, tags: [ infrastructure, infra ] }
 
     # 3. Independent Services (Using centralized docker-compose)
-    - { role: trip-service, tags: [ trip ] }
-    - { role: client-gateway, tags: [ gateway ] }
-    - { role: driver-service, tags: [ driver ] }
+    # Standardized: All services are now part of 'infrastructure' tag
+    - { role: trip-service, tags: [ infrastructure, trip ] }
+    - { role: client-gateway, tags: [ infrastructure, gateway ] }
+    - { role: driver-service, tags: [ infrastructure, driver ] }
 
   post_tasks:
     - name: Print completion message
@@ -51,6 +54,7 @@
         msg: 
           - "========================================"
           - " VM is configured and ready!"
-          - " Deployment of {{ ansible_run_tags | join(', ') }} completed!"
+          # Fixed as per CodeRabbitAI: Show 'all' if no specific tags were used
+          - " Deployment of {{ ansible_run_tags | default(['all']) | join(', ') }} completed!"
           - "========================================"
       tags: always
