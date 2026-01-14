@@ -1,5 +1,5 @@
 ---
-# Main tasks for Trip Service deployment using centralized configuration
+# Tasks for Trip Service (Go-based microservice)
 
 - name: Ensure project root directory exists
   ansible.builtin.file:
@@ -8,30 +8,17 @@
     mode: '0755'
   tags: [ infrastructure, trip ]
 
-- name: Copy central .env file (Secure permissions)
-  # Fixed as per CodeRabbitAI: Using playbook_dir for stability and 0600 for security
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../.env"
-    dest: "/opt/drive-ops/.env"
-    mode: '0600'
+- name: Link trip-service source code (Developer Mode)
+  # Using symlinks instead of copy for instant code updates from host to VM
+  # This addresses peer review feedback regarding slow development iterations
+  ansible.builtin.file:
+    src: "/vagrant/trip-service"
+    dest: "/opt/drive-ops/trip-service"
+    state: link
+    force: yes
   tags: [ infrastructure, trip ]
 
-- name: Copy central docker-compose.yml
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../docker-compose.yml"
-    dest: "/opt/drive-ops/docker-compose.yml"
-    mode: '0644'
-  tags: [ infrastructure, trip ]
-
-- name: Sync trip-service source code
-  # Using playbook_dir to avoid fragile relative paths
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../trip-service/"
-    dest: "/opt/drive-ops/trip-service/"
-    mode: '0644'
-  tags: [ infrastructure, trip ]
-
-- name: Start trip-service and migrations only
+- name: Start trip-service and migrations
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
