@@ -14,7 +14,7 @@ vi .env
 ```bash
 ansible-galaxy collection install community.docker
 ```
-##🚀 Quick Start
+## 🚀 Quick Start
 ```bash
 # Navigate to the project root
 cd ~/projects/drive-ops
@@ -26,7 +26,7 @@ The playbook implements a Fail-Fast pattern and requires a .env file to be prese
 
 Mandatory variables:
 
-* BOT_TOKEN — Valid Telegram API token obtained from @BotFather. you can you use mine   8221522516:AAHs4K6uf2MUaWS7UGUQ2Dnr9i1Poa-3RP0
+* BOT_TOKEN — Valid Telegram API token obtained from @BotFather.
 
 * DB_USER / DB_PASSWORD — Credentials for the PostgreSQL database.
 
