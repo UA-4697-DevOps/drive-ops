@@ -1,4 +1,5 @@
 import re
+import hashlib
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters
 from telegram.helpers import escape_markdown
@@ -106,7 +107,13 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                 'status': 'offline'
             }
             
-            logger.info("Driver registered successfully: chat_id=%s driver_id=%s name=%s", chat_id, driver_id, name)
+            # Sanitize PII for logs: use short hash instead of raw name
+            try:
+                sanitized_name = hashlib.sha256(name.encode()).hexdigest()[:8] if name else 'none'
+            except Exception:
+                sanitized_name = 'err'
+            
+            logger.info("Driver registered successfully: chat_id=%s driver_id=%s name_hash=%s", chat_id, driver_id, sanitized_name)
             
             await update.message.reply_text(
                 "\u2705 *Реєстрацію завершено!*\n\n"

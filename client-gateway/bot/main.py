@@ -21,6 +21,9 @@ DRIVER_SERVICE_URL = os.getenv('DRIVER_SERVICE_URL', 'http://localhost:8081')
 
 DEBUGGING = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
 
+logger.info("DEBUG env var: %s", os.getenv('DEBUG'))
+logger.info("DEBUGGING mode: %s", DEBUGGING)
+
 
 def ensure_bot_token():
     if not BOT_TOKEN:
