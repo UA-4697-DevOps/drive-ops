@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -25,9 +25,10 @@ class Settings(BaseSettings):
     DRIVER_SEARCH_RADIUS_KM: float = 5.0
     MAX_DRIVERS_TO_NOTIFY: int = 10
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-
-
+    class SettingsConfig(BaseSettings):
+        model_config = SettingsConfigDict(
+            env_file=".env",
+            env_file_encoding="utf-8",
+        )
+        
 settings = Settings()

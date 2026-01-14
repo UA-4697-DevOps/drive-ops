@@ -57,6 +57,8 @@ async def lifespan(app: FastAPI):
             consumer = TripEventsConsumer(
                 rabbitmq_host=settings.RABBITMQ_HOST,
                 rabbitmq_port=settings.RABBITMQ_PORT,
+                rabbitmq_user=settings.RABBITMQ_USER,
+                rabbitmq_pass=settings.RABBITMQ_PASS,
                 queue_name=settings.TRIP_EVENTS_QUEUE,
                 notification_service=notification_service
             )

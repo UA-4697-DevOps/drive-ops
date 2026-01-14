@@ -101,7 +101,7 @@ class DriverNotificationService:
         nearby_drivers = find_nearby_drivers(
             drivers=self.drivers,
             pickup_lat=pickup_latitude,
-            pickup_lon=pickup_longitude,
+            pickup_lng=pickup_longitude,
             radius_km=radius_km,
             max_drivers=10
         )

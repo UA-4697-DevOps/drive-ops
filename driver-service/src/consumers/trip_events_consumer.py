@@ -19,11 +19,15 @@ class TripEventsConsumer:
         self,
         rabbitmq_host: str,
         rabbitmq_port: int,
+        rabbitmq_user: str,
+        rabbitmq_pass: str,
         queue_name: str,
         notification_service: DriverNotificationService
     ):
         self.rabbitmq_host = rabbitmq_host
         self.rabbitmq_port = rabbitmq_port
+        self.rabbitmq_user = rabbitmq_user
+        self.rabbitmq_pass = rabbitmq_pass
         self.queue_name = queue_name
         self.notification_service = notification_service
         self.connection = None
@@ -32,7 +36,7 @@ class TripEventsConsumer:
     def connect(self):
         """Establish connection to RabbitMQ"""
         try:
-            credentials = pika.PlainCredentials('guest', 'guest')
+            credentials = pika.PlainCredentials(self.rabbitmq_user, self.rabbitmq_pass)
             parameters = pika.ConnectionParameters(
                 host=self.rabbitmq_host,
                 port=self.rabbitmq_port,
@@ -70,16 +74,28 @@ class TripEventsConsumer:
             
             logger.info(f"Processing trip.event.created for trip {trip_id}")
             
+            # Validate pickup coordinates
             pickup_lat = pickup_data.get("lat")
             pickup_lng = pickup_data.get("lng")
             
-            if not pickup_lat or not pickup_lng:
+            if pickup_lat is None or pickup_lng is None:
                 logger.error(f"Missing pickup coordinates for trip {trip_id}")
                 return
-            
+
+            # Validate dropoff data
+            dropoff_data = payload.get("dropoff", {})
+            dropoff_lat = dropoff_data.get("lat")
+            dropoff_lng = dropoff_data.get("lng")
+            dropoff_address = dropoff_data.get("address")
+
+            if dropoff_lat is None or dropoff_lng is None or not dropoff_address:
+                logger.error(f"Missing or incomplete dropoff data for trip {trip_id}")
+                return
+
+            # Create notification data
             notification_data = {
                 "pickup": Location(**pickup_data),
-                "dropoff": Location(**payload.get("dropoff", {})),
+                "dropoff": Location(**dropoff_data),
                 "passenger_name": payload.get("passenger_id", "Unknown"),
                 "estimated_distance_km": 5.0,
                 "estimated_duration_min": 15,
