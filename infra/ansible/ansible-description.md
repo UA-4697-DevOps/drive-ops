@@ -3,9 +3,10 @@ This directory contains Ansible playbooks and roles designed to automate the dep
 
 ## 📋 Prerequisites
 Before running the playbook, ensure the following requirements are met:
-* Docker Desktop is running on your os.
+* Docker Desktop is running on your OS.
 * Ansible is installed.
 * .env file with your credentials is created
+### If dont want to search or create bot_token. write  me (Davlit) in discord to get token
 ```bash
 cp .env.example .env
 vi .env
@@ -17,9 +18,9 @@ ansible-galaxy collection install community.docker
 ## 🚀 Quick Start
 ```bash
 # Navigate to the project root
-cd ~/projects/drive-ops
+cd <path_to_project>
 # Execute the deployment
-ansible-playbook -i infra/ansible/inventory/localhost infra/ansible/playbook.yaml --skip-tags docker -K
+ansible-playbook -i infra/ansible/inventory/localhost infra/ansible/playbook.yaml -e "drive_ops_src_root=$(pwd)" -K
 ```
 ### 🛠 Configuration (.env)
 The playbook implements a Fail-Fast pattern and requires a .env file to be present in the project root. Deployment will halt if mandatory variables are missing.
@@ -34,9 +35,12 @@ Mandatory variables:
 
 ### 🏷 Using Tags
 
+* **`infrastructure`** — This is a "group" tag. It runs everything related to the application stack, including the shared infrastructure (DB/MQ) and all microservices (infra, trip-service, and client-gateway).
 * **`infra`** — Deploys the shared infrastructure (PostgreSQL and RabbitMQ) and copies core configuration files.
 * **`docker`** — Installs the Docker Engine and system-level dependencies.
 * **`trip` / `gateway`** — Deploy specific microservices (Go Trip Service or Python Gateway) individually.
+* **`always`** — Tasks that run every time (e.g., updating the package cache and printing the final status report).
+* **`upgrade`** — Explicitly used to perform a sudo apt upgrade on the host machine.
 
 ### 🏗 Deployment Architecture
 The playbook orchestrates 5 key components within a dedicated Docker network:
