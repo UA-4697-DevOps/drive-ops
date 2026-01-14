@@ -9,24 +9,24 @@
   tags: [ infrastructure, trip ]
 
 - name: Copy central .env file (Secure permissions)
-  # Fixed as per CodeRabbitAI: Restrictive permissions for sensitive data
+  # Fixed as per CodeRabbitAI: Using playbook_dir for stability and 0600 for security
   ansible.builtin.copy:
-    src: "../../../../../.env"
+    src: "{{ playbook_dir }}/../../.env"
     dest: "/opt/drive-ops/.env"
     mode: '0600'
   tags: [ infrastructure, trip ]
 
 - name: Copy central docker-compose.yml
   ansible.builtin.copy:
-    src: "../../../../../docker-compose.yml"
+    src: "{{ playbook_dir }}/../../docker-compose.yml"
     dest: "/opt/drive-ops/docker-compose.yml"
     mode: '0644'
   tags: [ infrastructure, trip ]
 
 - name: Sync trip-service source code
-  # Required for the 'build: context: ./trip-service' in central compose
+  # Using playbook_dir to avoid fragile relative paths
   ansible.builtin.copy:
-    src: "../../../../../trip-service/"
+    src: "{{ playbook_dir }}/../../trip-service/"
     dest: "/opt/drive-ops/trip-service/"
     mode: '0644'
   tags: [ infrastructure, trip ]
@@ -35,10 +35,8 @@
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
-    # Independent deployment for Go service
     services:
       - "trip-migrations"
       - "trip-service"
     build: always
   tags: [ infrastructure, trip ]
-  
