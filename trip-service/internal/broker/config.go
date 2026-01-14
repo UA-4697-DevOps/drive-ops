@@ -45,11 +45,6 @@ func LoadConfig() (*Config, error) {
 			return nil, fmt.Errorf("invalid RABBITMQ_URL: password cannot be empty")
 		}
 
-		// Reject insecure default credentials
-		if username == "guest" && password == "guest" {
-			return nil, fmt.Errorf("invalid RABBITMQ_URL: default guest/guest credentials are not allowed for security reasons")
-		}
-
 		connURL = rabbitmqURL
 	} else {
 		// Build URL from individual components
@@ -64,11 +59,6 @@ func LoadConfig() (*Config, error) {
 		}
 		if password == "" {
 			return nil, fmt.Errorf("RABBITMQ_PASSWORD environment variable is required")
-		}
-
-		// Reject insecure default credentials
-		if user == "guest" && password == "guest" {
-			return nil, fmt.Errorf("default guest/guest credentials are not allowed for security reasons")
 		}
 
 		// URL-encode credentials to handle special characters

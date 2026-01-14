@@ -34,6 +34,20 @@ func main() {
 		log.Println("Note: .env file not found, using system env variables")
 	}
 
+	// Helper for retry logic
+	connectWithRetry := func(desc string, fn func() error) error {
+		var err error
+		for i := 0; i < 10; i++ {
+			if err = fn(); err == nil {
+				log.Printf("Successfully connected to %s", desc)
+				return nil
+			}
+			log.Printf("Failed to connect to %s (attempt %d/10): %v", desc, i+1, err)
+			time.Sleep(time.Duration(i+1) * time.Second) // Exponential backoff: 1s, 2s, 3s... (actually linear here but sufficient)
+		}
+		return fmt.Errorf("failed to connect to %s after retries: %w", desc, err)
+	}
+
 	// 1. Database Connection setup
 	var dsn string
 	if dbURL := os.Getenv("DB_URL"); dbURL != "" {
@@ -48,37 +62,65 @@ func main() {
 		)
 	}
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	var db *gorm.DB
+	err := connectWithRetry("Postgres", func() error {
+		var err error
+		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		return err
+	})
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatalf("Fatal: %v", err)
 	}
 
-	// 2. Initialize RabbitMQ publisher (Keep from main)
+	// 2. Initialize RabbitMQ publisher
 	brokerConfig, err := broker.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load broker config: %v", err)
 	}
 
-	publisher, err := broker.NewRabbitMQPublisher(brokerConfig)
+	var publisher *broker.RabbitMQPublisher
+	err = connectWithRetry("RabbitMQ Publisher", func() error {
+		var err error
+		publisher, err = broker.NewRabbitMQPublisher(brokerConfig)
+		return err
+	})
 	if err != nil {
-		log.Fatalf("Failed to connect to RabbitMQ: %v", err)
+		log.Fatalf("Fatal: %v", err)
 	}
 
 	// 3. Dependency Injection: Repository -> Service -> Handler
 	repo := repository.NewTripRepository(db)
-	// Passing publisher to service as required for events (Phase 2 & 3)
-	svc := service.NewTripService(repo, publisher) 
+	svc := service.NewTripService(repo, publisher)
 	handler := api.NewTripHandler(svc)
+
+	// Initialize RabbitMQ Consumer
+	var consumer *broker.RabbitMQConsumer
+	err = connectWithRetry("RabbitMQ Consumer", func() error {
+		var err error
+		consumer, err = broker.NewRabbitMQConsumer(brokerConfig, svc)
+		return err
+	})
+	if err != nil {
+		log.Fatalf("Fatal: %v", err)
+	}
+
+	// Create a cancellable context for consumer
+	consumerCtx, consumerCancel := context.WithCancel(context.Background())
+
+	// Start consumer in background
+	if err := consumer.Start(consumerCtx); err != nil {
+		log.Fatalf("Failed to start consumer: %v", err)
+	}
 
 	// 4. Router setup
 	r := chi.NewRouter()
 
 	r.Get("/health", handler.HealthCheck)
-	
+
 	r.Route("/trips", func(r chi.Router) {
 		r.Post("/", handler.CreateTrip)
 		r.Get("/{id}", handler.GetTrip)
-		
+
 		// New endpoint for driver assignment (integrated from feature branch)
 		r.Patch("/{id}/assign-driver", handler.AssignDriver)
 	})
@@ -114,7 +156,26 @@ func main() {
 		log.Printf("Server shutdown error: %v", err)
 	}
 
-	// Close publisher after server has stopped to ensure no data loss
+	// Cancel consumer context to signal shutdown
+	consumerCancel()
+
+	// Give consumer time to finish in-flight messages
+	consumerShutdownDone := make(chan struct{})
+	go func() {
+		if err := consumer.Close(); err != nil {
+			log.Printf("Error closing consumer: %v", err)
+		}
+		close(consumerShutdownDone)
+	}()
+
+	select {
+	case <-consumerShutdownDone:
+		log.Println("Consumer closed gracefully")
+	case <-time.After(10 * time.Second):
+		log.Println("Consumer close timed out")
+	}
+
+	// Close publisher last - both HTTP handlers and consumer may use it
 	if err := publisher.Close(); err != nil {
 		log.Printf("Error closing publisher: %v", err)
 	}
