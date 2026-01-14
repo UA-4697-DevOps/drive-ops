@@ -9,8 +9,6 @@
   tags: [ infrastructure, infra ]
 
 - name: Copy central .env file (Secure permissions)
-  # Centralized here to avoid duplication in service roles
-  # Using 0600 mode to protect sensitive tokens and passwords
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../.env"
     dest: "/opt/drive-ops/.env"
@@ -18,7 +16,6 @@
   tags: [ infrastructure, infra ]
 
 - name: Copy central docker-compose.yml
-  # Shared orchestration file for all services
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../docker-compose.yml"
     dest: "/opt/drive-ops/docker-compose.yml"
@@ -27,16 +24,15 @@
 
 - name: Ensure postgres init directory exists
   ansible.builtin.file:
-    path: "/opt/drive-ops/infra/postgres"
+    path: "/opt/drive-ops/infra/postgres/init-db"
     state: directory
     mode: '0755'
   tags: [ infrastructure, infra ]
 
 - name: Copy postgres init scripts
-  # Handles multi-db initialization (trip_db and driver_db)
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/roles/infra/files/init.sql"
-    dest: "/opt/drive-ops/infra/postgres/init.sql"
+    dest: "/opt/drive-ops/infra/postgres/init-db/init.sql"
     mode: '0644'
   tags: [ infrastructure, infra ]
 
@@ -47,4 +43,25 @@
     services:
       - "drive-ops-db"
       - "drive-ops-mq"
+  tags: [ infrastructure, infra ]
+
+- name: Wait for PostgreSQL to be ready
+  # Addresses CodeRabbitAI feedback: Ensure DB is accepting connections 
+  # before starting dependent microservices (trip-service, etc.)
+  ansible.builtin.wait_for:
+    host: localhost
+    port: 5432
+    state: started
+    delay: 5
+    timeout: 60
+  tags: [ infrastructure, infra ]
+
+- name: Wait for RabbitMQ to be ready
+  # Ensures the message broker is fully operational
+  ansible.builtin.wait_for:
+    host: localhost
+    port: 5672
+    state: started
+    delay: 5
+    timeout: 60
   tags: [ infrastructure, infra ]
