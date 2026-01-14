@@ -6,28 +6,39 @@
     path: "/opt/drive-ops"
     state: directory
     mode: '0755'
+  tags: [ infrastructure, trip ]
 
-- name: Copy central configuration files
+- name: Copy central .env file (Secure permissions)
+  # Fixed as per CodeRabbitAI: Restrictive permissions for sensitive data
   ansible.builtin.copy:
-    src: "../../../../../{{ item }}"
-    dest: "/opt/drive-ops/{{ item }}"
+    src: "../../../../../.env"
+    dest: "/opt/drive-ops/.env"
+    mode: '0600'
+  tags: [ infrastructure, trip ]
+
+- name: Copy central docker-compose.yml
+  ansible.builtin.copy:
+    src: "../../../../../docker-compose.yml"
+    dest: "/opt/drive-ops/docker-compose.yml"
     mode: '0644'
-  loop:
-    - ".env"
-    - "docker-compose.yml"
+  tags: [ infrastructure, trip ]
 
 - name: Sync trip-service source code
   # Required for the 'build: context: ./trip-service' in central compose
   ansible.builtin.copy:
     src: "../../../../../trip-service/"
     dest: "/opt/drive-ops/trip-service/"
+    mode: '0644'
+  tags: [ infrastructure, trip ]
 
 - name: Start trip-service and migrations only
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
-    # We specify only relevant services to ensure independent deployment
+    # Independent deployment for Go service
     services:
       - "trip-migrations"
       - "trip-service"
     build: always
+  tags: [ infrastructure, trip ]
+  
