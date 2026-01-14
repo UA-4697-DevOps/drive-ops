@@ -15,16 +15,23 @@
         cache_valid_time: 3600
       tags: always
     
-    - name: Install system dependencies (Moved from Vagrant shell)
-      # Mentor's advice: use Ansible to install build tools
+    - name: Install general system dependencies
       ansible.builtin.apt:
         name:
           - python3-pip
-          - linux-headers-{{ ansible_kernel }}
           - build-essential
           - dkms
           - curl
         state: present
+      tags: always
+
+    - name: Install kernel headers (Skip on WSL)
+      # Fixed: Microsoft WSL kernels don't have standard apt headers.
+      # This task runs on Vagrant/Real VM but skips on WSL.
+      ansible.builtin.apt:
+        name: "linux-headers-{{ ansible_kernel }}"
+        state: present
+      when: "'microsoft' not in ansible_kernel | lower"
       tags: always
 
     - name: Upgrade all packages
@@ -34,16 +41,13 @@
       tags: upgrade
 
   roles:
-    # 1. Base Docker installation 
-    # Fixed: Clarified that this runs by default unless skipped (e.g., --skip-tags docker)
+    # 1. Base Docker installation (Runs by default, skip with --skip-tags docker)
     - { role: docker, tags: [ docker ] }
 
     # 2. Shared Infrastructure (DB & MQ)
-    # Standardized: Added 'infrastructure' master tag
     - { role: infra, tags: [ infrastructure, infra ] }
 
-    # 3. Independent Services (Using centralized docker-compose)
-    # Standardized: All services are now part of 'infrastructure' tag
+    # 3. Independent Services (Microservices stack)
     - { role: trip-service, tags: [ infrastructure, trip ] }
     - { role: client-gateway, tags: [ infrastructure, gateway ] }
     - { role: driver-service, tags: [ infrastructure, driver ] }
@@ -54,7 +58,6 @@
         msg: 
           - "========================================"
           - " VM is configured and ready!"
-          # Fixed as per CodeRabbitAI: Show 'all' if no specific tags were used
           - " Deployment of {{ ansible_run_tags | default(['all']) | join(', ') }} completed!"
           - "========================================"
       tags: always
