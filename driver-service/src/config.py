@@ -2,6 +2,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
     
     # Application
     APP_NAME: str = "Driver Service"
@@ -24,11 +28,6 @@ class Settings(BaseSettings):
     MAX_RETRY_ATTEMPTS: int = 3
     DRIVER_SEARCH_RADIUS_KM: float = 5.0
     MAX_DRIVERS_TO_NOTIFY: int = 10
-    
-    class SettingsConfig(BaseSettings):
-        model_config = SettingsConfigDict(
-            env_file=".env",
-            env_file_encoding="utf-8",
-        )
-        
+
+
 settings = Settings()
