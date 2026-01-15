@@ -708,7 +708,7 @@ async def finish_trip(driver_id, trip_id):
                 },
             }
     
-    except httpx.TimeoutException as e:
+    except httpx.TimeoutException:
         latency = int((time.time() - start_time) * 1000)
         logger.error(
             "Finish trip TIMEOUT: driver_id=%s trip_id=%s latency=%dms",

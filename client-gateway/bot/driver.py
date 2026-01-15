@@ -22,9 +22,6 @@ def generate_fake_orders(chat_id):
     Returns:
         A list of 3 sample trip dictionaries with realistic pickup/dropoff locations
     """
-    # Use chat_id to generate consistent but varied fake data
-    seed = chat_id % 3
-    
     fake_orders_templates = [
         {
             "id": f"fake_trip_{chat_id}_001",
@@ -432,13 +429,10 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             error_obj = result.get('error') if isinstance(result, dict) else None
             if isinstance(error_obj, dict):
                 error_msg = error_obj.get('message') or 'Невідома помилка'
-                status_code = error_obj.get('status_code', 500)
             elif isinstance(error_obj, str) and error_obj:
                 error_msg = error_obj
-                status_code = 500
             else:
                 error_msg = 'Невідома помилка'
-                status_code = 500
             
             logger.error("Failed to fetch trips: chat_id=%s driver_id=%s error=%s", chat_id, driver_id, error_msg)
             

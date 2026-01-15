@@ -568,7 +568,6 @@ async def test_show_driver_orders_unregistered(mock_update, mock_context):
         DEBUGGING=False
     )
     
-    chat_id = mock_update.effective_chat.id
     mock_update.message = mock_update.effective_message
     
     await driver.show_driver_orders_handler(mock_update, mock_context)
