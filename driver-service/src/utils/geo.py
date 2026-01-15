@@ -26,7 +26,7 @@ def haversine_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> fl
 def find_nearby_drivers(
     drivers: Dict[str, Dict[str, Any]],
     pickup_lat: float,
-    pickup_lng: float,
+    pickup_lon: float,
     radius_km: float = 5.0,
     max_drivers: int = 10
 ) -> List[Dict[str, Any]]:
