@@ -46,6 +46,7 @@ BTN_REGISTER_DRIVER = "\U0001F4DD Зареєструватися як водій
 BTN_GO_ONLINE = "\U0001F7E2 Приймати замовлення"
 BTN_GO_OFFLINE = "\U0001F534 Не приймати замовлення"
 BTN_DRIVER_STATUS = "\U0001F4CA Мій статус"
+BTN_FINISH_TRIP = "\U0001F3C1 Завершити поїздку"
 
 BUTTONS = {
     'BTN_PASSENGER': BTN_PASSENGER,
@@ -59,6 +60,7 @@ BUTTONS = {
     'BTN_GO_ONLINE': BTN_GO_ONLINE,
     'BTN_GO_OFFLINE': BTN_GO_OFFLINE,
     'BTN_DRIVER_STATUS': BTN_DRIVER_STATUS,
+    'BTN_FINISH_TRIP': BTN_FINISH_TRIP,
 }
 
 def role_selection_menu():
@@ -86,12 +88,17 @@ def driver_menu_unregistered():
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-def driver_menu_registered(is_online=False):
+def driver_menu_registered(is_online=False, active_trip=False):
     keyboard = [
         [KeyboardButton(BTN_MY_ORDERS), KeyboardButton(BTN_DRIVER_STATUS)],
-        [KeyboardButton(BTN_GO_OFFLINE if is_online else BTN_GO_ONLINE)],
-        [KeyboardButton(BTN_CHANGE_ROLE)]
     ]
+    
+    if active_trip:
+        keyboard.append([KeyboardButton(BTN_FINISH_TRIP)])
+    else:
+        keyboard.append([KeyboardButton(BTN_GO_OFFLINE if is_online else BTN_GO_ONLINE)])
+    
+    keyboard.append([KeyboardButton(BTN_CHANGE_ROLE)])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 def skip_menu():
@@ -514,12 +521,442 @@ async def update_driver_status(driver_id, status):
             },
         }
 
+
+async def fetch_driver_trips(driver_id):
+    """
+    Fetch pending trip requests assigned to a driver from the Driver Service.
+    
+    Args:
+        driver_id: The driver's ID
+    
+    Returns:
+        Dictionary with success status, trips list, and error details if any.
+    """
+    start_time = time.time()
+    correlation_id = generate_correlation_id()
+    
+    logger.info(
+        "Fetching driver trips: driver_id=%s",
+        driver_id,
+        extra={'correlationId': correlation_id}
+    )
+    
+    try:
+        url = f"{DRIVER_SERVICE_URL}/drivers/{driver_id}/trips"
+        logger.info(
+            "Sending GET %s",
+            url,
+            extra={'correlationId': correlation_id}
+        )
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url)
+        
+        latency = int((time.time() - start_time) * 1000)
+        
+        if resp.status_code in (200, 201):
+            data = resp.json()
+            trips = data.get('trips', []) if isinstance(data, dict) else data if isinstance(data, list) else []
+            
+            logger.info(
+                "Fetch driver trips SUCCESS: driver_id=%s trip_count=%d latency=%dms",
+                driver_id, len(trips), latency,
+                extra={'correlationId': correlation_id}
+            )
+            
+            return {
+                'success': True,
+                'trips': trips,
+                'error': None,
+                'raw_response': data,
+            }
+        elif resp.status_code == 404:
+            logger.info(
+                "Fetch driver trips: no trips found driver_id=%s latency=%dms",
+                driver_id, latency,
+                extra={'correlationId': correlation_id}
+            )
+            return {
+                'success': True,
+                'trips': [],
+                'error': None,
+                'raw_response': None,
+            }
+        else:
+            response_preview = resp.text.encode('utf-8')[:200].decode('utf-8', errors='ignore')
+            logger.error(
+                "Fetch driver trips FAILED: status_code=%s latency=%dms response=%s",
+                resp.status_code, latency, response_preview,
+                extra={'correlationId': correlation_id}
+            )
+            return {
+                'success': False,
+                'trips': [],
+                'error': {
+                    'status_code': resp.status_code,
+                    'message': resp.text or 'Помилка при отриманні замовлень',
+                },
+                'raw_response': None,
+            }
+    except httpx.TimeoutException:
+        latency = int((time.time() - start_time) * 1000)
+        logger.error(
+            "Fetch driver trips TIMEOUT: driver_id=%s latency=%dms",
+            driver_id, latency,
+            extra={'correlationId': correlation_id}
+        )
+        return {
+            'success': False,
+            'trips': [],
+            'error': {
+                'status_code': 504,
+                'message': 'Сервіс не відповідає. Спробуйте пізніше.',
+            },
+            'raw_response': None,
+        }
+    except httpx.ConnectError:
+        latency = int((time.time() - start_time) * 1000)
+        logger.error(
+            "Fetch driver trips CONNECTION_ERROR: driver_id=%s latency=%dms",
+            driver_id, latency,
+            extra={'correlationId': correlation_id}
+        )
+        return {
+            'success': False,
+            'trips': [],
+            'error': {
+                'status_code': 503,
+                'message': 'Сервіс недоступний. Спробуйте пізніше.',
+            },
+            'raw_response': None,
+        }
+    except Exception as e:
+        latency = int((time.time() - start_time) * 1000)
+        logger.exception(
+            "Fetch driver trips UNEXPECTED_ERROR: driver_id=%s latency=%dms error=%s",
+            driver_id, latency, str(e),
+            extra={'correlationId': correlation_id}
+        )
+        return {
+            'success': False,
+            'trips': [],
+            'error': {
+                'status_code': 500,
+                'message': str(e),
+            },
+            'raw_response': None,
+        }
+
+
+async def finish_trip(driver_id, trip_id):
+    """
+    Mark a trip as completed by the driver.
+    
+    Args:
+        driver_id: The driver's ID
+        trip_id: The trip's ID to finish
+    
+    Returns:
+        Dictionary with success status and error details if any.
+    """
+    start_time = time.time()
+    correlation_id = generate_correlation_id()
+    
+    logger.info(
+        "Finish trip initiated: driver_id=%s trip_id=%s",
+        driver_id, trip_id,
+        extra={'correlationId': correlation_id}
+    )
+    
+    try:
+        url = f"{DRIVER_SERVICE_URL}/drivers/{driver_id}/trips/{trip_id}/complete"
+        logger.info(
+            "Sending POST %s",
+            url,
+            extra={'correlationId': correlation_id}
+        )
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url)
+        
+        latency = int((time.time() - start_time) * 1000)
+        
+        if resp.status_code in (200, 201, 204):
+            logger.info(
+                "Finish trip SUCCESS: driver_id=%s trip_id=%s latency=%dms",
+                driver_id, trip_id, latency,
+                extra={'correlationId': correlation_id}
+            )
+            return {'success': True}
+        else:
+            try:
+                error_data = resp.json()
+            except Exception:
+                error_data = {'message': resp.text or 'Unknown error'}
+            
+            logger.error(
+                "Finish trip FAILED: driver_id=%s trip_id=%s status=%d latency=%dms error=%s",
+                driver_id, trip_id, resp.status_code, latency, error_data,
+                extra={'correlationId': correlation_id}
+            )
+            
+            return {
+                'success': False,
+                'error': {
+                    'status_code': resp.status_code,
+                    'message': error_data.get('message') or error_data.get('error') or f"HTTP {resp.status_code}",
+                },
+            }
+    
+    except httpx.TimeoutException as e:
+        latency = int((time.time() - start_time) * 1000)
+        logger.error(
+            "Finish trip TIMEOUT: driver_id=%s trip_id=%s latency=%dms",
+            driver_id, trip_id, latency,
+            extra={'correlationId': correlation_id}
+        )
+        return {
+            'success': False,
+            'error': {
+                'status_code': 504,
+                'message': 'Час очікування вичерпано. Спробуйте ще раз.',
+            },
+        }
+    
+    except httpx.ConnectError as e:
+        latency = int((time.time() - start_time) * 1000)
+        logger.error(
+            "Finish trip CONNECTION_ERROR: driver_id=%s trip_id=%s latency=%dms error=%s",
+            driver_id, trip_id, latency, str(e),
+            extra={'correlationId': correlation_id}
+        )
+        return {
+            'success': False,
+            'error': {
+                'status_code': 503,
+                'message': 'Не вдалося підключитися до сервісу. Перевірте підключення.',
+            },
+        }
+    
+    except Exception as e:
+        latency = int((time.time() - start_time) * 1000)
+        logger.error(
+            "Finish trip EXCEPTION: driver_id=%s trip_id=%s latency=%dms error=%s",
+            driver_id, trip_id, latency, str(e),
+            extra={'correlationId': correlation_id}
+        )
+        return {
+            'success': False,
+            'error': {
+                'status_code': 500,
+                'message': str(e),
+            },
+        }
+
+
+async def send_trip_response(driver_id, trip_id, action):
+    """
+    Send driver's accept/reject response for a trip to the Driver Service.
+    
+    Args:
+        driver_id: The driver's ID
+        trip_id: The trip's ID
+        action: 'accept' or 'reject'
+    
+    Returns:
+        Dictionary with success status and error details if any.
+    """
+    start_time = time.time()
+    correlation_id = generate_correlation_id()
+    
+    # Validate action input
+    allowed_actions = ('accept', 'reject')
+    if action not in allowed_actions:
+        logger.error(
+            "Trip response INVALID_ACTION: driver_id=%s trip_id=%s action=%s",
+            driver_id, trip_id, action,
+            extra={'correlationId': correlation_id}
+        )
+        return {
+            'success': False,
+            'error': {
+                'status_code': 400,
+                'message': f"Invalid action '{action}'. Allowed: {allowed_actions}",
+            },
+        }
+    
+    logger.info(
+        "Trip response initiated: driver_id=%s trip_id=%s action=%s",
+        driver_id, trip_id, action,
+        extra={'correlationId': correlation_id}
+    )
+    
+    try:
+        url = f"{DRIVER_SERVICE_URL}/drivers/{driver_id}/trips/{trip_id}/{action}"
+        logger.info(
+            "Sending POST %s",
+            url,
+            extra={'correlationId': correlation_id}
+        )
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url)
+        
+        latency = int((time.time() - start_time) * 1000)
+        
+        if resp.status_code in (200, 201, 204):
+            logger.info(
+                "Trip response SUCCESS: driver_id=%s trip_id=%s action=%s latency=%dms",
+                driver_id, trip_id, action, latency,
+                extra={'correlationId': correlation_id}
+            )
+            
+            return {
+                'success': True,
+                'error': None,
+            }
+        elif resp.status_code == 410:
+            # Trip request expired
+            logger.warning(
+                "Trip response EXPIRED: driver_id=%s trip_id=%s latency=%dms",
+                driver_id, trip_id, latency,
+                extra={'correlationId': correlation_id}
+            )
+            return {
+                'success': False,
+                'error': {
+                    'status_code': 410,
+                    'message': 'Замовлення вже недоступне або прийняте іншим водієм.',
+                },
+            }
+        elif resp.status_code == 404:
+            logger.warning(
+                "Trip response NOT_FOUND: driver_id=%s trip_id=%s latency=%dms",
+                driver_id, trip_id, latency,
+                extra={'correlationId': correlation_id}
+            )
+            return {
+                'success': False,
+                'error': {
+                    'status_code': 404,
+                    'message': 'Замовлення не знайдено.',
+                },
+            }
+        else:
+            response_preview = resp.text.encode('utf-8')[:200].decode('utf-8', errors='ignore')
+            logger.error(
+                "Trip response FAILED: status_code=%s latency=%dms response=%s",
+                resp.status_code, latency, response_preview,
+                extra={'correlationId': correlation_id}
+            )
+            
+            if DEBUGGING:
+                logger.info(
+                    "[DEBUG] Mocking trip response success: driver_id=%s trip_id=%s action=%s",
+                    driver_id, trip_id, action,
+                    extra={'correlationId': correlation_id}
+                )
+                return {
+                    'success': True,
+                    'error': None,
+                }
+            
+            return {
+                'success': False,
+                'error': {
+                    'status_code': resp.status_code,
+                    'message': resp.text or 'Помилка при обробці відповіді',
+                },
+            }
+    except httpx.TimeoutException:
+        latency = int((time.time() - start_time) * 1000)
+        logger.error(
+            "Trip response TIMEOUT: driver_id=%s trip_id=%s latency=%dms",
+            driver_id, trip_id, latency,
+            extra={'correlationId': correlation_id}
+        )
+        
+        if DEBUGGING:
+            logger.info(
+                "[DEBUG] Mocking trip response success after timeout: driver_id=%s trip_id=%s action=%s",
+                driver_id, trip_id, action,
+                extra={'correlationId': correlation_id}
+            )
+            return {
+                'success': True,
+                'error': None,
+            }
+        
+        return {
+            'success': False,
+            'error': {
+                'status_code': 504,
+                'message': 'Сервіс не відповідає. Спробуйте пізніше.',
+            },
+        }
+    except httpx.ConnectError:
+        latency = int((time.time() - start_time) * 1000)
+        logger.error(
+            "Trip response CONNECTION_ERROR: driver_id=%s trip_id=%s latency=%dms",
+            driver_id, trip_id, latency,
+            extra={'correlationId': correlation_id}
+        )
+        
+        if DEBUGGING:
+            logger.info(
+                "[DEBUG] Mocking trip response success after connection error: driver_id=%s trip_id=%s action=%s",
+                driver_id, trip_id, action,
+                extra={'correlationId': correlation_id}
+            )
+            return {
+                'success': True,
+                'error': None,
+            }
+        
+        return {
+            'success': False,
+            'error': {
+                'status_code': 503,
+                'message': 'Сервіс недоступний. Спробуйте пізніше.',
+            },
+        }
+    except Exception as e:
+        latency = int((time.time() - start_time) * 1000)
+        logger.exception(
+            "Trip response UNEXPECTED_ERROR: driver_id=%s trip_id=%s latency=%dms error=%s",
+            driver_id, trip_id, latency, str(e),
+            extra={'correlationId': correlation_id}
+        )
+        
+        if DEBUGGING:
+            logger.info(
+                "[DEBUG] Mocking trip response success after unexpected error: driver_id=%s trip_id=%s action=%s",
+                driver_id, trip_id, action,
+                extra={'correlationId': correlation_id}
+            )
+            return {
+                'success': True,
+                'error': None,
+            }
+        
+        return {
+            'success': False,
+            'error': {
+                'status_code': 500,
+                'message': str(e),
+            },
+        }
+
+
 HELPERS = {
     'safe_send': safe_send,
     'safe_edit_message_text': safe_edit_message_text,
     'submit_trip_request': submit_trip_request,
     'register_driver_in_service': register_driver_in_service,
     'update_driver_status': update_driver_status,
+    'fetch_driver_trips': fetch_driver_trips,
+    'send_trip_response': send_trip_response,
+    'finish_trip': finish_trip,
     'is_valid_address': is_valid_address,
 }
 

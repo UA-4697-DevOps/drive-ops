@@ -81,6 +81,8 @@ async def test_process_driver_car_handler_service_unavailable(mock_update, mock_
         'safe_send': main.safe_send,
         'register_driver_in_service': mock_register,
         'update_driver_status': AsyncMock(),
+        'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
+        'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
     }
     application = MagicMock()
 
@@ -128,6 +130,8 @@ async def test_process_driver_car_handler_timeout(mock_update, mock_context):
         'safe_send': main.safe_send,
         'register_driver_in_service': mock_register,
         'update_driver_status': AsyncMock(),
+        'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
+        'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
     }
     application = MagicMock()
 
@@ -254,7 +258,9 @@ async def test_driver_info_persistence(mock_update, mock_context):
     helpers = {
         'safe_send': main.safe_send,
         'register_driver_in_service': mock_register,
-        'update_driver_status': AsyncMock()
+        'update_driver_status': AsyncMock(),
+        'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
+        'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
     }
 
     application = MagicMock()
@@ -306,6 +312,8 @@ async def test_driver_status_update(mock_update, mock_context):
         'safe_send': main.safe_send,
         'register_driver_in_service': AsyncMock(),
         'update_driver_status': mock_update_status,
+        'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
+        'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
     }
 
     application = MagicMock()
@@ -356,6 +364,8 @@ async def test_go_online_handler_service_unavailable(mock_update, mock_context):
         'safe_send': main.safe_send,
         'register_driver_in_service': AsyncMock(),
         'update_driver_status': mock_update_status,
+        'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
+        'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
     }
 
     application = MagicMock()
@@ -390,6 +400,8 @@ def _build_driver_helpers(register_return=None):
         'safe_send': main.safe_send,
         'register_driver_in_service': register_mock,
         'update_driver_status': AsyncMock(),
+        'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
+        'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
     }, register_mock
 
 
@@ -486,6 +498,8 @@ async def test_driver_car_validation_accepts_valid_description(mock_update, mock
         'safe_send': main.safe_send,
         'register_driver_in_service': register_mock,
         'update_driver_status': AsyncMock(),
+        'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
+        'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
     }
     application = MagicMock()
     driver.register_handlers(
@@ -511,3 +525,511 @@ async def test_driver_car_validation_accepts_valid_description(mock_update, mock
     assert role_entry and role_entry['registered'] is True
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert "Реєстрацію завершено" in last_reply
+
+
+# =============================================================================
+# Trip Request Handling Tests
+# =============================================================================
+
+
+def _build_trip_helpers(fetch_trips_response=None, trip_response_result=None):
+    """Build helpers dict with mocked trip-related functions."""
+    fetch_mock = AsyncMock(return_value=fetch_trips_response or {
+        'success': True,
+        'trips': [],
+        'error': None,
+    })
+    send_response_mock = AsyncMock(return_value=trip_response_result or {
+        'success': True,
+        'error': None,
+    })
+    return {
+        'safe_send': main.safe_send,
+        'register_driver_in_service': AsyncMock(),
+        'update_driver_status': AsyncMock(),
+        'fetch_driver_trips': fetch_mock,
+        'send_trip_response': send_response_mock,
+    }, fetch_mock, send_response_mock
+
+
+@pytest.mark.asyncio
+async def test_show_driver_orders_unregistered(mock_update, mock_context):
+    """Test that unregistered drivers cannot see orders."""
+    helpers, fetch_mock, _ = _build_trip_helpers()
+    application = MagicMock()
+    
+    driver.register_handlers(
+        application,
+        main.user_orders,
+        main.user_roles,
+        main.BUTTONS,
+        main.KEYBOARDS,
+        helpers,
+        DEBUGGING=False
+    )
+    
+    chat_id = mock_update.effective_chat.id
+    mock_update.message = mock_update.effective_message
+    
+    await driver.show_driver_orders_handler(mock_update, mock_context)
+    
+    last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
+    assert 'зареєструйтесь як водій' in last_reply
+    fetch_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_show_driver_orders_offline(mock_update, mock_context):
+    """Test that offline drivers get a message to go online first."""
+    helpers, fetch_mock, _ = _build_trip_helpers()
+    application = MagicMock()
+    
+    chat_id = mock_update.effective_chat.id
+    main.user_roles[chat_id] = {
+        'role': 'driver',
+        'registered': True,
+        'driver_id': 'drv_123',
+        'status': 'offline'
+    }
+    
+    driver.register_handlers(
+        application,
+        main.user_orders,
+        main.user_roles,
+        main.BUTTONS,
+        main.KEYBOARDS,
+        helpers,
+        DEBUGGING=False
+    )
+    
+    mock_update.message = mock_update.effective_message
+    
+    await driver.show_driver_orders_handler(mock_update, mock_context)
+    
+    last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
+    assert 'офлайн' in last_reply.lower()
+    fetch_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_show_driver_orders_no_trips(mock_update, mock_context):
+    """Test showing empty trips list for online driver."""
+    helpers, fetch_mock, _ = _build_trip_helpers({
+        'success': True,
+        'trips': [],
+        'error': None,
+    })
+    application = MagicMock()
+    
+    chat_id = mock_update.effective_chat.id
+    main.user_roles[chat_id] = {
+        'role': 'driver',
+        'registered': True,
+        'driver_id': 'drv_123',
+        'status': 'online'
+    }
+    
+    driver.register_handlers(
+        application,
+        main.user_orders,
+        main.user_roles,
+        main.BUTTONS,
+        main.KEYBOARDS,
+        helpers,
+        DEBUGGING=False
+    )
+    
+    mock_update.message = mock_update.effective_message
+    
+    await driver.show_driver_orders_handler(mock_update, mock_context)
+    
+    fetch_mock.assert_awaited_once_with('drv_123')
+    last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
+    assert 'немає нових замовлень' in last_reply
+
+
+@pytest.mark.asyncio
+async def test_show_driver_orders_with_trips(mock_update, mock_context):
+    """Test showing pending trips for online driver."""
+    trips = [
+        {'id': 'trip_001', 'pickup': 'вул. Хрещатик, 1', 'dropoff': 'пл. Незалежності', 'comment': 'Швидко'},
+        {'id': 'trip_002', 'pickup': 'Центральний вокзал', 'dropoff': 'Аеропорт', 'comment': ''}
+    ]
+    helpers, fetch_mock, _ = _build_trip_helpers({
+        'success': True,
+        'trips': trips,
+        'error': None,
+    })
+    application = MagicMock()
+    
+    chat_id = mock_update.effective_chat.id
+    main.user_roles[chat_id] = {
+        'role': 'driver',
+        'registered': True,
+        'driver_id': 'drv_123',
+        'status': 'online'
+    }
+    
+    driver.register_handlers(
+        application,
+        main.user_orders,
+        main.user_roles,
+        main.BUTTONS,
+        main.KEYBOARDS,
+        helpers,
+        DEBUGGING=False
+    )
+    
+    mock_update.message = mock_update.effective_message
+    
+    await driver.show_driver_orders_handler(mock_update, mock_context)
+    
+    fetch_mock.assert_awaited_once_with('drv_123')
+    
+    # Should have called reply_text multiple times (loading + trips + summary)
+    reply_calls = mock_update.message.reply_text.call_args_list
+    # At least: loading message, 2 trips, summary
+    assert len(reply_calls) >= 4
+    
+    # Check that trip info is displayed (underscores may be escaped for Markdown)
+    all_replies = ' '.join([call[0][0] for call in reply_calls])
+    # trip_001 becomes trip\_001 in Markdown, so check for either
+    assert 'trip' in all_replies and '001' in all_replies
+    assert 'trip' in all_replies and '002' in all_replies
+    assert 'Хрещатик' in all_replies
+    assert 'Знайдено замовлень: 2' in all_replies
+
+
+@pytest.mark.asyncio
+async def test_show_driver_orders_service_error(mock_update, mock_context):
+    """Test error handling when trip service is unavailable."""
+    helpers, fetch_mock, _ = _build_trip_helpers({
+        'success': False,
+        'trips': [],
+        'error': {'status_code': 503, 'message': 'Сервіс недоступний. Спробуйте пізніше.'},
+    })
+    application = MagicMock()
+    
+    chat_id = mock_update.effective_chat.id
+    main.user_roles[chat_id] = {
+        'role': 'driver',
+        'registered': True,
+        'driver_id': 'drv_123',
+        'status': 'online'
+    }
+    
+    driver.register_handlers(
+        application,
+        main.user_orders,
+        main.user_roles,
+        main.BUTTONS,
+        main.KEYBOARDS,
+        helpers,
+        DEBUGGING=False
+    )
+    
+    mock_update.message = mock_update.effective_message
+    
+    await driver.show_driver_orders_handler(mock_update, mock_context)
+    
+    fetch_mock.assert_awaited_once_with('drv_123')
+    last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
+    assert 'Помилка отримання замовлень' in last_reply
+    assert 'Сервіс недоступний' in last_reply
+
+
+@pytest.mark.asyncio
+async def test_accept_trip_success(mock_update, mock_context, mock_callback_query):
+    """Test successful trip acceptance."""
+    helpers, _, send_mock = _build_trip_helpers(
+        trip_response_result={'success': True, 'error': None}
+    )
+    application = MagicMock()
+    
+    chat_id = 12345
+    mock_callback_query.data = 'accept_trip_trip_001'
+    mock_callback_query.message.chat.id = chat_id
+    mock_update.callback_query = mock_callback_query
+    
+    main.user_roles[chat_id] = {
+        'role': 'driver',
+        'registered': True,
+        'driver_id': 'drv_123',
+        'status': 'online'
+    }
+    
+    driver.register_handlers(
+        application,
+        main.user_orders,
+        main.user_roles,
+        main.BUTTONS,
+        main.KEYBOARDS,
+        helpers,
+        DEBUGGING=False
+    )
+    
+    await driver.accept_trip_handler(mock_update, mock_context)
+    
+    mock_callback_query.answer.assert_awaited_once()
+    send_mock.assert_awaited_once_with('drv_123', 'trip_001', 'accept')
+    
+    # Check final message contains success
+    last_edit = mock_callback_query.edit_message_text.call_args_list[-1]
+    assert 'прийнято' in last_edit[1]['text'].lower()
+
+
+@pytest.mark.asyncio
+async def test_accept_trip_expired(mock_update, mock_context, mock_callback_query):
+    """Test accepting an expired trip."""
+    helpers, _, send_mock = _build_trip_helpers(
+        trip_response_result={
+            'success': False,
+            'error': {'status_code': 410, 'message': 'Замовлення вже недоступне'}
+        }
+    )
+    application = MagicMock()
+    
+    chat_id = 12345
+    mock_callback_query.data = 'accept_trip_trip_001'
+    mock_callback_query.message.chat.id = chat_id
+    mock_update.callback_query = mock_callback_query
+    
+    main.user_roles[chat_id] = {
+        'role': 'driver',
+        'registered': True,
+        'driver_id': 'drv_123',
+        'status': 'online'
+    }
+    
+    driver.register_handlers(
+        application,
+        main.user_orders,
+        main.user_roles,
+        main.BUTTONS,
+        main.KEYBOARDS,
+        helpers,
+        DEBUGGING=False
+    )
+    
+    await driver.accept_trip_handler(mock_update, mock_context)
+    
+    send_mock.assert_awaited_once_with('drv_123', 'trip_001', 'accept')
+    
+    last_edit = mock_callback_query.edit_message_text.call_args_list[-1]
+    assert 'недоступне' in last_edit[1]['text'].lower()
+
+
+@pytest.mark.asyncio
+async def test_decline_trip_success(mock_update, mock_context, mock_callback_query):
+    """Test successful trip rejection."""
+    helpers, _, send_mock = _build_trip_helpers(
+        trip_response_result={'success': True, 'error': None}
+    )
+    application = MagicMock()
+    
+    chat_id = 12345
+    mock_callback_query.data = 'decline_trip_trip_001'
+    mock_callback_query.message.chat.id = chat_id
+    mock_update.callback_query = mock_callback_query
+    
+    main.user_roles[chat_id] = {
+        'role': 'driver',
+        'registered': True,
+        'driver_id': 'drv_123',
+        'status': 'online'
+    }
+    
+    driver.register_handlers(
+        application,
+        main.user_orders,
+        main.user_roles,
+        main.BUTTONS,
+        main.KEYBOARDS,
+        helpers,
+        DEBUGGING=False
+    )
+    
+    await driver.decline_trip_handler(mock_update, mock_context)
+    
+    mock_callback_query.answer.assert_awaited_once()
+    send_mock.assert_awaited_once_with('drv_123', 'trip_001', 'reject')
+    
+    last_edit = mock_callback_query.edit_message_text.call_args_list[-1]
+    assert 'відхилено' in last_edit[1]['text'].lower()
+
+
+@pytest.mark.asyncio
+async def test_decline_trip_service_unavailable(mock_update, mock_context, mock_callback_query):
+    """Test rejecting trip when service is unavailable."""
+    helpers, _, send_mock = _build_trip_helpers(
+        trip_response_result={
+            'success': False,
+            'error': {'status_code': 503, 'message': 'Сервіс недоступний. Спробуйте пізніше.'}
+        }
+    )
+    application = MagicMock()
+    
+    chat_id = 12345
+    mock_callback_query.data = 'decline_trip_trip_001'
+    mock_callback_query.message.chat.id = chat_id
+    mock_update.callback_query = mock_callback_query
+    
+    main.user_roles[chat_id] = {
+        'role': 'driver',
+        'registered': True,
+        'driver_id': 'drv_123',
+        'status': 'online'
+    }
+    
+    driver.register_handlers(
+        application,
+        main.user_orders,
+        main.user_roles,
+        main.BUTTONS,
+        main.KEYBOARDS,
+        helpers,
+        DEBUGGING=False
+    )
+    
+    await driver.decline_trip_handler(mock_update, mock_context)
+    
+    send_mock.assert_awaited_once_with('drv_123', 'trip_001', 'reject')
+    
+    last_edit = mock_callback_query.edit_message_text.call_args_list[-1]
+    assert 'помилка' in last_edit[1]['text'].lower()
+
+
+@pytest.mark.asyncio
+async def test_accept_trip_unregistered_driver(mock_update, mock_context, mock_callback_query):
+    """Test that unregistered drivers cannot accept trips."""
+    helpers, _, send_mock = _build_trip_helpers()
+    application = MagicMock()
+    
+    chat_id = 12345
+    mock_callback_query.data = 'accept_trip_trip_001'
+    mock_callback_query.message.chat.id = chat_id
+    mock_update.callback_query = mock_callback_query
+    
+    # No driver registered
+    main.user_roles.clear()
+    
+    driver.register_handlers(
+        application,
+        main.user_orders,
+        main.user_roles,
+        main.BUTTONS,
+        main.KEYBOARDS,
+        helpers,
+        DEBUGGING=False
+    )
+    
+    await driver.accept_trip_handler(mock_update, mock_context)
+    
+    send_mock.assert_not_awaited()
+    last_edit = mock_callback_query.edit_message_text.call_args_list[-1]
+    assert 'не зареєстровані' in last_edit[1]['text'].lower()
+
+
+@pytest.mark.asyncio
+async def test_fetch_driver_trips_calls_driver_service(monkeypatch):
+    """Ensure `fetch_driver_trips` hits the driver service with the expected URL."""
+    driver_id = 'drv_123'
+    mock_response = MagicMock(
+        status_code=200,
+        json=MagicMock(return_value={'trips': [{'id': 'trip_001', 'pickup': 'A', 'dropoff': 'B'}]})
+    )
+    client_instances = []
+
+    class DummyAsyncClient:
+        def __init__(self, *args, **kwargs):
+            self.get = AsyncMock(return_value=mock_response)
+            client_instances.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(main.httpx, 'AsyncClient', DummyAsyncClient)
+
+    result = await main.fetch_driver_trips(driver_id)
+
+    assert result['success'] is True
+    assert len(result['trips']) == 1
+    assert result['trips'][0]['id'] == 'trip_001'
+    
+    assert client_instances, 'AsyncClient should be instantiated'
+    client = client_instances[-1]
+    expected_url = f"{main.DRIVER_SERVICE_URL}/drivers/{driver_id}/trips"
+    client.get.assert_awaited_once_with(expected_url)
+
+
+@pytest.mark.asyncio
+async def test_send_trip_response_accept(monkeypatch):
+    """Ensure `send_trip_response` sends accept request to correct endpoint."""
+    driver_id = 'drv_123'
+    trip_id = 'trip_001'
+    mock_response = MagicMock(status_code=200, text='ok')
+    client_instances = []
+
+    class DummyAsyncClient:
+        def __init__(self, *args, **kwargs):
+            self.post = AsyncMock(return_value=mock_response)
+            client_instances.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(main.httpx, 'AsyncClient', DummyAsyncClient)
+
+    result = await main.send_trip_response(driver_id, trip_id, 'accept')
+
+    assert result == {'success': True, 'error': None}
+    assert client_instances, 'AsyncClient should be instantiated'
+    client = client_instances[-1]
+    expected_url = f"{main.DRIVER_SERVICE_URL}/drivers/{driver_id}/trips/{trip_id}/accept"
+    client.post.assert_awaited_once_with(expected_url)
+
+
+@pytest.mark.asyncio
+async def test_send_trip_response_reject(monkeypatch):
+    """Ensure `send_trip_response` sends reject request to correct endpoint."""
+    driver_id = 'drv_123'
+    trip_id = 'trip_001'
+    mock_response = MagicMock(status_code=200, text='ok')
+    client_instances = []
+
+    class DummyAsyncClient:
+        def __init__(self, *args, **kwargs):
+            self.post = AsyncMock(return_value=mock_response)
+            client_instances.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(main.httpx, 'AsyncClient', DummyAsyncClient)
+
+    result = await main.send_trip_response(driver_id, trip_id, 'reject')
+
+    assert result == {'success': True, 'error': None}
+    assert client_instances, 'AsyncClient should be instantiated'
+    client = client_instances[-1]
+    expected_url = f"{main.DRIVER_SERVICE_URL}/drivers/{driver_id}/trips/{trip_id}/reject"
+    client.post.assert_awaited_once_with(expected_url)
+
+
+@pytest.mark.asyncio
+async def test_send_trip_response_invalid_action():
+    """Ensure `send_trip_response` rejects invalid actions."""
+    result = await main.send_trip_response('drv_123', 'trip_001', 'invalid_action')
+
+    assert result['success'] is False
+    assert result['error']['status_code'] == 400
+    assert 'Invalid action' in result['error']['message']

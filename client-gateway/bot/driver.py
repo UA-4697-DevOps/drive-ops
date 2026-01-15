@@ -11,6 +11,44 @@ logger = create_trip_request_logger()
 DRIVER_NAME, DRIVER_CAR = range(2)
 
 
+def generate_fake_orders(chat_id):
+    """
+    Generate consistent fake orders for testing purposes.
+    Orders are deterministic based on chat_id to ensure consistency across calls.
+    
+    Args:
+        chat_id: The Telegram chat ID to base fake data on
+        
+    Returns:
+        A list of 3 sample trip dictionaries with realistic pickup/dropoff locations
+    """
+    # Use chat_id to generate consistent but varied fake data
+    seed = chat_id % 3
+    
+    fake_orders_templates = [
+        {
+            "id": f"fake_trip_{chat_id}_001",
+            "pickup": "м. Київ, вул. Хрещатик, 15",
+            "dropoff": "м. Київ, Борисфіль аеропорт",
+            "comment": "Поспішаю на рейс в 14:00"
+        },
+        {
+            "id": f"fake_trip_{chat_id}_002",
+            "pickup": "м. Київ, Центральний залізничний вокзал",
+            "dropoff": "м. Київ, вул. Червоноармійська, 85",
+            "comment": "Обережно з багажем"
+        },
+        {
+            "id": f"fake_trip_{chat_id}_003",
+            "pickup": "м. Київ, ТЦ 'Дніпро'",
+            "dropoff": "м. Київ, вул. Мельникова, 50",
+            "comment": ""
+        }
+    ]
+    
+    return fake_orders_templates
+
+
 def register_handlers(application, user_orders, user_roles, buttons, keyboards, helpers, DEBUGGING=False):
     
     BTN_DRIVER = buttons['BTN_DRIVER']
@@ -19,12 +57,16 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     BTN_GO_ONLINE = buttons['BTN_GO_ONLINE']
     BTN_GO_OFFLINE = buttons['BTN_GO_OFFLINE']
     BTN_DRIVER_STATUS = buttons['BTN_DRIVER_STATUS']
+    BTN_FINISH_TRIP = buttons['BTN_FINISH_TRIP']
     
     driver_menu_unregistered = keyboards['driver_menu_unregistered']
     driver_menu_registered = keyboards['driver_menu_registered']
     
     register_driver_in_service = helpers['register_driver_in_service']
     update_driver_status = helpers['update_driver_status']
+    fetch_driver_trips = helpers['fetch_driver_trips']
+    send_trip_response = helpers['send_trip_response']
+    finish_trip = helpers['finish_trip']
     
     async def select_driver_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
@@ -33,13 +75,14 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         if chat_id in user_roles and isinstance(user_roles[chat_id], dict) and user_roles[chat_id].get('role') == 'driver':
             driver_info = user_roles[chat_id]
             is_online = driver_info.get('status') == 'online'
+            has_active_trip = driver_info.get('active_trip_id') is not None
             await update.message.reply_text(
                 f"\u2705 Ви вже зареєстровані як водій\n\n"
                 f"\U0001F464 Ім'я: {driver_info.get('name')}\n"
                 f"\U0001F697 Авто: {driver_info.get('car_description')}\n"
                 f"\U0001F7E2 Статус: {'На лінії' if is_online else 'Офлайн'}\n\n"
                 "Оберіть опцію:",
-                reply_markup=driver_menu_registered(is_online)
+                reply_markup=driver_menu_registered(is_online, has_active_trip)
             )
         else:
             # New driver - needs registration
@@ -122,7 +165,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                 f"\U0001F194 ID водія: {escape_markdown(driver_id)}\n\n"
                 "\U0001F4A1 Тепер ви можете вийти на лінію та отримувати замовлення.",
                 parse_mode='Markdown',
-                reply_markup=driver_menu_registered(is_online=False)
+                reply_markup=driver_menu_registered(is_online=False, active_trip=False)
             )
         else:
             if DEBUGGING:
@@ -141,7 +184,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     f"\U0001F194 ID водія: {escape_markdown(driver_id)}\n\n"
                     "Ви можете вийти на лінію та отримувати замовлення.",
                     parse_mode='Markdown',
-                    reply_markup=driver_menu_registered(is_online=False)
+                    reply_markup=driver_menu_registered(is_online=False, active_trip=False)
                 )
             else:
                 # Safely extract error message
@@ -210,7 +253,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                 "\U0001F7E2 *Ви на лінії!*\n\n"
                 "\U0001F4E2 Тепер ви будете отримувати нові замовлення.",
                 parse_mode='Markdown',
-                reply_markup=driver_menu_registered(is_online=True)
+                reply_markup=driver_menu_registered(is_online=True, active_trip=False)
             )
         else:
             if DEBUGGING:
@@ -221,7 +264,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     "\u26A0\uFE0F *Режим налагодження*: Статус оновлено\n\n"
                     "\U0001F7E2 Ви на лінії!",
                     parse_mode='Markdown',
-                    reply_markup=driver_menu_registered(is_online=True)
+                    reply_markup=driver_menu_registered(is_online=True, active_trip=False)
                 )
             else:
                 # Safely extract error message
@@ -277,7 +320,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                 "\U0001F534 *Ви офлайн*\n\n"
                 "\U0001F6AB Ви більше не отримуватимете нові замовлення.",
                 parse_mode='Markdown',
-                reply_markup=driver_menu_registered(is_online=False)
+                reply_markup=driver_menu_registered(is_online=False, active_trip=False)
             )
         else:
             if DEBUGGING:
@@ -288,7 +331,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     "\u26A0\uFE0F *Режим налагодження*: Статус оновлено\n\n"
                     "\U0001F534 Ви офлайн",
                     parse_mode='Markdown',
-                    reply_markup=driver_menu_registered(is_online=False)
+                    reply_markup=driver_menu_registered(is_online=False, active_trip=False)
                 )
             else:
                 # Safely extract error message
@@ -324,6 +367,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             return
         
         is_online = driver_info.get('status') == 'online'
+        has_active_trip = driver_info.get('active_trip_id') is not None
         status_emoji = "\U0001F7E2" if is_online else "\U0001F534"
         status_text = "На лінії" if is_online else "Офлайн"
 
@@ -339,7 +383,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             f"\U0001F194 ID: {escape_markdown(safe_driver_id)}\n"
             f"{status_emoji} Статус: *{status_text}*",
             parse_mode='Markdown',
-            reply_markup=driver_menu_registered(is_online)
+            reply_markup=driver_menu_registered(is_online, has_active_trip)
         )
 
     async def show_driver_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -360,17 +404,108 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         
         is_online = driver_info.get('status') == 'online'
         
-        if is_online:
-            await update.message.reply_text(
-                "\U0001F4ED У вас немає нових замовлень\n\n"
-                "\U0001F4A1 Нові замовлення з'являться тут автоматично."
-            )
-        else:
+        if not is_online:
             await update.message.reply_text(
                 "\U0001F534 Ви офлайн\n\n"
                 "\U0001F4A1 Вийдіть на лінію, щоб отримувати замовлення.",
-                reply_markup=driver_menu_registered(is_online=False)
+                reply_markup=driver_menu_registered(is_online=False, active_trip=False)
             )
+            return
+        
+        driver_id = driver_info.get('driver_id')
+        
+        # Show loading message
+        await update.message.reply_text("\u23F3 Завантаження замовлень...")
+        
+        # Fetch trips from Driver Service
+        result = await fetch_driver_trips(driver_id)
+        
+        trips = []
+        
+        if result['success']:
+            trips = result.get('trips', [])
+        elif DEBUGGING:
+            logger.info("[DEBUG] Generating fake orders for driver: chat_id=%s driver_id=%s", chat_id, driver_id)
+            trips = generate_fake_orders(chat_id)
+        else:
+            # API call failed and we're not in debug mode
+            error_obj = result.get('error') if isinstance(result, dict) else None
+            if isinstance(error_obj, dict):
+                error_msg = error_obj.get('message') or 'Невідома помилка'
+                status_code = error_obj.get('status_code', 500)
+            elif isinstance(error_obj, str) and error_obj:
+                error_msg = error_obj
+                status_code = 500
+            else:
+                error_msg = 'Невідома помилка'
+                status_code = 500
+            
+            logger.error("Failed to fetch trips: chat_id=%s driver_id=%s error=%s", chat_id, driver_id, error_msg)
+            
+            await update.message.reply_text(
+                f"\u274C *Помилка отримання замовлень*\n\n{escape_markdown(str(error_msg))}\n\n"
+                "Спробуйте ще раз пізніше.",
+                parse_mode='Markdown',
+                reply_markup=driver_menu_registered(is_online=True, active_trip=False)
+            )
+            return
+        
+        if not trips:
+            if result['success']:
+                logger.info("No pending trips for driver: chat_id=%s driver_id=%s", chat_id, driver_id)
+                await update.message.reply_text(
+                    "\U0001F4ED У вас немає нових замовлень\n\n"
+                    "\U0001F4A1 Нові замовлення з'являться тут автоматично.",
+                    reply_markup=driver_menu_registered(is_online=True, active_trip=False)
+                )
+            return
+        
+        # Prepare debug prefix if we're using fake orders
+        debug_prefix = ""
+        if DEBUGGING and not result['success']:
+            debug_prefix = "\u26A0\uFE0F *Режим налагодження*: Змодельовані замовлення\n\n"
+        
+        logger.info("Found %d pending trips for driver: chat_id=%s driver_id=%s", len(trips), chat_id, driver_id)
+        
+        # Display each trip with Accept/Reject buttons
+        for trip in trips:
+            trip_id = trip.get('id') or trip.get('trip_id') or 'N/A'
+            pickup = trip.get('pickup') or trip.get('pickup_address') or 'Не вказано'
+            dropoff = trip.get('dropoff') or trip.get('dropoff_address') or 'Не вказано'
+            comment = trip.get('comment') or ''
+            
+            text = (
+                "\U0001F6A8 *Нове замовлення*\n\n"
+                f"\U0001F194 ID: `{escape_markdown(str(trip_id))}`\n"
+                f"\U0001F4CD *Звідки:* {escape_markdown(str(pickup))}\n"
+                f"\U0001F3C1 *Куди:* {escape_markdown(str(dropoff))}\n"
+            )
+            
+            if comment:
+                text += f"\U0001F4AC *Коментар:* {escape_markdown(str(comment))}\n"
+            
+            markup = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("\u2705 Прийняти", callback_data=f"accept_trip_{trip_id}"),
+                    InlineKeyboardButton("\u274C Відхилити", callback_data=f"decline_trip_{trip_id}")
+                ]
+            ])
+            
+            await update.message.reply_text(
+                text,
+                parse_mode='Markdown',
+                reply_markup=markup
+            )
+        
+        summary_text = f"\U0001F4CB Знайдено замовлень: {len(trips)}"
+        if debug_prefix:
+            summary_text = debug_prefix + summary_text
+        
+        await update.message.reply_text(
+            summary_text,
+            parse_mode='Markdown',
+            reply_markup=driver_menu_registered(is_online=True, active_trip=False)
+        )
 
     async def accept_trip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
@@ -379,12 +514,230 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         trip_id = query.data.replace('accept_trip_', '')
         chat_id = query.message.chat.id
         
-        logger.info("Driver %s accepted trip %s", chat_id, trip_id)
+        # Get driver info
+        driver_info = user_roles.get(chat_id)
+        if not driver_info or not isinstance(driver_info, dict) or not driver_info.get('registered'):
+            logger.warning("Accept trip attempted by unregistered driver: chat_id=%s trip_id=%s", chat_id, trip_id)
+            await query.edit_message_text(
+                text="\u274C Ви не зареєстровані як водій.",
+                parse_mode='Markdown'
+            )
+            return
         
+        driver_id = driver_info.get('driver_id')
+        
+        logger.info("Driver accepting trip: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, trip_id)
+        
+        # Show processing state
         await query.edit_message_text(
-            text=f"\u2705 Ви прийняли замовлення {trip_id}\n\nЗв'яжіться з клієнтом.",
+            text=f"\u23F3 Приймаємо замовлення {escape_markdown(str(trip_id))}...",
             parse_mode='Markdown'
         )
+        
+        # Call Driver Service
+        result = await send_trip_response(driver_id, trip_id, 'accept')
+        
+        if result['success']:
+            # Set driver offline after accepting trip and store active trip
+            user_roles[chat_id]['status'] = 'offline'
+            user_roles[chat_id]['active_trip_id'] = trip_id
+            
+            logger.info("Trip accepted successfully: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, trip_id)
+            await query.edit_message_text(
+                text=(
+                    f"\u2705 *Замовлення прийнято!*\n\n"
+                    f"\U0001F194 ID: `{escape_markdown(str(trip_id))}`\n\n"
+                    "\U0001F4DE Зв'яжіться з клієнтом для уточнення деталей.\n"
+                    "\U0001F534 Ви перейшли в офлайн."
+                ),
+                parse_mode='Markdown'
+            )
+            
+            # Automatically refresh status with updated menu
+            try:
+                await query.message.reply_text(
+                    f"\U0001F4CA *Ваш статус*\n\n"
+                    f"\U0001F464 Ім'я: {escape_markdown(str(user_roles[chat_id].get('name') or ''))}\n"
+                    f"\U0001F697 Авто: {escape_markdown(str(user_roles[chat_id].get('car_description') or ''))}\n"
+                    f"\U0001F194 ID: {escape_markdown(str(driver_id))}\n"
+                    f"\U0001F534 Статус: *Офлайн (активна поїздка)*",
+                    parse_mode='Markdown',
+                    reply_markup=driver_menu_registered(is_online=False, active_trip=True)
+                )
+                
+                # Send message about active trip
+                await query.message.reply_text(
+                    f"\U0001F6A8 *Активна поїздка*\n\n"
+                    f"\U0001F194 ID поїздки: `{escape_markdown(str(trip_id))}`\n\n"
+                    f"📍 Відправна точка: {escape_markdown(str(result.get('pickup_address') or 'Не вказано'))}\n"
+                    f"🏁 Точка призначення: {escape_markdown(str(result.get('dropoff_address') or 'Не вказано'))}\n\n"
+                    "🏁 Натисніть кнопку *Завершити поїздку* коли закінчите",
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                logger.warning("Failed to send status refresh after trip acceptance: %s", e)
+        else:
+            if DEBUGGING:
+                # Set driver offline in debug mode as well
+                user_roles[chat_id]['status'] = 'offline'
+                user_roles[chat_id]['active_trip_id'] = trip_id
+                
+                logger.info("[DEBUG] Mocking trip acceptance: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, trip_id)
+                await query.edit_message_text(
+                    text=(
+                        "\u26A0\uFE0F *Режим налагодження*\n\n"
+                        f"\u2705 Замовлення {escape_markdown(str(trip_id))} прийнято\n"
+                        "\U0001F534 Ви перейшли в офлайн."
+                    ),
+                    parse_mode='Markdown'
+                )
+                
+                # Automatically refresh status with updated menu in debug mode
+                try:
+                    await query.message.reply_text(
+                        f"\U0001F4CA *Ваш статус*\n\n"
+                        f"\U0001F464 Ім'я: {escape_markdown(str(user_roles[chat_id].get('name') or ''))}\n"
+                        f"\U0001F697 Авто: {escape_markdown(str(user_roles[chat_id].get('car_description') or ''))}\n"
+                        f"\U0001F194 ID: {escape_markdown(str(driver_id))}\n"
+                        f"\U0001F534 Статус: *Офлайн (активна поїздка)*",
+                        parse_mode='Markdown',
+                        reply_markup=driver_menu_registered(is_online=False, active_trip=True)
+                    )
+                    
+                    # Send message about active trip in debug mode
+                    await query.message.reply_text(
+                        f"\U0001F6A8 *Активна поїздка*\n\n"
+                        f"\U0001F194 ID поїздки: `{escape_markdown(str(trip_id))}`\n\n"
+                        "✅ Поїздка готова до початку\n"
+                        "📱 Зв'яжіться з пасажиром\n"
+                        "🏁 Натисніть кнопку *Завершити поїздку* коли закінчите",
+                        parse_mode='Markdown'
+                    )
+                except Exception as e:
+                    logger.warning("Failed to send status refresh after trip acceptance in debug mode: %s", e)
+            else:
+                error_obj = result.get('error') if isinstance(result, dict) else None
+                if isinstance(error_obj, dict):
+                    error_msg = error_obj.get('message') or 'Невідома помилка'
+                    status_code = error_obj.get('status_code', 500)
+                elif isinstance(error_obj, str) and error_obj:
+                    error_msg = error_obj
+                    status_code = 500
+                else:
+                    error_msg = 'Невідома помилка'
+                    status_code = 500
+                
+                logger.error("Failed to accept trip: chat_id=%s driver_id=%s trip_id=%s error=%s status=%d", 
+                           chat_id, driver_id, trip_id, error_msg, status_code)
+                
+                # Specific message for expired trips
+                if status_code == 410:
+                    await query.edit_message_text(
+                        text=(
+                            f"\u23F0 *Замовлення недоступне*\n\n"
+                            f"\U0001F194 ID: `{escape_markdown(str(trip_id))}`\n\n"
+                            "Це замовлення вже прийняте іншим водієм або закінчився час очікування."
+                        ),
+                        parse_mode='Markdown'
+                    )
+                elif status_code == 404:
+                    await query.edit_message_text(
+                        text=(
+                            f"\u274C *Замовлення не знайдено*\n\n"
+                            f"\U0001F194 ID: `{escape_markdown(str(trip_id))}`\n\n"
+                            "Можливо, замовлення було скасовано."
+                        ),
+                        parse_mode='Markdown'
+                    )
+                else:
+                    await query.edit_message_text(
+                        text=(
+                            f"\u274C *Помилка*\n\n"
+                            f"{escape_markdown(str(error_msg))}\n\n"
+                            "Спробуйте ще раз пізніше."
+                        ),
+                        parse_mode='Markdown'
+                    )
+    
+    async def finish_trip_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        
+        # Get driver info
+        driver_info = user_roles.get(chat_id)
+        if not driver_info or not isinstance(driver_info, dict) or not driver_info.get('registered'):
+            await update.message.reply_text(
+                "\u274C Ви не зареєстровані як водій.",
+                reply_markup=driver_menu_unregistered()
+            )
+            return
+        
+        active_trip_id = driver_info.get('active_trip_id')
+        if not active_trip_id:
+            await update.message.reply_text(
+                "\u274C У вас немає активної поїздки.",
+                reply_markup=driver_menu_registered(is_online=False, active_trip=False)
+            )
+            return
+        
+        driver_id = driver_info.get('driver_id')
+        
+        logger.info("Driver finishing trip: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, active_trip_id)
+        
+        # Show processing message
+        await update.message.reply_text(f"\u23F3 Завершуємо поїздку {escape_markdown(str(active_trip_id))}...", parse_mode='Markdown')
+        
+        # Call finish_trip helper
+        result = await finish_trip(driver_id, active_trip_id)
+        
+        if result['success']:
+            # Clear active trip and keep driver offline
+            user_roles[chat_id]['active_trip_id'] = None
+            
+            logger.info("Trip finished successfully: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, active_trip_id)
+            
+            await update.message.reply_text(
+                f"\U0001F3C1 *Поїздку завершено!*\n\n"
+                f"\U0001F194 ID: `{escape_markdown(str(active_trip_id))}`\n\n"
+                "\U0001F4B5 Дякуємо за роботу!\n"
+                "\U0001F7E2 Вийдіть на лінію, щоб отримувати нові замовлення.",
+                parse_mode='Markdown',
+                reply_markup=driver_menu_registered(is_online=False, active_trip=False)
+            )
+        else:
+            if DEBUGGING:
+                # Clear active trip in debug mode
+                user_roles[chat_id]['active_trip_id'] = None
+                
+                logger.info("[DEBUG] Mocking trip completion: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, active_trip_id)
+                
+                await update.message.reply_text(
+                    "\u26A0\uFE0F *Режим налагодження*\n\n"
+                    f"\U0001F3C1 Поїздку {escape_markdown(str(active_trip_id))} завершено",
+                    parse_mode='Markdown',
+                    reply_markup=driver_menu_registered(is_online=False, active_trip=False)
+                )
+            else:
+                error_obj = result.get('error') if isinstance(result, dict) else None
+                if isinstance(error_obj, dict):
+                    error_msg = error_obj.get('message') or 'Невідома помилка'
+                    status_code = error_obj.get('status_code', 500)
+                elif isinstance(error_obj, str) and error_obj:
+                    error_msg = error_obj
+                    status_code = 500
+                else:
+                    error_msg = 'Невідома помилка'
+                    status_code = 500
+                
+                logger.error("Failed to finish trip: chat_id=%s driver_id=%s trip_id=%s error=%s status=%d", 
+                           chat_id, driver_id, active_trip_id, error_msg, status_code)
+                
+                await update.message.reply_text(
+                    f"\u274C *Помилка*\n\n"
+                    f"{escape_markdown(str(error_msg))}\n\n"
+                    "Спробуйте ще раз пізніше.",
+                    parse_mode='Markdown',
+                    reply_markup=driver_menu_registered(is_online=False, active_trip=True)
+                )
     
     async def decline_trip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
@@ -393,12 +746,92 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         trip_id = query.data.replace('decline_trip_', '')
         chat_id = query.message.chat.id
         
-        logger.info("Driver %s declined trip %s", chat_id, trip_id)
+        # Get driver info
+        driver_info = user_roles.get(chat_id)
+        if not driver_info or not isinstance(driver_info, dict) or not driver_info.get('registered'):
+            logger.warning("Decline trip attempted by unregistered driver: chat_id=%s trip_id=%s", chat_id, trip_id)
+            await query.edit_message_text(
+                text="\u274C Ви не зареєстровані як водій.",
+                parse_mode='Markdown'
+            )
+            return
         
+        driver_id = driver_info.get('driver_id')
+        
+        logger.info("Driver declining trip: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, trip_id)
+        
+        # Show processing state
         await query.edit_message_text(
-            text=f"\u274C Ви відхилили замовлення {trip_id}",
+            text=f"\u23F3 Відхиляємо замовлення {escape_markdown(str(trip_id))}...",
             parse_mode='Markdown'
         )
+        
+        # Call Driver Service
+        result = await send_trip_response(driver_id, trip_id, 'reject')
+        
+        if result['success']:
+            logger.info("Trip declined successfully: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, trip_id)
+            await query.edit_message_text(
+                text=(
+                    f"\u274C *Замовлення відхилено*\n\n"
+                    f"\U0001F194 ID: `{escape_markdown(str(trip_id))}`\n\n"
+                    "Ви можете переглянути інші замовлення."
+                ),
+                parse_mode='Markdown'
+            )
+        else:
+            if DEBUGGING:
+                logger.info("[DEBUG] Mocking trip rejection: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, trip_id)
+                await query.edit_message_text(
+                    text=(
+                        "\u26A0\uFE0F *Режим налагодження*\n\n"
+                        f"\u274C Замовлення {escape_markdown(str(trip_id))} відхилено"
+                    ),
+                    parse_mode='Markdown'
+                )
+            else:
+                error_obj = result.get('error') if isinstance(result, dict) else None
+                if isinstance(error_obj, dict):
+                    error_msg = error_obj.get('message') or 'Невідома помилка'
+                    status_code = error_obj.get('status_code', 500)
+                elif isinstance(error_obj, str) and error_obj:
+                    error_msg = error_obj
+                    status_code = 500
+                else:
+                    error_msg = 'Невідома помилка'
+                    status_code = 500
+                
+                logger.error("Failed to decline trip: chat_id=%s driver_id=%s trip_id=%s error=%s status=%d", 
+                           chat_id, driver_id, trip_id, error_msg, status_code)
+                
+                # Specific message for expired trips
+                if status_code == 410:
+                    await query.edit_message_text(
+                        text=(
+                            f"\u23F0 *Замовлення недоступне*\n\n"
+                            f"\U0001F194 ID: `{escape_markdown(str(trip_id))}`\n\n"
+                            "Це замовлення вже оброблене або закінчився час очікування."
+                        ),
+                        parse_mode='Markdown'
+                    )
+                elif status_code == 404:
+                    await query.edit_message_text(
+                        text=(
+                            f"\u274C *Замовлення не знайдено*\n\n"
+                            f"\U0001F194 ID: `{escape_markdown(str(trip_id))}`\n\n"
+                            "Можливо, замовлення було скасовано."
+                        ),
+                        parse_mode='Markdown'
+                    )
+                else:
+                    await query.edit_message_text(
+                        text=(
+                            f"\u274C *Помилка*\n\n"
+                            f"{escape_markdown(str(error_msg))}\n\n"
+                            "Спробуйте ще раз пізніше."
+                        ),
+                        parse_mode='Markdown'
+                    )
 
     # Expose inner handlers to module-level so tests can invoke them directly.
     # They close over the `user_orders` and `user_roles` passed to `register_handlers`.
@@ -408,6 +841,10 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     globals()['go_online_handler'] = go_online
     globals()['go_offline_handler'] = go_offline
     globals()['show_driver_status_handler'] = show_driver_status
+    globals()['show_driver_orders_handler'] = show_driver_orders
+    globals()['accept_trip_handler'] = accept_trip
+    globals()['decline_trip_handler'] = decline_trip
+    globals()['finish_trip_handler'] = finish_trip_handler
 
     # Registration conversation handler
     registration_handler = ConversationHandler(
@@ -430,6 +867,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_GO_ONLINE)}$"), go_online))
     application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_GO_OFFLINE)}$"), go_offline))
     application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_DRIVER_STATUS)}$"), show_driver_status))
+    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_FINISH_TRIP)}$"), finish_trip_handler))
     application.add_handler(CallbackQueryHandler(accept_trip, pattern="^accept_trip_"))
     application.add_handler(CallbackQueryHandler(decline_trip, pattern="^decline_trip_"))
 
