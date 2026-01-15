@@ -83,6 +83,7 @@ async def test_process_driver_car_handler_service_unavailable(mock_update, mock_
         'update_driver_status': AsyncMock(),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
+        'finish_trip': AsyncMock(return_value={'success': True}),
     }
     application = MagicMock()
 
@@ -132,6 +133,7 @@ async def test_process_driver_car_handler_timeout(mock_update, mock_context):
         'update_driver_status': AsyncMock(),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
+        'finish_trip': AsyncMock(return_value={'success': True}),
     }
     application = MagicMock()
 
@@ -261,6 +263,7 @@ async def test_driver_info_persistence(mock_update, mock_context):
         'update_driver_status': AsyncMock(),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
+        'finish_trip': AsyncMock(return_value={'success': True}),
     }
 
     application = MagicMock()
@@ -314,6 +317,7 @@ async def test_driver_status_update(mock_update, mock_context):
         'update_driver_status': mock_update_status,
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
+        'finish_trip': AsyncMock(return_value={'success': True}),
     }
 
     application = MagicMock()
@@ -366,6 +370,7 @@ async def test_go_online_handler_service_unavailable(mock_update, mock_context):
         'update_driver_status': mock_update_status,
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
+        'finish_trip': AsyncMock(return_value={'success': True}),
     }
 
     application = MagicMock()
@@ -402,6 +407,7 @@ def _build_driver_helpers(register_return=None):
         'update_driver_status': AsyncMock(),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
+        'finish_trip': AsyncMock(return_value={'success': True}),
     }, register_mock
 
 
@@ -500,6 +506,7 @@ async def test_driver_car_validation_accepts_valid_description(mock_update, mock
         'update_driver_status': AsyncMock(),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
+        'finish_trip': AsyncMock(return_value={'success': True}),
     }
     application = MagicMock()
     driver.register_handlers(
@@ -549,6 +556,7 @@ def _build_trip_helpers(fetch_trips_response=None, trip_response_result=None):
         'update_driver_status': AsyncMock(),
         'fetch_driver_trips': fetch_mock,
         'send_trip_response': send_response_mock,
+        'finish_trip': AsyncMock(return_value={'success': True}),
     }, fetch_mock, send_response_mock
 
 
