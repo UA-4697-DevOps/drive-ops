@@ -1,39 +1,78 @@
 ---
-- name: Prepare Debian VM for Docker services
+# Playbook to prepare environment for Drive-Ops services
+# Target group 'local_vm' ensures explicit targeting per peer review
+- name: Prepare Local VM for Independent Docker services
   hosts: local_vm
   become: true
   gather_facts: true
   
   vars:
-    docker_users:
-      - vagrant
+    # Default source root for Vagrant, can be overridden for CI/CD, Prod, or WSL
+    drive_ops_src_root: "/vagrant"
+    # Build strategy: 'always' for dev hot-reloads, 'policy' for stable environments
+    docker_build_strategy: "always"
+    # FIXED: Deduplicating user list using Jinja2 'unique' filter to avoid redundant entries
+    # This handles cases where 'ansible_user_id' is already 'vagrant'
+    docker_users: "{{ (['vagrant', ansible_user_id]) | unique }}"
   
   pre_tasks:
     - name: Update apt cache
-      apt:
+      ansible.builtin.apt:
         update_cache: yes
         cache_valid_time: 3600
       tags: always
     
+    - name: Install general system dependencies and utilities
+      # FIXED: Moved general tools (git, vim, htop, etc.) here from the Docker role
+      # This follows the 'Separation of Concerns' principle for cleaner roles
+      ansible.builtin.apt:
+        name:
+          - python3-pip
+          - build-essential
+          - dkms
+          - curl
+          - git
+          - vim
+          - htop
+          - net-tools
+        state: present
+      tags: always
+
+    - name: Install kernel headers (Skip on WSL)
+      # Standard headers are unavailable for custom Microsoft WSL 2 kernels
+      ansible.builtin.apt:
+        name: "linux-headers-{{ ansible_kernel }}"
+        state: present
+      when: "'microsoft' not in ansible_kernel | lower"
+      tags: always
+
     - name: Upgrade all packages
-      apt:
+      ansible.builtin.apt:
         upgrade: dist
         autoremove: yes
-        autoclean: yes
       tags: upgrade
 
   roles:
-    - role: docker
-    - role: client-gateway
+    # 1. Base Docker Engine installation with dearmored keys and arch mapping
+    - { role: docker, tags: [ docker ] }
+
+    # 2. Shared Infrastructure (DB, MQ, and Centralized Configs)
+    - { role: infra, tags: [ infrastructure, infra ] }
+
+    # 3. Independent Services (Microservices stack)
+    - { role: trip-service, tags: [ infrastructure, trip ] }
+    - { role: client-gateway, tags: [ infrastructure, gateway ] }
+    - { role: driver-service, tags: [ infrastructure, driver ] }
 
   post_tasks:
     - name: Print completion message
-      debug:
+      ansible.builtin.debug:
         msg: 
           - "========================================"
-          - " VM is configured and ready!"
-          - "========================================"
-          - "{{ docker_version.stdout }}"
-          - "{{ docker_compose_version.stdout }}"
+          - " Infrastructure is ready!"
+          - " Target group: {{ ansible_limit | default('local_vm') }}"
+          - " Source root: {{ drive_ops_src_root }}"
+          - " Users added to docker group: {{ docker_users | join(', ') }}"
+          - " Deployment of {{ ansible_run_tags | default(['all']) | join(', ') }} completed!"
           - "========================================"
       tags: always

@@ -1,40 +1,23 @@
 ---
-# 0. Define a single project root variable to avoid repetitive relative paths
-- name: Set project root path
-  ansible.builtin.set_fact:
-    project_root: "{{ playbook_dir }}/../.."
-  tags: [ infrastructure, docker ]
+# Tasks for Client Gateway (Python-based Telegram Bot)
 
-# 1. Check if the environment configuration file exists
-- name: Verify .env file existence
-  ansible.builtin.stat:
-    path: "{{ project_root }}/.env"
-  register: env_file
-  tags: [ infrastructure, docker ]
+- name: Link client-gateway source code (Flexible Environment)
+  # Links Python source code to the project root for development hot-reloading
+  # Redundant directory creation is skipped as it is handled by the 'infra' role
+  ansible.builtin.file:
+    src: "{{ drive_ops_src_root }}/client-gateway"
+    dest: "/opt/drive-ops/client-gateway"
+    state: link
+    force: yes
+  tags: [ infrastructure, gateway ]
 
-# 2. Comprehensive Fail-Fast check: existence + mandatory keys (Bot, DB, MQ)
-- name: Validate .env file availability and content
-  ansible.builtin.fail:
-    msg: |
-      CRITICAL CONFIGURATION ERROR: The .env file is missing or incomplete!
-      Please ensure {{ project_root }}/.env contains:
-      - BOT_TOKEN (for Telegram gateway)
-      - DB_USER & DB_PASSWORD (for Postgres)
-      - RABBITMQ_USER & RABBITMQ_PASSWORD (for message broker)
-  when: >
-    not env_file.stat.exists or 
-    'BOT_TOKEN' not in lookup('file', project_root + '/.env') or
-    'RABBITMQ_USER' not in lookup('file', project_root + '/.env') or
-    'DB_USER' not in lookup('file', project_root + '/.env')
-  tags: [ infrastructure, docker ]
-
-# 3. Orchestrate the deployment of the entire drive-ops microservices stack
-# This includes: db (Postgres), mq (RabbitMQ), trip-service (Go), and python services
-- name: Deploy drive-ops stack via Docker Compose
+- name: Start Client Gateway service
+  # Deploys the Telegram bot container via Docker Compose
+  # Uses the centralized build strategy to optimize deployment time
   community.docker.docker_compose_v2:
-    project_src: "{{ project_root }}"
+    project_src: "/opt/drive-ops"
     state: present
-    build: policy
-    pull: missing
-    wait: yes
-  tags: [ infrastructure, docker ]
+    services:
+      - "client-gateway"
+    build: "{{ docker_build_strategy | default('policy') }}"
+  tags: [ infrastructure, gateway ]
