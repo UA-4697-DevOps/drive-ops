@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import re
+import uuid
 import httpx
 import warnings
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
@@ -236,11 +237,13 @@ async def submit_trip_request(chat_id, order):
     start_time = time.time()
     correlation_id = generate_correlation_id()
     
+    # Generate deterministic UUID from chat_id for passenger_id
+    passenger_uuid = order.get('passenger_id') or str(uuid.uuid5(uuid.NAMESPACE_DNS, f"telegram-{chat_id}"))
+
     payload = {
         'pickup': order.get('pickup'),
         'dropoff': order.get('dropoff'),
-        'passenger_id': order.get('passenger_id') or str(chat_id),
-        'comment': order.get('comment'),
+        'passenger_id': passenger_uuid,
     }
     
     request_id = f"REQ-{chat_id}-{int(time.time())}"
@@ -254,8 +257,8 @@ async def submit_trip_request(chat_id, order):
     try:
         url = f"{TRIP_SERVICE_URL}/trips"
         logger.info(
-            "Sending POST %s with pickup=%s, dropoff=%s",
-            url, payload['pickup'], payload['dropoff'],
+            "Sending POST %s with payload=%s",
+            url, payload,
             extra={'correlationId': correlation_id}
         )
         
