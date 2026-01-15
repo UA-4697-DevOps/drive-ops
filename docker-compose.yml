@@ -1,4 +1,7 @@
 services:
+  # --- Shared Infrastructure ---
+  
+  # PostgreSQL Database
   db:
     image: postgres:15-alpine
     container_name: drive-ops-db
@@ -8,6 +11,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${TRIP_DB_NAME}
     healthcheck:
+      # Use native postgres utility to check readiness
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${TRIP_DB_NAME}"]
       interval: 5s
       timeout: 5s
@@ -21,6 +25,7 @@ services:
     networks:
       - drive-ops-net
 
+  # RabbitMQ Message Broker
   mq:
     image: rabbitmq:3-management-alpine
     container_name: drive-ops-mq
@@ -29,6 +34,7 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     healthcheck:
+      # Ensure RabbitMQ nodes are fully running
       test: ["CMD-SHELL", "rabbitmq-diagnostics -q check_running"]
       interval: 10s
       timeout: 5s
@@ -42,6 +48,78 @@ services:
     networks:
       - drive-ops-net
 
+  # --- Microservices Stack ---
+
+  # Database Migrations for Trip Service
+  trip-migrations:
+    build:
+      context: ./trip-service
+      dockerfile: Dockerfile.migrations
+    container_name: trip-migrations
+    env_file: .env
+    # Executes migrations and exits
+    command: -path=/migrations/ -database "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${TRIP_DB_NAME}?sslmode=disable" up
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - drive-ops-net
+
+  # Trip Service (Go)
+  trip-service:
+    build:
+      context: ./trip-service
+      dockerfile: Dockerfile
+    container_name: trip-service
+    restart: always
+    env_file: .env
+    ports:
+      - "8081:8081"
+    healthcheck:
+      # Linked to the /health endpoint in Go source code
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      db:
+        condition: service_healthy
+      mq:
+        condition: service_healthy
+      trip-migrations:
+        condition: service_completed_successfully
+    networks:
+      - drive-ops-net
+
+  # Driver Service (Python/FastAPI)
+  driver-service:
+    build:
+      context: ./driver-service
+      dockerfile: Dockerfile
+    container_name: driver-service
+    restart: always
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8082:8082" # Unified internal and external port
+    healthcheck:
+      # Linked to the @app.get("/health") endpoint in FastAPI
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      db:
+        condition: service_healthy
+      mq:
+        condition: service_healthy
+    networks:
+      - drive-ops-net
+
+  # Client Gateway (Telegram Bot)
   client-gateway:
     build:
       context: ./client-gateway
@@ -55,72 +133,12 @@ services:
       - "8080:8080"
     depends_on:
       trip-service:
-        condition: service_healthy
-      #driver-service:
-      #  condition: service_healthy
-    networks:
-      - drive-ops-net
-
-  trip-migrations:
-    build:
-      context: ./trip-service
-      dockerfile: Dockerfile.migrations
-    container_name: trip-migrations
-    env_file: .env
-    command: -path=/migrations/ -database "postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${TRIP_DB_NAME}?sslmode=disable" up
-    depends_on:
-      db:
+        # Ensures the bot only starts when the backend is ready to accept requests
         condition: service_healthy
     networks:
       - drive-ops-net
 
-  trip-service:
-    build:
-      context: ./trip-service
-      dockerfile: Dockerfile
-    container_name: trip-service
-    restart: always
-    env_file: .env
-    ports:
-      - "8081:8081"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    depends_on:
-      db:
-        condition: service_healthy
-      mq:
-        condition: service_healthy
-    networks:
-      - drive-ops-net
-
-  driver-service:
-    build:
-      context: ./driver-service
-      dockerfile: Dockerfile
-    container_name: driver-service
-    restart: always
-    env_file: .env
-    environment:
-      - PYTHONUNBUFFERED=1
-    ports:
-      - "8082:8082"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    depends_on:
-      db:
-        condition: service_healthy
-      mq:
-        condition: service_healthy
-    networks:
-      - drive-ops-net
+# --- Infrastructure Definitions ---
 
 networks:
   drive-ops-net:
