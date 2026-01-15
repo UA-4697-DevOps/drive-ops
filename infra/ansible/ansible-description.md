@@ -38,7 +38,7 @@ Mandatory variables:
 * **`infrastructure`** — This is a "group" tag. It runs everything related to the application stack, including the shared infrastructure (DB/MQ) and all microservices (infra, trip-service, and client-gateway).
 * **`infra`** — Deploys the shared infrastructure (PostgreSQL and RabbitMQ) and copies core configuration files.
 * **`docker`** — Installs the Docker Engine and system-level dependencies.
-* **`trip` / `gateway`** — Deploy specific microservices (Go Trip Service or Python Gateway) individually.
+* **`trip` / `gateway`/ `driver`** — Deploy specific microservices (Go Trip Service or Python Gateway) individually.
 * **`always`** — Tasks that run every time (e.g., updating the package cache and printing the final status report).
 * **`upgrade`** — Explicitly used to perform a sudo apt upgrade on the host machine.
 
