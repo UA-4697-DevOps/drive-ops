@@ -3,14 +3,21 @@ This directory contains Ansible playbooks and roles designed to automate the dep
 
 ## 📋 Prerequisites
 Before running the playbook, ensure the following requirements are met:
-* Docker Desktop is running on your OS.
-* Ansible is installed.
-* .env file with your credentials is created
-### If dont want to search or create bot_token. write  me (Davlit) in discord to get token
+* **Repository**: Clone the GitHub repository and checkout the desired branch.
+* **Ansible**: Ensure Ansible is installed on your local machine or WSL.
+* **Environment**: A `.env` file with your credentials must be created in the project root.
 ```bash
 cp .env.example .env
 vi .env
 ```
+### If dont want to search or create bot_token. write  me (Davlit) in discord to get token
+* **Docker Engine**:
+
+| Option | Environment | Requirement | Command Flag |
+| :--- | :--- | :--- | :--- |
+| **Option 1** | **No Docker Desktop** | (WSL/Linux) | No extra flags needed. |
+| **Option 2** | **With Docker Desktop** | Docker Desktop running + WSL Integration enabled | Add `--skip-tags docker` to q-start command|
+
 * The Docker community collection is installed:
 ```bash
 ansible-galaxy collection install community.docker
@@ -38,7 +45,7 @@ Mandatory variables:
 * **`infrastructure`** — This is a "group" tag. It runs everything related to the application stack, including the shared infrastructure (DB/MQ) and all microservices (infra, trip-service, and client-gateway).
 * **`infra`** — Deploys the shared infrastructure (PostgreSQL and RabbitMQ) and copies core configuration files.
 * **`docker`** — Installs the Docker Engine and system-level dependencies.
-* **`trip` / `gateway`** — Deploy specific microservices (Go Trip Service or Python Gateway) individually.
+* **`trip` / `gateway` / `driver`** — Deploy specific microservices (Go Trip Service, Python Gateway, Python Driver Service) individually.
 * **`always`** — Tasks that run every time (e.g., updating the package cache and printing the final status report).
 * **`upgrade`** — Explicitly used to perform a sudo apt upgrade on the host machine.
 
@@ -69,4 +76,33 @@ docker logs client-gateway-bot
 * Migration Logs: Run command to ensure the database schema was applied correctly.
 ```bash
 docker logs trip-migrations
+```
+## 🧹 Clean Up & Environment Reset
+
+Follow these steps to completely remove the deployed infrastructure and reclaim system resources. This procedure ensures a "clean slate" for testing deployments from scratch.
+
+### 1. Stop Services and Wipe Data
+This command stops all containers and **permanently deletes** persistent volumes (resetting database and message broker state).
+```bash
+sudo docker compose -f /opt/drive-ops/docker-compose.yml down -v
+```
+### 2. Remove Deployment Directory
+Delete the /opt/drive-ops directory, which removes all configuration files and the symbolic links created by Ansible.
+```bash
+sudo rm -rf /opt/drive-ops
+```
+### 3. Deep System Prune (Optional)
+
+Reclaim disk space by removing all unused Docker images, networks, and build cache. 
+
+> [!WARNING]
+> This will remove **all** images not currently used by a container, not just those from the `drive-ops` project.
+
+```bash
+docker system prune -a
+```
+## 🚀 To Redeploy
+To start the entire stack again on a clean system:
+```bash
+ansible-playbook -i infra/ansible/inventory/localhost infra/ansible/playbook.yaml -e "drive_ops_src_root=$(pwd)" -K
 ```
