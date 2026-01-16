@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import re
+import uuid
 import httpx
 import warnings
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
@@ -221,26 +222,65 @@ async def safe_edit_message_text(chat_id, message_id, text, context, **kwargs):
         logger.exception("Failed to edit message %s/%s: %s", chat_id, message_id, e)
         return None
 
+def sanitize_payload(payload):
+    """
+    Sanitize payload by masking PII fields (addresses, locations).
+
+    Args:
+        payload: Dictionary with trip data
+
+    Returns:
+        Dictionary with sensitive fields masked
+    """
+    sanitized = payload.copy()
+
+    # Mask address fields
+    pii_fields = ['pickup', 'dropoff', 'address', 'location']
+    for field in pii_fields:
+        if field in sanitized and sanitized[field]:
+            # Show only first 3 chars + ***
+            value = str(sanitized[field])
+            sanitized[field] = f"{value[:3]}***" if len(value) > 3 else "***"
+
+    return sanitized
+
 async def submit_trip_request(chat_id, order):
     """
     Submit a trip request to the trip service.
     Logs the full lifecycle: request init -> validation -> response.
-    
+
     Args:
         chat_id: Telegram user chat ID
-        order: Dictionary with 'pickup', 'dropoff', 'comment' fields
-    
+        order: Dictionary with 'pickup' and 'dropoff' fields
+
     Returns:
         Dictionary with success status, trip_id, error details, etc.
     """
     start_time = time.time()
     correlation_id = generate_correlation_id()
-    
+
+    # Validate and normalize passenger_id
+    provided_passenger_id = order.get('passenger_id')
+    if provided_passenger_id:
+        try:
+            # Validate it's a proper UUID format
+            uuid.UUID(str(provided_passenger_id))
+            passenger_uuid = str(provided_passenger_id)
+        except (ValueError, AttributeError):
+            # Invalid UUID, fall back to generated one
+            logger.warning(
+                "Invalid passenger_id provided: %s, generating deterministic UUID",
+                provided_passenger_id
+            )
+            passenger_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"telegram-{chat_id}"))
+    else:
+        # No passenger_id provided, generate deterministic UUID from chat_id
+        passenger_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"telegram-{chat_id}"))
+
     payload = {
         'pickup': order.get('pickup'),
         'dropoff': order.get('dropoff'),
-        'passenger_id': order.get('passenger_id') or str(chat_id),
-        'comment': order.get('comment'),
+        'passenger_id': passenger_uuid,
     }
     
     request_id = f"REQ-{chat_id}-{int(time.time())}"
@@ -253,9 +293,11 @@ async def submit_trip_request(chat_id, order):
     
     try:
         url = f"{TRIP_SERVICE_URL}/trips"
+        # Sanitize payload before logging to protect PII
+        sanitized_payload = sanitize_payload(payload)
         logger.info(
-            "Sending POST %s with pickup=%s, dropoff=%s",
-            url, payload['pickup'], payload['dropoff'],
+            "Sending POST %s with payload=%s",
+            url, sanitized_payload,
             extra={'correlationId': correlation_id}
         )
         
