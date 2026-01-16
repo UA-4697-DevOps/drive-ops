@@ -103,7 +103,7 @@ class TripEventsConsumer:
                 "comment": None
             }
             
-            notified_drivers = await self.notification_service.notify_nearby_drivers(
+            selected_driver_id = await self.notification_service.select_and_notify_driver(
                 trip_id=trip_id,
                 pickup_latitude=pickup_lat,
                 pickup_longitude=pickup_lng,
@@ -111,10 +111,10 @@ class TripEventsConsumer:
                 radius_km=5.0
             )
             
-            logger.info(
-                f"Trip {trip_id} processing complete. "
-                f"Notified {len(notified_drivers)} drivers: {notified_drivers}"
-            )
+            if selected_driver_id:
+                logger.info(f"Trip {trip_id} processing complete. Assigned search to driver: {selected_driver_id}")
+            else:
+                logger.warning(f"Trip {trip_id} processing complete. No driver selected/notified.")
             
         except Exception as e:
             logger.error(

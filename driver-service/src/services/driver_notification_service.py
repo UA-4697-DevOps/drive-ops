@@ -88,55 +88,61 @@ class DriverNotificationService:
         )
         return False
     
-    async def notify_nearby_drivers(
+    async def select_and_notify_driver(
         self,
         trip_id: str,
         pickup_latitude: float,
         pickup_longitude: float,
         notification_data: dict,
         radius_km: float = 5.0
-    ) -> List[str]:
-        """Find and notify nearby available drivers"""
+    ) -> str:
+        """
+        Select the best available driver and notify them.
+        Returns driver_id if successful, None otherwise.
+        """
         # Find nearby available drivers
         nearby_drivers = find_nearby_drivers(
             drivers=self.drivers,
             pickup_lat=pickup_latitude,
             pickup_lng=pickup_longitude,
             radius_km=radius_km,
-            max_drivers=10
+            max_drivers=10 # Get top 10 candidates
         )
         
         if not nearby_drivers:
-            logger.warning(f"No available drivers found for trip {trip_id}")
-            return []
+            logger.warning(
+                f"Selection failed: No available drivers found for trip {trip_id} "
+                f"within {radius_km}km"
+            )
+            return None
+            
+        # Select the 'best' driver (Simple algorithm: Nearest one)
+        selected_driver = nearby_drivers[0]
+        driver_id = selected_driver["id"]
         
         logger.info(
-            f"Found {len(nearby_drivers)} nearby drivers for trip {trip_id}"
+            f"Selected driver {driver_id} for trip {trip_id}. "
+            f"Distance: {selected_driver.get('distance_km')}km. "
+            f"Reason: Nearest available driver."
         )
         
-        notified_drivers = []
-        
-        # Send notifications to all nearby drivers
-        for driver in nearby_drivers:
-            driver_id = driver["id"]
-            
-            notification = TripRequestNotification(
-                trip_id=trip_id,
-                driver_id=driver_id,
-                **notification_data
-            )
-            
-            success = await self.send_trip_request_to_driver(
-                driver_id=driver_id,
-                notification=notification
-            )
-            
-            if success:
-                notified_drivers.append(driver_id)
-        
-        logger.info(
-            f"Successfully notified {len(notified_drivers)}/{len(nearby_drivers)} "
-            f"drivers for trip {trip_id}: {notified_drivers}"
+        # Notify the selected driver
+        notification = TripRequestNotification(
+            trip_id=trip_id,
+            driver_id=driver_id,
+            **notification_data
         )
         
-        return notified_drivers
+        success = await self.send_trip_request_to_driver(
+            driver_id=driver_id,
+            notification=notification
+        )
+        
+        if success:
+            logger.info(f"Successfully notified selected driver {driver_id} for trip {trip_id}")
+            return driver_id
+        else:
+            logger.error(f"Failed to notify selected driver {driver_id} for trip {trip_id}")
+            # In a real system, we would attempt to select the *next* driver here.
+            # For this simplified implementation, we just return None.
+            return None
