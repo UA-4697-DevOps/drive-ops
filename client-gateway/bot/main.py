@@ -243,7 +243,8 @@ async def submit_trip_request(chat_id, order):
     payload = {
         'pickup': order.get('pickup'),
         'dropoff': order.get('dropoff'),
-        'passenger_id': passenger_uuid,
+        'comment': order.get('comment'),
+        'passenger_id': passenger_uuid,    
     }
     
     request_id = f"REQ-{chat_id}-{int(time.time())}"
