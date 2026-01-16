@@ -258,9 +258,24 @@ async def submit_trip_request(chat_id, order):
     """
     start_time = time.time()
     correlation_id = generate_correlation_id()
-    
-    # Generate deterministic UUID from chat_id for passenger_id
-    passenger_uuid = order.get('passenger_id') or str(uuid.uuid5(uuid.NAMESPACE_DNS, f"telegram-{chat_id}"))
+
+    # Validate and normalize passenger_id
+    provided_passenger_id = order.get('passenger_id')
+    if provided_passenger_id:
+        try:
+            # Validate it's a proper UUID format
+            uuid.UUID(str(provided_passenger_id))
+            passenger_uuid = str(provided_passenger_id)
+        except (ValueError, AttributeError):
+            # Invalid UUID, fall back to generated one
+            logger.warning(
+                "Invalid passenger_id provided: %s, generating deterministic UUID",
+                provided_passenger_id
+            )
+            passenger_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"telegram-{chat_id}"))
+    else:
+        # No passenger_id provided, generate deterministic UUID from chat_id
+        passenger_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"telegram-{chat_id}"))
 
     payload = {
         'pickup': order.get('pickup'),
