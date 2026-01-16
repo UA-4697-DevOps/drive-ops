@@ -251,7 +251,7 @@ async def submit_trip_request(chat_id, order):
 
     Args:
         chat_id: Telegram user chat ID
-        order: Dictionary with 'pickup', 'dropoff', 'comment' fields
+        order: Dictionary with 'pickup' and 'dropoff' fields
 
     Returns:
         Dictionary with success status, trip_id, error details, etc.
