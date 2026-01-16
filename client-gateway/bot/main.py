@@ -222,15 +222,37 @@ async def safe_edit_message_text(chat_id, message_id, text, context, **kwargs):
         logger.exception("Failed to edit message %s/%s: %s", chat_id, message_id, e)
         return None
 
+def sanitize_payload(payload):
+    """
+    Sanitize payload by masking PII fields (addresses, locations).
+
+    Args:
+        payload: Dictionary with trip data
+
+    Returns:
+        Dictionary with sensitive fields masked
+    """
+    sanitized = payload.copy()
+
+    # Mask address fields
+    pii_fields = ['pickup', 'dropoff', 'address', 'location']
+    for field in pii_fields:
+        if field in sanitized and sanitized[field]:
+            # Show only first 3 chars + ***
+            value = str(sanitized[field])
+            sanitized[field] = f"{value[:3]}***" if len(value) > 3 else "***"
+
+    return sanitized
+
 async def submit_trip_request(chat_id, order):
     """
     Submit a trip request to the trip service.
     Logs the full lifecycle: request init -> validation -> response.
-    
+
     Args:
         chat_id: Telegram user chat ID
         order: Dictionary with 'pickup', 'dropoff', 'comment' fields
-    
+
     Returns:
         Dictionary with success status, trip_id, error details, etc.
     """
@@ -243,8 +265,7 @@ async def submit_trip_request(chat_id, order):
     payload = {
         'pickup': order.get('pickup'),
         'dropoff': order.get('dropoff'),
-        'comment': order.get('comment'),
-        'passenger_id': passenger_uuid,    
+        'passenger_id': passenger_uuid,
     }
     
     request_id = f"REQ-{chat_id}-{int(time.time())}"
@@ -257,9 +278,11 @@ async def submit_trip_request(chat_id, order):
     
     try:
         url = f"{TRIP_SERVICE_URL}/trips"
+        # Sanitize payload before logging to protect PII
+        sanitized_payload = sanitize_payload(payload)
         logger.info(
             "Sending POST %s with payload=%s",
-            url, payload,
+            url, sanitized_payload,
             extra={'correlationId': correlation_id}
         )
         
