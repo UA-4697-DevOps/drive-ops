@@ -10,6 +10,10 @@ from services.driver_notification_service import DriverNotificationService
 from clients.gateway_client import ClientGatewayClient
 from config import settings
 
+# NEW: Import for driver response handling
+from clients.rabbitmq_publisher import RabbitMQPublisher
+from services.driver_response_service import DriverResponseService
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -19,17 +23,26 @@ logger = logging.getLogger(__name__)
 
 # In-memory storage (will be replaced with database)
 drivers = {}
+trip_requests = {}  # NEW: Track trip requests for idempotency
 
 # Global services
 gateway_client = None
 notification_service = None
-consumer_task = None
+rabbitmq_publisher = None
+response_service = None
+# FIXED: Store consumer instances globally for graceful shutdown
+trip_events_consumer = None
+driver_responses_consumer = None
+trip_events_consumer_task = None
+driver_responses_consumer_task = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for FastAPI app"""
-    global gateway_client, notification_service, consumer_task
+    global gateway_client, notification_service, rabbitmq_publisher, response_service
+    global trip_events_consumer, driver_responses_consumer
+    global trip_events_consumer_task, driver_responses_consumer_task
     
     # Startup
     logger.info("Starting Driver Service...")
@@ -50,24 +63,61 @@ async def lifespan(app: FastAPI):
     # Seed some test drivers
     seed_test_drivers()
     
-    # Start RabbitMQ consumer if enabled
+    # Start RabbitMQ consumers if enabled
     if settings.ENABLE_RABBITMQ:
         try:
+            # Initialize RabbitMQ Publisher
+            rabbitmq_publisher = RabbitMQPublisher(
+                rabbitmq_host=settings.RABBITMQ_HOST,
+                rabbitmq_port=settings.RABBITMQ_PORT,
+                rabbitmq_user=settings.RABBITMQ_USER,
+                rabbitmq_pass=settings.RABBITMQ_PASS,
+                exchange_name=settings.TRIP_EVENTS_EXCHANGE
+            )
+            rabbitmq_publisher.connect()
+            logger.info("RabbitMQ Publisher initialized")
+            
+            # Initialize Driver Response Service
+            response_service = DriverResponseService(
+                publisher=rabbitmq_publisher,
+                drivers_storage=drivers,
+                trip_requests_storage=trip_requests
+            )
+            logger.info("Driver Response Service initialized")
+            
+            # Start Trip Events Consumer (existing)
             from consumers.trip_events_consumer import TripEventsConsumer
-            consumer = TripEventsConsumer(
+            trip_events_consumer = TripEventsConsumer(
                 rabbitmq_host=settings.RABBITMQ_HOST,
                 rabbitmq_port=settings.RABBITMQ_PORT,
                 rabbitmq_user=settings.RABBITMQ_USER,
                 rabbitmq_pass=settings.RABBITMQ_PASS,
                 queue_name=settings.TRIP_EVENTS_QUEUE,
-                notification_service=notification_service
+                notification_service=notification_service,
+                trip_requests_storage=trip_requests
             )
-            consumer_task = asyncio.create_task(
-                asyncio.to_thread(consumer.start_consuming)
+            trip_events_consumer_task = asyncio.create_task(
+                asyncio.to_thread(trip_events_consumer.start_consuming)
             )
-            logger.info("RabbitMQ consumer started")
+            logger.info("Trip Events Consumer started")
+            
+            # Start Driver Responses Consumer (NEW)
+            from consumers.driver_response_consumer import DriverResponseConsumer
+            driver_responses_consumer = DriverResponseConsumer(
+                rabbitmq_host=settings.RABBITMQ_HOST,
+                rabbitmq_port=settings.RABBITMQ_PORT,
+                rabbitmq_user=settings.RABBITMQ_USER,
+                rabbitmq_pass=settings.RABBITMQ_PASS,
+                queue_name=settings.DRIVER_RESPONSES_QUEUE,
+                response_service=response_service
+            )
+            driver_responses_consumer_task = asyncio.create_task(
+                asyncio.to_thread(driver_responses_consumer.start_consuming)
+            )
+            logger.info("Driver Responses Consumer started")
+            
         except Exception as e:
-            logger.error(f"Failed to start RabbitMQ consumer: {e}")
+            logger.error(f"Failed to start RabbitMQ consumers: {e}")
     
     logger.info("Driver Service started successfully")
     
@@ -76,12 +126,27 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down Driver Service...")
     
-    if consumer_task:
-        consumer_task.cancel()
+    # FIXED: Call stop() on consumers before cancelling tasks
+    if trip_events_consumer_task:
+        if trip_events_consumer:
+            trip_events_consumer.stop()
+        trip_events_consumer_task.cancel()
         try:
-            await consumer_task
+            await trip_events_consumer_task
         except asyncio.CancelledError:
             pass
+    
+    if driver_responses_consumer_task:
+        if driver_responses_consumer:
+            driver_responses_consumer.stop()
+        driver_responses_consumer_task.cancel()
+        try:
+            await driver_responses_consumer_task
+        except asyncio.CancelledError:
+            pass
+    
+    if rabbitmq_publisher:
+        rabbitmq_publisher.close()
     
     if gateway_client:
         await gateway_client.close()
@@ -129,8 +194,8 @@ def seed_test_drivers():
 
 app = FastAPI(
     title="DriverService",
-    version="0.1.0",
-    description="Driver Service with Trip Request functionality",
+    version="0.2.0",
+    description="Driver Service with Trip Request and Response functionality",
     lifespan=lifespan
 )
 
@@ -192,8 +257,6 @@ def update_location(driver_id: str, location: str):
     return driver
 
 
-# ========== NEW ENDPOINTS (for task #41) ==========
-
 @app.get("/drivers")
 def list_drivers(status: str = None):
     """
@@ -216,17 +279,6 @@ async def send_trip_request(notification: TripRequestNotification):
     
     This endpoint is for manual testing. In production, this is triggered
     by consuming trip.event.created from RabbitMQ.
-    
-    Body:
-    - trip_id: Unique trip identifier
-    - driver_id: Target driver ID
-    - pickup: Pickup location with coordinates
-    - dropoff: Dropoff location with coordinates
-    - passenger_name: Name of passenger
-    - estimated_distance_km: Distance estimate
-    - estimated_duration_min: Duration estimate
-    - fare_estimate: Price estimate
-    - comment: Optional comment
     """
     if not notification_service:
         raise HTTPException(
@@ -245,10 +297,47 @@ async def send_trip_request(notification: TripRequestNotification):
             detail="Failed to send trip request to driver"
         )
     
+    # NEW: Track trip request in storage
+    if notification.trip_id not in trip_requests:
+        trip_requests[notification.trip_id] = {
+            "status": "pending",
+            "notified_drivers": [notification.driver_id],
+            "responses": {},
+            "created_at": notification.created_at.isoformat()
+        }
+    
     return {
         "message": "Trip request sent successfully",
         "trip_id": notification.trip_id,
         "driver_id": notification.driver_id
+    }
+
+
+# ========== NEW ENDPOINTS (for monitoring) ==========
+
+@app.get("/api/v1/trip-requests")
+def list_trip_requests():
+    """
+    List all tracked trip requests (for monitoring/debugging)
+    """
+    return {
+        "trip_requests": trip_requests,
+        "count": len(trip_requests)
+    }
+
+
+@app.get("/api/v1/trip-requests/{trip_id}")
+def get_trip_request(trip_id: str):
+    """
+    Get specific trip request details
+    """
+    trip_data = trip_requests.get(trip_id)
+    if not trip_data:
+        raise HTTPException(status_code=404, detail="Trip request not found")
+    
+    return {
+        "trip_id": trip_id,
+        **trip_data
     }
 
 
@@ -257,11 +346,12 @@ def root():
     """Root endpoint with service info"""
     return {
         "service": "Driver Service",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "status": "running",
         "features": {
             "driver_management": True,
             "trip_requests": True,
+            "driver_responses": True,
             "rabbitmq_enabled": settings.ENABLE_RABBITMQ
         }
     }
