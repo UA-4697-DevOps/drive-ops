@@ -18,7 +18,13 @@ class Settings(BaseSettings):
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str = "guest"
     RABBITMQ_PASS: str = "guest"
+    
+    # RabbitMQ Queues
     TRIP_EVENTS_QUEUE: str = "trip.events"
+    DRIVER_RESPONSES_QUEUE: str = "driver.responses"
+    
+    # RabbitMQ Exchanges
+    TRIP_EVENTS_EXCHANGE: str = "trip.events"
     
     # Client Gateway (Telegram Bot)
     CLIENT_GATEWAY_URL: str = "http://localhost:8080"

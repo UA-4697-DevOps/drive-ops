@@ -1,5 +1,6 @@
 """
 Consumer for trip.event.created from Message Broker
+UPDATED: Now tracks trip requests in storage for idempotency
 """
 import json
 import logging
@@ -22,7 +23,8 @@ class TripEventsConsumer:
         rabbitmq_user: str,
         rabbitmq_pass: str,
         queue_name: str,
-        notification_service: DriverNotificationService
+        notification_service: DriverNotificationService,
+        trip_requests_storage: Dict[str, Dict[str, Any]] = None
     ):
         self.rabbitmq_host = rabbitmq_host
         self.rabbitmq_port = rabbitmq_port
@@ -30,6 +32,7 @@ class TripEventsConsumer:
         self.rabbitmq_pass = rabbitmq_pass
         self.queue_name = queue_name
         self.notification_service = notification_service
+        self.trip_requests = trip_requests_storage or {}
         self.connection = None
         self.channel = None
     
@@ -110,6 +113,18 @@ class TripEventsConsumer:
                 notification_data=notification_data,
                 radius_km=5.0
             )
+            
+            # NEW: Track trip request in storage for idempotency
+            if trip_id not in self.trip_requests:
+                self.trip_requests[trip_id] = {
+                    "status": "pending",
+                    "notified_drivers": notified_drivers,
+                    "responses": {},
+                    "created_at": event_data.get("timestamp", ""),
+                    "pickup": pickup_data,
+                    "dropoff": dropoff_data
+                }
+                logger.info(f"Tracked trip request {trip_id} in storage")
             
             logger.info(
                 f"Trip {trip_id} processing complete. "
