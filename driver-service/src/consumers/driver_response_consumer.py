@@ -52,7 +52,7 @@ class DriverResponseConsumer:
             logger.error(f"Failed to connect to RabbitMQ: {e}")
             raise
     
-    async def process_driver_response_event(self, event_data: Dict[str, Any]):
+    async def process_driver_response_event(self, event_data: Dict[str, Any]) -> bool:
         """
         Process driver response events
         
@@ -60,23 +60,15 @@ class DriverResponseConsumer:
         - driver.cmd.trip_accept
         - driver.cmd.trip_reject
         
-        Event structure:
-        {
-            "event_type": "driver.cmd.trip_accept",  # or driver.cmd.trip_reject
-            "payload": {
-                "driver_id": "driver_001",
-                "trip_id": "trip_123",
-                "decision": "accept",  # or "reject"
-                "timestamp": "2026-01-17T19:30:00"
-            }
-        }
+        Returns:
+            True if processed successfully, False otherwise
         """
         try:
             event_type = event_data.get("event_type")
             
             if event_type not in ["driver.cmd.trip_accept", "driver.cmd.trip_reject"]:
                 logger.warning(f"Unknown event type: {event_type}")
-                return
+                return False
             
             # Validate and parse event
             event = DriverResponseEvent(**event_data)
@@ -103,11 +95,14 @@ class DriverResponseConsumer:
                     f"Trip: {event.payload.trip_id}"
                 )
             
+            return success
+            
         except Exception as e:
             logger.error(
                 f"Error processing driver response event: {e}",
                 exc_info=True
             )
+            return False
     
     def callback(self, ch, method, properties, body):
         """RabbitMQ callback for incoming messages"""
@@ -117,9 +112,13 @@ class DriverResponseConsumer:
             logger.info(f"Received event: {event_type}")
             
             import asyncio
-            asyncio.run(self.process_driver_response_event(event_data))
+            success = asyncio.run(self.process_driver_response_event(event_data))
             
-            ch.basic_ack(delivery_tag=method.delivery_tag)
+            if success:
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+            else:
+                # Requeue on failure for retry
+                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
             
         except Exception as e:
             logger.error(f"Error in callback: {e}", exc_info=True)

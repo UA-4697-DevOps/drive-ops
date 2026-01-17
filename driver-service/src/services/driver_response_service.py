@@ -1,6 +1,7 @@
 """
 Service for handling driver responses (accept/reject) to trip requests
 """
+import asyncio
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -114,7 +115,29 @@ class DriverResponseService:
             )
             return False
         
-        # Update trip request state
+        # FIXED: Publish event FIRST before updating state
+        payload = DriverAssignedPayload(
+            trip_id=trip_id,
+            driver_id=driver_id,
+            assigned_at=timestamp
+        )
+        
+        # Use asyncio.to_thread to avoid blocking event loop
+        success = await asyncio.to_thread(
+            self.publisher.publish_event,
+            event_type="trip.event.driver_assigned",
+            payload=payload.model_dump(mode='json'),
+            routing_key="trip.event.driver_assigned"
+        )
+        
+        if not success:
+            logger.error(
+                f"Failed to publish driver_assigned event - "
+                f"Driver: {driver_id}, Trip: {trip_id}"
+            )
+            return False
+        
+        # FIXED: Only update state AFTER successful publish
         trip_data = self.trip_requests[trip_id]
         trip_data["status"] = "assigned"
         trip_data["assigned_driver_id"] = driver_id
@@ -130,31 +153,12 @@ class DriverResponseService:
         if driver:
             driver["status"] = "ON_TRIP"
         
-        # Publish trip.event.driver_assigned to Trip Service
-        payload = DriverAssignedPayload(
-            trip_id=trip_id,
-            driver_id=driver_id,
-            assigned_at=timestamp
+        logger.info(
+            f"Successfully processed driver accept and published assignment - "
+            f"Driver: {driver_id}, Trip: {trip_id}"
         )
         
-        success = self.publisher.publish_event(
-            event_type="trip.event.driver_assigned",
-            payload=payload.model_dump(mode='json'),
-            routing_key="trip.event.driver_assigned"
-        )
-        
-        if success:
-            logger.info(
-                f"Successfully processed driver accept and published assignment - "
-                f"Driver: {driver_id}, Trip: {trip_id}"
-            )
-        else:
-            logger.error(
-                f"Failed to publish driver_assigned event - "
-                f"Driver: {driver_id}, Trip: {trip_id}"
-            )
-        
-        return success
+        return True
     
     async def handle_driver_reject(
         self,

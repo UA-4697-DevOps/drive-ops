@@ -76,8 +76,8 @@ class RabbitMQPublisher:
             routing_key = event_type
         
         try:
-            # Ensure connection
-            if not self.connection or self.connection.is_closed:
+            # Ensure connection and channel (FIXED: added channel check)
+            if not self.connection or self.connection.is_closed or not self.channel or self.channel.is_closed:
                 self.connect()
             
             event_data = {

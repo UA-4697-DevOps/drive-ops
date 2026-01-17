@@ -28,16 +28,20 @@ trip_requests = {}  # NEW: Track trip requests for idempotency
 # Global services
 gateway_client = None
 notification_service = None
-rabbitmq_publisher = None  # NEW
-response_service = None  # NEW
+rabbitmq_publisher = None
+response_service = None
+# FIXED: Store consumer instances globally for graceful shutdown
+trip_events_consumer = None
+driver_responses_consumer = None
 trip_events_consumer_task = None
-driver_responses_consumer_task = None  # NEW
+driver_responses_consumer_task = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle manager for FastAPI app"""
     global gateway_client, notification_service, rabbitmq_publisher, response_service
+    global trip_events_consumer, driver_responses_consumer
     global trip_events_consumer_task, driver_responses_consumer_task
     
     # Startup
@@ -83,7 +87,7 @@ async def lifespan(app: FastAPI):
             
             # Start Trip Events Consumer (existing)
             from consumers.trip_events_consumer import TripEventsConsumer
-            trip_consumer = TripEventsConsumer(
+            trip_events_consumer = TripEventsConsumer(
                 rabbitmq_host=settings.RABBITMQ_HOST,
                 rabbitmq_port=settings.RABBITMQ_PORT,
                 rabbitmq_user=settings.RABBITMQ_USER,
@@ -93,13 +97,13 @@ async def lifespan(app: FastAPI):
                 trip_requests_storage=trip_requests
             )
             trip_events_consumer_task = asyncio.create_task(
-                asyncio.to_thread(trip_consumer.start_consuming)
+                asyncio.to_thread(trip_events_consumer.start_consuming)
             )
             logger.info("Trip Events Consumer started")
             
             # Start Driver Responses Consumer (NEW)
             from consumers.driver_response_consumer import DriverResponseConsumer
-            response_consumer = DriverResponseConsumer(
+            driver_responses_consumer = DriverResponseConsumer(
                 rabbitmq_host=settings.RABBITMQ_HOST,
                 rabbitmq_port=settings.RABBITMQ_PORT,
                 rabbitmq_user=settings.RABBITMQ_USER,
@@ -108,7 +112,7 @@ async def lifespan(app: FastAPI):
                 response_service=response_service
             )
             driver_responses_consumer_task = asyncio.create_task(
-                asyncio.to_thread(response_consumer.start_consuming)
+                asyncio.to_thread(driver_responses_consumer.start_consuming)
             )
             logger.info("Driver Responses Consumer started")
             
@@ -122,7 +126,10 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down Driver Service...")
     
+    # FIXED: Call stop() on consumers before cancelling tasks
     if trip_events_consumer_task:
+        if trip_events_consumer:
+            trip_events_consumer.stop()
         trip_events_consumer_task.cancel()
         try:
             await trip_events_consumer_task
@@ -130,6 +137,8 @@ async def lifespan(app: FastAPI):
             pass
     
     if driver_responses_consumer_task:
+        if driver_responses_consumer:
+            driver_responses_consumer.stop()
         driver_responses_consumer_task.cancel()
         try:
             await driver_responses_consumer_task
@@ -270,17 +279,6 @@ async def send_trip_request(notification: TripRequestNotification):
     
     This endpoint is for manual testing. In production, this is triggered
     by consuming trip.event.created from RabbitMQ.
-    
-    Body:
-    - trip_id: Unique trip identifier
-    - driver_id: Target driver ID
-    - pickup: Pickup location with coordinates
-    - dropoff: Dropoff location with coordinates
-    - passenger_name: Name of passenger
-    - estimated_distance_km: Distance estimate
-    - estimated_duration_min: Duration estimate
-    - fare_estimate: Price estimate
-    - comment: Optional comment
     """
     if not notification_service:
         raise HTTPException(
