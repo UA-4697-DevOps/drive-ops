@@ -11,15 +11,9 @@ from src.schemas.driver_schemas import DriverCreate, DriverResponse
 from src.config import settings
 
 # Імпорти для Task #41
-# ... (початок файлу)
-
-# ІМПОРТИ ДЛЯ TASK #41 - ПЕРЕВІР ТУТ!
 from src.schemas.trip_request import TripRequestNotification
 from src.services.driver_notification_service import DriverNotificationService
 from src.clients.gateway_client import ClientGatewayClient
-
-
-
 
 # Налаштування логування
 logging.basicConfig(
@@ -28,7 +22,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Глобальні змінні для довготривалих з'єднань
+# Глобальні змінні
 _gateway_client: ClientGatewayClient = None
 _consumer_task: asyncio.Task = None
 
@@ -39,7 +33,7 @@ async def lifespan(app: FastAPI):
     
     logger.info("🚀 Starting Driver Service...")
     
-    # 1. Ініціалізація клієнта для зв'язку з іншими сервісами
+    # 1. Ініціалізація клієнта
     _gateway_client = ClientGatewayClient(
         base_url=settings.CLIENT_GATEWAY_URL,
         timeout=settings.GATEWAY_TIMEOUT
@@ -49,7 +43,6 @@ async def lifespan(app: FastAPI):
     if settings.ENABLE_RABBITMQ:
         try:
             from src.consumers.trip_events_consumer import TripEventsConsumer
-            # Створюємо тимчасову сесію для споживача
             consumer = TripEventsConsumer(
                 rabbitmq_host=settings.RABBITMQ_HOST,
                 gateway_client=_gateway_client
@@ -74,7 +67,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Функція-хелпер для отримання сервісу сповіщень
+# Хелпер для сервісу
 def get_notification_service(db: AsyncSession = Depends(get_db)):
     return DriverNotificationService(
         gateway_client=_gateway_client,
@@ -82,25 +75,37 @@ def get_notification_service(db: AsyncSession = Depends(get_db)):
         max_retries=settings.MAX_RETRY_ATTEMPTS
     )
 
+# ========== DEBUGGING & STATUS ENDPOINTS ==========
+
+@app.get("/drivers/status/online", response_model=list[DriverResponse], tags=["Debugging"])
+async def get_online_drivers(db: AsyncSession = Depends(get_db)):
+    """
+    Отримати список усіх активних водіїв (is_active=True).
+    Використовується для перевірки перед відправкою Trip Request.
+    """
+    repo = DriverRepository(db)
+    drivers = await repo.list_all()
+    # Фільтруємо за полем is_active
+    online_drivers = [d for d in drivers if getattr(d, 'is_active', False)]
+    
+    logger.info(f"🔍 Debug: Found {len(online_drivers)} online drivers")
+    return online_drivers
+
 # ========== CRUD ENDPOINTS (Database) ==========
 
-@app.post("/drivers", response_model=DriverResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/drivers", response_model=DriverResponse, status_code=status.HTTP_201_CREATED, tags=["Drivers"])
 async def register_driver(driver_in: DriverCreate, db: AsyncSession = Depends(get_db)):
     """Реєстрація нового водія"""
     repo = DriverRepository(db)
     return await repo.create(**driver_in.model_dump())
 
-@app.get("/drivers", response_model=list[DriverResponse])
-async def list_drivers(status: str = None, db: AsyncSession = Depends(get_db)):
-    """Список водіїв з фільтрацією за статусом"""
+@app.get("/drivers", response_model=list[DriverResponse], tags=["Drivers"])
+async def list_drivers(db: AsyncSession = Depends(get_db)):
+    """Список усіх водіїв"""
     repo = DriverRepository(db)
-    drivers = await repo.list_all()
-    if status:
-        # Приклад логіки фільтрації (можна винести в repo.list_all(status=status))
-        return [d for d in drivers if d.status == status]
-    return drivers
+    return await repo.list_all()
 
-@app.get("/drivers/{driver_id}", response_model=DriverResponse)
+@app.get("/drivers/{driver_id}", response_model=DriverResponse, tags=["Drivers"])
 async def get_driver(driver_id: int, db: AsyncSession = Depends(get_db)):
     repo = DriverRepository(db)
     driver = await repo.get_by_id(driver_id)
@@ -108,36 +113,37 @@ async def get_driver(driver_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Driver not found")
     return driver
 
-@app.patch("/drivers/{driver_id}/status", response_model=DriverResponse)
-async def update_driver_status(driver_id: int, new_status: str, db: AsyncSession = Depends(get_db)):
-    """Зміна статусу водія (ONLINE, AVAILABLE, etc)"""
+@app.patch("/drivers/{driver_id}/status", response_model=DriverResponse, tags=["Drivers"])
+async def update_driver_status(driver_id: int, is_active: bool, db: AsyncSession = Depends(get_db)):
+    """Зміна активності водія"""
     repo = DriverRepository(db)
-    updated = await repo.update(driver_id, status=new_status)
+    updated = await repo.update(driver_id, is_active=is_active)
     if not updated:
         raise HTTPException(status_code=404, detail="Driver not found")
     return updated
 
 # ========== TASK #41: TRIP REQUESTS ==========
 
-@app.post("/api/v1/trip-requests/send", status_code=status.HTTP_202_ACCEPTED)
+@app.post("/api/v1/trip-requests/send", status_code=status.HTTP_202_ACCEPTED, tags=["Trip Requests"])
 async def send_trip_request(
     notification: TripRequestNotification,
     service: DriverNotificationService = Depends(get_notification_service)
 ):
-    """Ручне відправлення запиту на поїздку водію"""
+    """Надсилання запиту на поїздку водію (Task #41)"""
     success = await service.send_trip_request_to_driver(
-        driver_id=notification.driver_id,
+        driver_id=int(notification.driver_id),
         notification=notification
     )
     
     if not success:
+        # Повертаємо 400, якщо водій не в мережі або не знайдений
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not reach driver or gateway"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Driver unavailable or notification failed"
         )
     
-    return {"status": "accepted", "trip_id": notification.trip_id}
+    return {"status": "dispatched", "trip_id": notification.trip_id}
 
-@app.get("/health")
+@app.get("/health", tags=["System"])
 def health():
-    return {"status": "ok", "db": "healthy"}
+    return {"status": "ok", "db": "connected"}

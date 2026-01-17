@@ -102,6 +102,7 @@ services:
     env_file: .env
     environment:
       - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app/src
     ports:
       - "8082:8082" # Unified internal and external port
     healthcheck:
