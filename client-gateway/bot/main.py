@@ -571,11 +571,11 @@ async def register_driver_in_service(chat_id, name, car_description):
 async def update_driver_status(driver_id, status):
     """
     Update driver's online/offline status in the Driver Service.
-    
+
     Args:
         driver_id: The driver's ID
-        status: 'online' or 'offline'
-    
+        status: 'online' or 'offline' (will be converted to uppercase for API)
+
     Returns:
         Dictionary with success status and error details if any.
     """
@@ -606,14 +606,16 @@ async def update_driver_status(driver_id, status):
 
     try:
         url = f"{DRIVER_SERVICE_URL}/drivers/{driver_id}/status"
+        # Convert status to uppercase to match driver-service API expectations
+        status_upper = status.upper()
         logger.info(
             "Sending POST %s with status=%s",
-            url, status,
+            url, status_upper,
             extra={'correlationId': correlation_id}
         )
 
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url, params={'status': status})
+            resp = await client.post(url, params={'status': status_upper})
         
         latency = int((time.time() - start_time) * 1000)
         
