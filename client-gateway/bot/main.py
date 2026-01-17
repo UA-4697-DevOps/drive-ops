@@ -598,14 +598,12 @@ async def update_driver_status(driver_id, status):
             },
         }
 
-    payload = {'status': status}
-
     logger.info(
         "Driver status update initiated: driver_id=%s status=%s",
         driver_id, status,
         extra={'correlationId': correlation_id}
     )
-    
+
     try:
         url = f"{DRIVER_SERVICE_URL}/drivers/{driver_id}/status"
         logger.info(
@@ -613,9 +611,9 @@ async def update_driver_status(driver_id, status):
             url, status,
             extra={'correlationId': correlation_id}
         )
-        
+
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url, json=payload)
+            resp = await client.post(url, params={'status': status})
         
         latency = int((time.time() - start_time) * 1000)
         
