@@ -3,7 +3,7 @@ HTTP client for communicating with Client Gateway
 """
 import httpx
 import logging
-from schemas.trip_request import TripRequestNotification
+from src.schemas.trip_request import TripRequestNotification
 
 logger = logging.getLogger(__name__)
 
