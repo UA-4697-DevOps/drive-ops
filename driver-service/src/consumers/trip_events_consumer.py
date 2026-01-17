@@ -56,26 +56,18 @@ class TripEventsConsumer:
             raise
     
     async def process_trip_created_event(self, event_data: Dict[str, Any]):
-        """
-        Process trip.event.created from Trip Service
-        
-        Event structure (from trip-events.md):
-        {
-            "event_type": "trip.event.created",
-            "payload": {
-                "trip_id": "...",
-                "passenger_id": "...",
-                "pickup": {"address": "...", "lat": 50.45, "lng": 30.52},
-                "dropoff": {"address": "...", "lat": 50.46, "lng": 30.53}
-            }
-        }
-        """
+        """Process trip.event.created from Trip Service"""
         try:
             payload = event_data.get("payload", {})
             trip_id = payload.get("trip_id")
             pickup_data = payload.get("pickup", {})
             
             logger.info(f"Processing trip.event.created for trip {trip_id}")
+            
+            # Check idempotency first
+            if trip_id in self.trip_requests:
+                logger.info(f"Trip {trip_id} already tracked, skipping duplicate processing")
+                return
             
             # Validate pickup coordinates
             pickup_lat = pickup_data.get("lat")
@@ -114,17 +106,16 @@ class TripEventsConsumer:
                 radius_km=5.0
             )
             
-            # NEW: Track trip request in storage for idempotency
-            if trip_id not in self.trip_requests:
-                self.trip_requests[trip_id] = {
-                    "status": "pending",
-                    "notified_drivers": notified_drivers,
-                    "responses": {},
-                    "created_at": event_data.get("timestamp", ""),
-                    "pickup": pickup_data,
-                    "dropoff": dropoff_data
-                }
-                logger.info(f"Tracked trip request {trip_id} in storage")
+            # Track trip request in storage
+            self.trip_requests[trip_id] = {
+                "status": "pending",
+                "notified_drivers": notified_drivers,
+                "responses": {},
+                "created_at": event_data.get("timestamp", ""),
+                "pickup": pickup_data,
+                "dropoff": dropoff_data
+            }
+            logger.info(f"Tracked trip request {trip_id} in storage")
             
             logger.info(
                 f"Trip {trip_id} processing complete. "
@@ -169,9 +160,12 @@ class TripEventsConsumer:
             self.stop()
     
     def stop(self):
-        """Stop consuming and close connection"""
-        if self.channel:
-            self.channel.stop_consuming()
-        if self.connection and not self.connection.is_closed:
-            self.connection.close()
-        logger.info("Stopped consuming")
+        """Stop consuming and close connection (thread-safe)"""
+        # FIXED: Use thread-safe callback for pika BlockingConnection
+        if self.connection and self.connection.is_open and self.channel:
+            try:
+                self.connection.add_callback_threadsafe(self.channel.stop_consuming)
+            except Exception as e:
+                logger.error(f"Error stopping consumer: {e}")
+        # Connection will close automatically after stop_consuming completes
+        logger.info("Consumer stop requested")

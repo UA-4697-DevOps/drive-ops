@@ -24,16 +24,6 @@ class DriverResponseService:
         drivers_storage: Dict[str, Dict[str, Any]],
         trip_requests_storage: Dict[str, Dict[str, Any]]
     ):
-        """
-        Args:
-            publisher: RabbitMQ publisher for sending events
-            drivers_storage: In-memory storage for driver data
-            trip_requests_storage: In-memory storage for tracking trip requests
-                                   Format: {trip_id: {"status": "pending|assigned|rejected", 
-                                                      "assigned_driver_id": str, 
-                                                      "notified_drivers": [str],
-                                                      "responses": {driver_id: decision}}}
-        """
         self.publisher = publisher
         self.drivers = drivers_storage
         self.trip_requests = trip_requests_storage
@@ -61,7 +51,7 @@ class DriverResponseService:
         trip_id: str
     ) -> tuple[bool, Optional[str]]:
         """
-        Validate driver response
+        Validate driver response (only checks existence, not idempotency)
         
         Returns:
             (is_valid, error_message)
@@ -74,20 +64,7 @@ class DriverResponseService:
         if trip_id not in self.trip_requests:
             return False, f"Trip request {trip_id} not found"
         
-        # Check for duplicate response (idempotency)
-        if self._is_duplicate_response(trip_id, driver_id):
-            logger.warning(
-                f"Duplicate response detected - Driver: {driver_id}, Trip: {trip_id}"
-            )
-            return False, "Duplicate response - already processed"
-        
-        # Check if trip already assigned
-        if self._is_trip_already_assigned(trip_id):
-            logger.warning(
-                f"Trip already assigned - Driver: {driver_id}, Trip: {trip_id}"
-            )
-            return False, "Trip already assigned to another driver"
-        
+        # FIXED: Don't check duplicates here - handle as success in handlers
         return True, None
     
     async def handle_driver_accept(
@@ -100,22 +77,35 @@ class DriverResponseService:
         Handle driver accepting trip request
         
         Returns:
-            True if processed successfully, False otherwise
+            True if processed successfully (including idempotent cases), False otherwise
         """
         logger.info(
             f"Processing driver accept - Driver: {driver_id}, Trip: {trip_id}"
         )
         
-        # Validate response
+        # Validate response (existence only)
         is_valid, error_msg = self._validate_response(driver_id, trip_id)
         if not is_valid:
             logger.error(
                 f"Invalid accept response - Driver: {driver_id}, "
                 f"Trip: {trip_id}, Error: {error_msg}"
             )
-            return False
+            return False  # Genuine error - will retry
         
-        # FIXED: Publish event FIRST before updating state
+        # FIXED: Handle idempotent cases as success (no retry)
+        if self._is_duplicate_response(trip_id, driver_id):
+            logger.info(
+                f"Duplicate accept ignored (idempotent) - Driver: {driver_id}, Trip: {trip_id}"
+            )
+            return True  # ACK without processing
+        
+        if self._is_trip_already_assigned(trip_id):
+            logger.info(
+                f"Accept ignored; trip already assigned - Driver: {driver_id}, Trip: {trip_id}"
+            )
+            return True  # ACK without processing
+        
+        # Publish event FIRST before updating state
         payload = DriverAssignedPayload(
             trip_id=trip_id,
             driver_id=driver_id,
@@ -135,9 +125,9 @@ class DriverResponseService:
                 f"Failed to publish driver_assigned event - "
                 f"Driver: {driver_id}, Trip: {trip_id}"
             )
-            return False
+            return False  # Will retry
         
-        # FIXED: Only update state AFTER successful publish
+        # Only update state AFTER successful publish
         trip_data = self.trip_requests[trip_id]
         trip_data["status"] = "assigned"
         trip_data["assigned_driver_id"] = driver_id
@@ -169,24 +159,34 @@ class DriverResponseService:
         """
         Handle driver rejecting trip request
         
-        For MVP: Just log the rejection
-        Future: Implement logic to select next available driver
-        
         Returns:
-            True if processed successfully, False otherwise
+            True if processed successfully (including idempotent cases), False otherwise
         """
         logger.info(
             f"Processing driver reject - Driver: {driver_id}, Trip: {trip_id}"
         )
         
-        # Validate response
+        # Validate response (existence only)
         is_valid, error_msg = self._validate_response(driver_id, trip_id)
         if not is_valid:
             logger.error(
                 f"Invalid reject response - Driver: {driver_id}, "
                 f"Trip: {trip_id}, Error: {error_msg}"
             )
-            return False
+            return False  # Genuine error - will retry
+        
+        # FIXED: Handle idempotent cases as success (no retry)
+        if self._is_duplicate_response(trip_id, driver_id):
+            logger.info(
+                f"Duplicate reject ignored (idempotent) - Driver: {driver_id}, Trip: {trip_id}"
+            )
+            return True  # ACK without processing
+        
+        if self._is_trip_already_assigned(trip_id):
+            logger.info(
+                f"Reject ignored; trip already assigned - Driver: {driver_id}, Trip: {trip_id}"
+            )
+            return True  # ACK without processing
         
         # Update trip request state
         trip_data = self.trip_requests[trip_id]
@@ -206,7 +206,6 @@ class DriverResponseService:
         )
         
         # MVP: Just log rejection
-        # TODO: Implement follow-up logic to pick next available driver
         logger.warning(
             f"Trip {trip_id} rejected by driver {driver_id}. "
             f"Follow-up logic not yet implemented (MVP choice)."
@@ -217,9 +216,6 @@ class DriverResponseService:
     async def process_driver_response(self, event: DriverResponseEvent) -> bool:
         """
         Process driver response event (accept or reject)
-        
-        Args:
-            event: Driver response event from RabbitMQ
         
         Returns:
             True if processed successfully, False otherwise

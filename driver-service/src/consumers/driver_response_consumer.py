@@ -66,9 +66,10 @@ class DriverResponseConsumer:
         try:
             event_type = event_data.get("event_type")
             
+            # FIXED: Unknown event types are non-retriable - drop them (return True)
             if event_type not in ["driver.cmd.trip_accept", "driver.cmd.trip_reject"]:
-                logger.warning(f"Unknown event type: {event_type}")
-                return False
+                logger.warning(f"Unknown event type: {event_type} (dropping message)")
+                return True  # ACK to prevent poison message retry loop
             
             # Validate and parse event
             event = DriverResponseEvent(**event_data)
@@ -142,9 +143,12 @@ class DriverResponseConsumer:
             self.stop()
     
     def stop(self):
-        """Stop consuming and close connection"""
-        if self.channel:
-            self.channel.stop_consuming()
-        if self.connection and not self.connection.is_closed:
-            self.connection.close()
-        logger.info("Stopped consuming")
+        """Stop consuming and close connection (thread-safe)"""
+        # FIXED: Use thread-safe callback for pika BlockingConnection
+        if self.connection and self.connection.is_open and self.channel:
+            try:
+                self.connection.add_callback_threadsafe(self.channel.stop_consuming)
+            except Exception as e:
+                logger.error(f"Error stopping consumer: {e}")
+        # Connection will close automatically after stop_consuming completes
+        logger.info("Consumer stop requested")
