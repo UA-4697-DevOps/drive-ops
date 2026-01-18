@@ -1,28 +1,25 @@
-"""
-Service for handling driver notifications and trip requests
-Uses in-memory drivers storage until database is ready
-"""
 import logging
 from typing import List, Dict, Any
+from sqlalchemy.orm import sessionmaker
 
 from schemas.trip_request import TripRequestNotification
 from clients.gateway_client import ClientGatewayClient
 from utils.geo import find_nearby_drivers
+from repository.driver_repository import DriverRepository
 
 logger = logging.getLogger(__name__)
 
-
 class DriverNotificationService:
-    """Service for handling driver notifications and trip requests"""
+    """Сервіс для сповіщення водіїв з підтримкою БД (Task 1 & 2)"""
     
     def __init__(
         self,
         gateway_client: ClientGatewayClient,
-        drivers_storage: Dict[str, Dict[str, Any]],
+        session_factory: sessionmaker,  # ВИПРАВЛЕНО: додано для роботи з БД
         max_retries: int = 3
     ):
         self.gateway_client = gateway_client
-        self.drivers = drivers_storage
+        self.session_factory = session_factory
         self.max_retries = max_retries
     
     async def send_trip_request_to_driver(
@@ -30,63 +27,36 @@ class DriverNotificationService:
         driver_id: str,
         notification: TripRequestNotification
     ) -> bool:
-        """Send trip request to specific driver with retry logic"""
-        logger.info(
-            f"Attempting to send trip request - "
-            f"Trip ID: {notification.trip_id}, Driver ID: {driver_id}"
-        )
-        
-        # Verify driver exists
-        driver = self.drivers.get(driver_id)
-        if not driver:
-            logger.error(f"Driver not found: {driver_id}")
-            return False
-        
-        # Check if driver is available
-        status = driver.get("status", "OFFLINE")
-        if status not in ["AVAILABLE", "ONLINE"]:
-            logger.warning(
-                f"Driver {driver_id} is not available (status: {status})"
-            )
-            return False
-        
-        # Retry logic
-        for attempt in range(1, self.max_retries + 1):
-            try:
-                success = await self.gateway_client.send_driver_notification(
-                    driver_id=driver_id,
-                    notification=notification
-                )
-                
-                if success:
-                    logger.info(
-                        f"Successfully dispatched trip request - "
-                        f"Trip ID: {notification.trip_id}, Driver ID: {driver_id}"
+        """Відправка запиту конкретному водію з оновленням статусу в БД"""
+        async with self.session_factory() as session:
+            repo = DriverRepository(session)
+            driver = await repo.get_by_id(driver_id)
+            
+            if not driver:
+                logger.error(f"Driver {driver_id} not found in DB")
+                return False
+            
+            if driver.status not in ["AVAILABLE", "ONLINE"]:
+                logger.warning(f"Driver {driver_id} is busy or offline (status: {driver.status})")
+                return False
+
+            # Логіка повторних спроб відправки через Gateway
+            for attempt in range(1, self.max_retries + 1):
+                try:
+                    success = await self.gateway_client.send_driver_notification(
+                        driver_id=str(driver.telegram_id), # Відправляємо на Telegram ID
+                        notification=notification
                     )
                     
-                    # Update driver status to NOTIFIED
-                    driver["status"] = "NOTIFIED"
-                    return True
-                else:
-                    logger.warning(
-                        f"Failed to dispatch trip request "
-                        f"(attempt {attempt}/{self.max_retries}) - "
-                        f"Trip ID: {notification.trip_id}, Driver ID: {driver_id}"
-                    )
+                    if success:
+                        await repo.update_status(driver.id, "NOTIFIED")
+                        return True
                     
-            except Exception as e:
-                logger.error(
-                    f"Error sending trip request "
-                    f"(attempt {attempt}/{self.max_retries}): {e} - "
-                    f"Trip ID: {notification.trip_id}, Driver ID: {driver_id}"
-                )
-        
-        # All retries failed
-        logger.error(
-            f"Failed to dispatch trip request after {self.max_retries} attempts - "
-            f"Trip ID: {notification.trip_id}, Driver ID: {driver_id}"
-        )
-        return False
+                    logger.warning(f"Gateway retry {attempt}/{self.max_retries} for driver {driver_id}")
+                except Exception as e:
+                    logger.error(f"Error notifying driver {driver_id}: {e}")
+            
+            return False
     
     async def notify_nearby_drivers(
         self,
@@ -96,47 +66,37 @@ class DriverNotificationService:
         notification_data: dict,
         radius_km: float = 5.0
     ) -> List[str]:
-        """Find and notify nearby available drivers"""
-        # Find nearby available drivers
-        nearby_drivers = find_nearby_drivers(
-            drivers=self.drivers,
+        """Пошук водіїв у БД та їх масове сповіщення (Phase 2)"""
+        async with self.session_factory() as session:
+            repo = DriverRepository(session)
+            # Отримуємо всіх потенційно вільних водіїв
+            db_drivers = await repo.list_all(status="AVAILABLE")
+            
+            # Конвертуємо об'єкти БД у формат, який розуміє find_nearby_drivers
+            drivers_map = {}
+            for d in db_drivers:
+                drivers_map[str(d.id)] = {
+                    "id": str(d.id),
+                    "status": d.status,
+                    "location": f"{d.last_lat},{d.last_lon}"
+                }
+
+        # Використовуємо твою гео-утиліту
+        nearby = find_nearby_drivers(
+            drivers=drivers_map,
             pickup_lat=pickup_latitude,
             pickup_lng=pickup_longitude,
-            radius_km=radius_km,
-            max_drivers=10
+            radius_km=radius_km
         )
         
-        if not nearby_drivers:
-            logger.warning(f"No available drivers found for trip {trip_id}")
-            return []
-        
-        logger.info(
-            f"Found {len(nearby_drivers)} nearby drivers for trip {trip_id}"
-        )
-        
-        notified_drivers = []
-        
-        # Send notifications to all nearby drivers
-        for driver in nearby_drivers:
-            driver_id = driver["id"]
-            
+        notified_ids = []
+        for d_info in nearby:
             notification = TripRequestNotification(
                 trip_id=trip_id,
-                driver_id=driver_id,
+                driver_id=d_info["id"],
                 **notification_data
             )
-            
-            success = await self.send_trip_request_to_driver(
-                driver_id=driver_id,
-                notification=notification
-            )
-            
-            if success:
-                notified_drivers.append(driver_id)
-        
-        logger.info(
-            f"Successfully notified {len(notified_drivers)}/{len(nearby_drivers)} "
-            f"drivers for trip {trip_id}: {notified_drivers}"
-        )
-        
-        return notified_drivers
+            if await self.send_trip_request_to_driver(d_info["id"], notification):
+                notified_ids.append(d_info["id"])
+                
+        return notified_ids
