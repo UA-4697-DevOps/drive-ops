@@ -27,43 +27,44 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- Database Setup ---
+# Формуємо URL підключення, використовуючи змінні, що підтягнулися з .env
 DATABASE_URL = f"postgresql+asyncpg://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DRIVER_DB_NAME}"
 engine = create_async_engine(DATABASE_URL, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-# Глобальні об'єкти сервісів
+# Глобальні об'єкти сервісів (ініціалізуються в lifespan)
 gateway_client = None
 notification_service = None
 rabbitmq_publisher = None
 response_service = None
 background_tasks = set()
 
-# Dependency для отримання сесії БД в ендпоінти
+# Dependency для отримання сесії БД в HTTP ендпоінти
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager (Tasks 1, 2, 3, 4)"""
+    """Lifecycle manager: ініціалізація зв'язків при старті та їх закриття при зупинці"""
     global gateway_client, notification_service, rabbitmq_publisher, response_service
     
     logger.info("🚀 Запуск Driver Service з підтримкою БД...")
     
-    # 1. Ініціалізація клієнтів
+    # 1. Клієнт для зв'язку з ботом (ВИПРАВЛЕНО: співпадає з config.py та .env)
     gateway_client = ClientGatewayClient(
-        base_url=settings.CLIENT_GATEWAY_URL,
+        base_url=settings.GATEWAY_URL, 
         timeout=settings.GATEWAY_TIMEOUT
     )
     
-    # 2. RabbitMQ Publisher (для Phase 3)
+    # 2. RabbitMQ Publisher (ВИПРАВЛЕНО: співпадає з config.py та .env)
     if settings.ENABLE_RABBITMQ:
         try:
             rabbitmq_publisher = RabbitMQPublisher(
                 rabbitmq_host=settings.RABBITMQ_HOST,
                 rabbitmq_port=settings.RABBITMQ_PORT,
                 rabbitmq_user=settings.RABBITMQ_USER,
-                rabbitmq_pass=settings.RABBITMQ_PASS,
+                rabbitmq_pass=settings.RABBITMQ_PASSWORD, # Тепер точно збігається
                 exchange_name=settings.TRIP_EVENTS_EXCHANGE
             )
             rabbitmq_publisher.connect()
@@ -71,7 +72,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"❌ Помилка RabbitMQ: {e}")
 
-    # 3. Ініціалізація сервісів (передаємо SessionLocal для консюмерів)
+    # 3. Ініціалізація сервісів (ВИПРАВЛЕНО: передаємо session_factory для роботи з БД)
     notification_service = DriverNotificationService(
         gateway_client=gateway_client,
         session_factory=AsyncSessionLocal,
@@ -95,9 +96,12 @@ async def lifespan(app: FastAPI):
             settings, response_service
         )
 
+        # Запускаємо консюмери в окремих потоках, щоб не блокувати FastAPI
         for c in [trip_consumer, resp_consumer]:
             task = asyncio.create_task(asyncio.to_thread(c.start_consuming))
             background_tasks.add(task)
+            
+        logger.info("✅ RabbitMQ Consumers запущені")
 
     yield
     
@@ -108,22 +112,22 @@ async def lifespan(app: FastAPI):
     await gateway_client.close()
     await engine.dispose()
 
-app = FastAPI(title="DriverService", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="DriverService", version="1.1.0", lifespan=lifespan)
 
-# ========== API Ендпоінти (Task 5) ==========
+# ========== API Ендпоінти ==========
 
 @app.get("/health")
 async def health(db: AsyncSession = Depends(get_db)):
+    """Перевірка стану сервісу та зв'язку з БД"""
     repo = DriverRepository(db)
     online_count = await repo.count_online_drivers()
     return {"status": "ok", "drivers_online": online_count}
 
 @app.post("/drivers", status_code=201)
 async def register_driver(data: DriverCreate, db: AsyncSession = Depends(get_db)):
-    """Реєстрація водія в БД (Task 3)"""
+    """Реєстрація нового водія (викликається з Client Gateway)"""
     repo = DriverRepository(db)
     
-    # Перевірка чи не зареєстрований вже такий telegram_id
     existing = await repo.get_by_telegram_id(data.telegram_id)
     if existing:
         return existing
@@ -139,7 +143,7 @@ async def register_driver(data: DriverCreate, db: AsyncSession = Depends(get_db)
 
 @app.post("/drivers/{driver_id}/status")
 async def update_status(driver_id: UUID, status: str, db: AsyncSession = Depends(get_db)):
-    """Оновлення статусу водія в БД"""
+    """Зміна робочого статусу водія"""
     repo = DriverRepository(db)
     updated_driver = await repo.update_status(driver_id, status.upper())
     if not updated_driver:
@@ -148,7 +152,7 @@ async def update_status(driver_id: UUID, status: str, db: AsyncSession = Depends
 
 @app.post("/drivers/{driver_id}/location")
 async def update_location(driver_id: UUID, data: DriverUpdateLocation, db: AsyncSession = Depends(get_db)):
-    """Оновлення гео-позиції (Task 5)"""
+    """Оновлення гео-позиції водія для алгоритму пошуку поруч"""
     repo = DriverRepository(db)
     try:
         lat, lon = map(float, data.location.split(','))
@@ -159,6 +163,7 @@ async def update_location(driver_id: UUID, data: DriverUpdateLocation, db: Async
 
 @app.get("/drivers/{driver_id}")
 async def get_driver(driver_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Отримання профілю водія"""
     repo = DriverRepository(db)
     driver = await repo.get_by_id(driver_id)
     if not driver:
@@ -167,12 +172,13 @@ async def get_driver(driver_id: UUID, db: AsyncSession = Depends(get_db)):
 
 @app.get("/drivers")
 async def list_drivers(status: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    """Список усіх водіїв із фільтрацією за статусом"""
     repo = DriverRepository(db)
     return await repo.list_all(status=status.upper() if status else None)
 
-# Ендпоінт для сідінгу (Task 3)
 @app.post("/api/v1/internal/seed-drivers")
 async def seed_drivers(db: AsyncSession = Depends(get_db)):
+    """Технічний ендпоінт для наповнення бази тестовими даними"""
     repo = DriverRepository(db)
     demo_driver = DriverModel(
         id=uuid4(),
