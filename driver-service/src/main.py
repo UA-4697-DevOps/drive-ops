@@ -1,72 +1,75 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Body
 from uuid import uuid4
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel
 
-# Import schemas and services for task #41
+# Імпорт схем та клієнтів
 from schemas.trip_request import TripRequestNotification
 from services.driver_notification_service import DriverNotificationService
 from clients.gateway_client import ClientGatewayClient
 from config import settings
-
-# NEW: Import for driver response handling
 from clients.rabbitmq_publisher import RabbitMQPublisher
 from services.driver_response_service import DriverResponseService
 
-# Setup logging
+# Налаштування логування
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='[%(asctime)s] | [%(levelname)s] | %(name)s | %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# In-memory storage (will be replaced with database)
+# --- Сховище (Тимчасово в пам'яті до підключення DB) ---
 drivers = {}
-trip_requests = {}  # NEW: Track trip requests for idempotency
+trip_requests = {} 
 
-# Global services
+# --- Глобальні сервіси ---
 gateway_client = None
 notification_service = None
 rabbitmq_publisher = None
 response_service = None
-# FIXED: Store consumer instances globally for graceful shutdown
 trip_events_consumer = None
 driver_responses_consumer = None
-trip_events_consumer_task = None
-driver_responses_consumer_task = None
+background_tasks = set()
 
+# --- Схеми даних (DTO) ---
+class DriverCreate(BaseModel):
+    name: str
+    car_description: str
+    telegram_id: str
+
+class DriverUpdateLocation(BaseModel):
+    location: str  # Формат "lat,lng"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager for FastAPI app"""
+    """Керування життєвим циклом додатка (Task 1, 2, 4)"""
     global gateway_client, notification_service, rabbitmq_publisher, response_service
     global trip_events_consumer, driver_responses_consumer
-    global trip_events_consumer_task, driver_responses_consumer_task
     
-    # Startup
-    logger.info("Starting Driver Service...")
+    logger.info("🚀 Запуск Driver Service...")
     
-    # Initialize Gateway Client
+    # 1. Клієнт для зв'язку з ботом
     gateway_client = ClientGatewayClient(
         base_url=settings.CLIENT_GATEWAY_URL,
         timeout=settings.GATEWAY_TIMEOUT
     )
     
-    # Initialize Notification Service
+    # 2. Сервіс пошуку та сповіщення водіїв
     notification_service = DriverNotificationService(
         gateway_client=gateway_client,
         drivers_storage=drivers,
         max_retries=settings.MAX_RETRY_ATTEMPTS
     )
     
-    # Seed some test drivers
+    # 3. Тестові дані
     seed_test_drivers()
     
-    # Start RabbitMQ consumers if enabled
+    # 4. RabbitMQ Інтеграція
     if settings.ENABLE_RABBITMQ:
         try:
-            # Initialize RabbitMQ Publisher
             rabbitmq_publisher = RabbitMQPublisher(
                 rabbitmq_host=settings.RABBITMQ_HOST,
                 rabbitmq_port=settings.RABBITMQ_PORT,
@@ -75,17 +78,14 @@ async def lifespan(app: FastAPI):
                 exchange_name=settings.TRIP_EVENTS_EXCHANGE
             )
             rabbitmq_publisher.connect()
-            logger.info("RabbitMQ Publisher initialized")
             
-            # Initialize Driver Response Service
             response_service = DriverResponseService(
                 publisher=rabbitmq_publisher,
                 drivers_storage=drivers,
                 trip_requests_storage=trip_requests
             )
-            logger.info("Driver Response Service initialized")
-            
-            # Start Trip Events Consumer (existing)
+
+            # Запуск Consumer для нових поїздок (Phase 2)
             from consumers.trip_events_consumer import TripEventsConsumer
             trip_events_consumer = TripEventsConsumer(
                 rabbitmq_host=settings.RABBITMQ_HOST,
@@ -96,12 +96,8 @@ async def lifespan(app: FastAPI):
                 notification_service=notification_service,
                 trip_requests_storage=trip_requests
             )
-            trip_events_consumer_task = asyncio.create_task(
-                asyncio.to_thread(trip_events_consumer.start_consuming)
-            )
-            logger.info("Trip Events Consumer started")
             
-            # Start Driver Responses Consumer (NEW)
+            # Запуск Consumer для відповідей водіїв (Phase 3)
             from consumers.driver_response_consumer import DriverResponseConsumer
             driver_responses_consumer = DriverResponseConsumer(
                 rabbitmq_host=settings.RABBITMQ_HOST,
@@ -111,247 +107,89 @@ async def lifespan(app: FastAPI):
                 queue_name=settings.DRIVER_RESPONSES_QUEUE,
                 response_service=response_service
             )
-            driver_responses_consumer_task = asyncio.create_task(
-                asyncio.to_thread(driver_responses_consumer.start_consuming)
-            )
-            logger.info("Driver Responses Consumer started")
-            
+
+            # Запускаємо в окремих потоках, щоб не блокувати FastAPI
+            for consumer in [trip_events_consumer, driver_responses_consumer]:
+                task = asyncio.create_task(asyncio.to_thread(consumer.start_consuming))
+                background_tasks.add(task)
+                
+            logger.info("✅ RabbitMQ Consumers запущені")
         except Exception as e:
-            logger.error(f"Failed to start RabbitMQ consumers: {e}")
-    
-    logger.info("Driver Service started successfully")
-    
+            logger.error(f"❌ Помилка RabbitMQ: {e}")
+
     yield
     
-    # Shutdown
-    logger.info("Shutting down Driver Service...")
-    
-    # FIXED: Call stop() on consumers before cancelling tasks
-    if trip_events_consumer_task:
-        if trip_events_consumer:
-            trip_events_consumer.stop()
-        trip_events_consumer_task.cancel()
-        try:
-            await trip_events_consumer_task
-        except asyncio.CancelledError:
-            pass
-    
-    if driver_responses_consumer_task:
-        if driver_responses_consumer:
-            driver_responses_consumer.stop()
-        driver_responses_consumer_task.cancel()
-        try:
-            await driver_responses_consumer_task
-        except asyncio.CancelledError:
-            pass
-    
-    if rabbitmq_publisher:
-        rabbitmq_publisher.close()
-    
-    if gateway_client:
-        await gateway_client.close()
-    
-    logger.info("Driver Service stopped")
+    # --- Shutdown ---
+    logger.info("Stopping Driver Service...")
+    if trip_events_consumer: trip_events_consumer.stop()
+    if driver_responses_consumer: driver_responses_consumer.stop()
+    if rabbitmq_publisher: rabbitmq_publisher.close()
+    await gateway_client.close()
 
-
-def seed_test_drivers():
-    # Seed some test drivers into in-memory storage
-    test_drivers = [
-        {
-            "id": "driver_001",
-            "name": "Олександр Коваленко",
-            "phone": "+380501234567",
-            "status": "AVAILABLE",
-            "location": "50.4501,30.5234",  # Київ, Хрещатик
-            "rating": 4.8,
-            "total_trips": 150
-        },
-        {
-            "id": "driver_002",
-            "name": "Марія Шевченко",
-            "phone": "+380502345678",
-            "status": "AVAILABLE",
-            "location": "50.4520,30.5245",  # Київ, центр
-            "rating": 4.9,
-            "total_trips": 200
-        },
-        {
-            "id": "driver_003",
-            "name": "Дмитро Петренко",
-            "phone": "+380503456789",
-            "status": "OFFLINE",
-            "location": "50.4480,30.5210",  # Київ, Поділ
-            "rating": 4.7,
-            "total_trips": 120
-        },
-    ]
-    
-    for driver in test_drivers:
-        drivers[driver["id"]] = driver
-    
-    logger.info(f"Seeded {len(test_drivers)} test drivers")
-
-
-app = FastAPI(
-    title="DriverService",
-    version="0.2.0",
-    description="Driver Service with Trip Request and Response functionality",
-    lifespan=lifespan
-)
-
-
-# ========== EXISTING ENDPOINTS (from original main.py) ==========
+# ========== Ендпоінти (Task 5) ==========
 
 @app.get("/health")
 def health():
-    """Health check endpoint"""
-    return {"status": "ok"}
-
+    return {"status": "ok", "drivers_online": len([d for d in drivers.values() if d['status'] == 'ONLINE'])}
 
 @app.post("/drivers", status_code=201)
-def register_driver():
-    """Register a new driver"""
+def register_driver(data: DriverCreate):
+    """Реєстрація нового водія (викликається ботом)"""
     driver_id = str(uuid4())
-
-    driver = {
+    new_driver = {
         "id": driver_id,
+        "name": data.name,
+        "car_description": data.car_description,
+        "telegram_id": data.telegram_id,
         "status": "OFFLINE",
-        "location": None
+        "location": "50.4501,30.5234" # Дефолт - центр Києва
     }
-
-    drivers[driver_id] = driver
-    return driver
-
-
-@app.get("/drivers/{driver_id}")
-def get_driver(driver_id: str):
-    """Get driver by ID"""
-    driver = drivers.get(driver_id)
-    if not driver:
-        raise HTTPException(status_code=404, detail="Driver not found")
-    return driver
-
+    drivers[driver_id] = new_driver
+    logger.info(f"Зареєстровано водія: {data.name} (ID: {driver_id})")
+    return new_driver
 
 @app.post("/drivers/{driver_id}/status")
 def update_status(driver_id: str, status: str):
-    """Update driver status"""
-    driver = drivers.get(driver_id)
-    if not driver:
+    """Зміна статусу (ONLINE/OFFLINE)"""
+    if driver_id not in drivers:
         raise HTTPException(status_code=404, detail="Driver not found")
-
-    if status not in ["ONLINE", "OFFLINE", "AVAILABLE", "ON_TRIP", "NOTIFIED"]:
-        raise HTTPException(status_code=400, detail="Invalid status")
-
-    driver["status"] = status
-    return driver
-
+    
+    valid_statuses = ["ONLINE", "OFFLINE", "AVAILABLE", "ON_TRIP", "NOTIFIED"]
+    if status.upper() not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of {valid_statuses}")
+    
+    drivers[driver_id]["status"] = status.upper()
+    return drivers[driver_id]
 
 @app.post("/drivers/{driver_id}/location")
-def update_location(driver_id: str, location: str):
-    """Update driver location"""
-    driver = drivers.get(driver_id)
-    if not driver:
+def update_location(driver_id: str, data: DriverUpdateLocation):
+    """Оновлення координат водія"""
+    if driver_id not in drivers:
         raise HTTPException(status_code=404, detail="Driver not found")
+    drivers[driver_id]["location"] = data.location
+    return {"status": "location_updated"}
 
-    driver["location"] = location
-    return driver
-
+@app.get("/drivers/{driver_id}")
+def get_driver(driver_id: str):
+    if driver_id not in drivers:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    return drivers[driver_id]
 
 @app.get("/drivers")
-def list_drivers(status: str = None):
-    """
-    List all drivers, optionally filtered by status
-    
-    Query params:
-    - status: Filter by driver status (ONLINE, OFFLINE, AVAILABLE, etc.)
-    """
+def list_drivers(status: Optional[str] = None):
     if status:
-        filtered = {k: v for k, v in drivers.items() if v.get("status") == status}
-        return {"drivers": list(filtered.values()), "count": len(filtered)}
-    
-    return {"drivers": list(drivers.values()), "count": len(drivers)}
+        return [d for d in drivers.values() if d['status'] == status.upper()]
+    return list(drivers.values())
 
+# ========== Допоміжні функції ==========
 
-@app.post("/api/v1/trip-requests/send", status_code=status.HTTP_202_ACCEPTED)
-async def send_trip_request(notification: TripRequestNotification):
-    """
-    Send trip request command to driver (Task #41)
-    
-    This endpoint is for manual testing. In production, this is triggered
-    by consuming trip.event.created from RabbitMQ.
-    """
-    if not notification_service:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Notification service not initialized"
-        )
-    
-    success = await notification_service.send_trip_request_to_driver(
-        driver_id=notification.driver_id,
-        notification=notification
-    )
-    
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send trip request to driver"
-        )
-    
-    # NEW: Track trip request in storage
-    if notification.trip_id not in trip_requests:
-        trip_requests[notification.trip_id] = {
-            "status": "pending",
-            "notified_drivers": [notification.driver_id],
-            "responses": {},
-            "created_at": notification.created_at.isoformat()
-        }
-    
-    return {
-        "message": "Trip request sent successfully",
-        "trip_id": notification.trip_id,
-        "driver_id": notification.driver_id
-    }
+def seed_test_drivers():
+    test_data = [
+        {"id": "driver_001", "name": "Олександр", "car_description": "Toyota Camry Black", "telegram_id": "12345", "status": "AVAILABLE", "location": "50.4501,30.5234"},
+        {"id": "driver_002", "name": "Марія", "car_description": "Hyundai Sonata White", "telegram_id": "67890", "status": "AVAILABLE", "location": "50.4520,30.5245"}
+    ]
+    for d in test_data:
+        drivers[d["id"]] = d
+    logger.info(f"seeded {len(test_data)} drivers")
 
-
-# ========== NEW ENDPOINTS (for monitoring) ==========
-
-@app.get("/api/v1/trip-requests")
-def list_trip_requests():
-    """
-    List all tracked trip requests (for monitoring/debugging)
-    """
-    return {
-        "trip_requests": trip_requests,
-        "count": len(trip_requests)
-    }
-
-
-@app.get("/api/v1/trip-requests/{trip_id}")
-def get_trip_request(trip_id: str):
-    """
-    Get specific trip request details
-    """
-    trip_data = trip_requests.get(trip_id)
-    if not trip_data:
-        raise HTTPException(status_code=404, detail="Trip request not found")
-    
-    return {
-        "trip_id": trip_id,
-        **trip_data
-    }
-
-
-@app.get("/")
-def root():
-    """Root endpoint with service info"""
-    return {
-        "service": "Driver Service",
-        "version": "0.2.0",
-        "status": "running",
-        "features": {
-            "driver_management": True,
-            "trip_requests": True,
-            "driver_responses": True,
-            "rabbitmq_enabled": settings.ENABLE_RABBITMQ
-        }
-    }
+app = FastAPI(title="DriverService", version="1.0.0", lifespan=lifespan)
