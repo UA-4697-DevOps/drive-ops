@@ -16,7 +16,7 @@ class TripEventsConsumer:
         notification_service: DriverNotificationService,
         session_factory: sessionmaker
     ):
-        # Отримуємо налаштування з об'єкта settings (ВИПРАВЛЯЄ ТВОЮ ПОМИЛКУ)
+        # Отримуємо налаштування з об'єкта settings
         self.host = settings.RABBITMQ_HOST
         self.port = settings.RABBITMQ_PORT
         self.user = settings.RABBITMQ_USER
@@ -43,7 +43,6 @@ class TripEventsConsumer:
         logger.info(f"✅ TripEventsConsumer підключено до черги: {self.queue_name}")
 
     def callback(self, ch, method, properties, body):
-        """Обробка вхідного повідомлення про поїздку"""
         try:
             event_data = json.loads(body)
             payload = event_data.get("payload", {})
@@ -51,7 +50,7 @@ class TripEventsConsumer:
 
             logger.info(f" [x] Отримано замовлення: {trip_id}")
 
-            # Запускаємо асинхронну логіку сповіщення водіїв
+            # Запускаємо асинхронну логіку в синхронному консюмері
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             loop.run_until_complete(
@@ -70,7 +69,6 @@ class TripEventsConsumer:
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
     def start_consuming(self):
-        """Запуск прослуховування черги"""
         self.connect()
         self.channel.basic_qos(prefetch_count=1)
         self.channel.basic_consume(queue=self.queue_name, on_message_callback=self.callback)
@@ -78,6 +76,5 @@ class TripEventsConsumer:
         self.channel.start_consuming()
 
     def stop(self):
-        """Зупинка консюмера"""
         if self.connection and self.connection.is_open:
             self.connection.add_callback_threadsafe(self.channel.stop_consuming)
