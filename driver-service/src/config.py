@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore"  # Ігнорувати зайві змінні в .env
+        extra="ignore"
     )
     
     # --- Application Settings ---
@@ -13,30 +13,28 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     PORT: int = 8082
     
-    # --- Database Settings (Task 3) ---
-    # Дефолтні значення налаштовані для роботи в Docker (хост 'db')
+    # --- Database Settings ---
+    # Імена полів мають точно збігатися з ключами в .env
     DB_HOST: str = "db"
     DB_PORT: int = 5432
     DB_USER: str = "postgres"
-    DB_PASSWORD: str = "postgres"
+    DB_PASSWORD: str = "postgres" # Збігається з DB_PASSWORD в .env
     DRIVER_DB_NAME: str = "driver_db"
 
-    # --- RabbitMQ Settings (Tasks 1, 2, 4) ---
-    # ENABLE_RABBITMQ ставимо True, бо це ядро логіки Phase 2/3
+    # --- RabbitMQ Settings ---
     ENABLE_RABBITMQ: bool = True
     RABBITMQ_HOST: str = "mq"
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str = "guest"
-    RABBITMQ_PASS: str = "guest"
+    RABBITMQ_PASSWORD: str = "guest" # ВИПРАВЛЕНО: тепер збігається з .env
     
-    # Назви черг та обмінників
     TRIP_EVENTS_QUEUE: str = "driver_service_trip_created"
     DRIVER_RESPONSES_QUEUE: str = "driver_service_responses"
     TRIP_EVENTS_EXCHANGE: str = "trip_events"
     
     # --- Client Gateway (Telegram Bot) ---
-    # Використовуємо ім'я сервісу з docker-compose
-    CLIENT_GATEWAY_URL: str = "http://client-gateway-bot:8080"
+    # У .env ця змінна називається GATEWAY_URL, тому міняємо ім'я тут
+    GATEWAY_URL: str = "http://client-gateway-bot:8080" 
     GATEWAY_TIMEOUT: int = 10
     
     # --- Driver Business Logic Settings ---
