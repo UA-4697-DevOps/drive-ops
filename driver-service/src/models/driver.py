@@ -16,7 +16,7 @@ class DriverModel(Base):
     car_description = Column(Text, nullable=False)
     status = Column(String(20), default="OFFLINE")
     
-    # Координати розбиті на два поля для зручності розрахунків
+    # Координати для розрахунків у geo.py
     last_lat = Column(Float, nullable=True)
     last_lon = Column(Float, nullable=True)
     
@@ -27,11 +27,12 @@ class DriverModel(Base):
 
 # --- Pydantic Schemas (FastAPI DTOs) ---
 class DriverCreate(BaseModel):
-    """Схема для створення водія через POST /drivers"""
+    """Схема для створення водія"""
     name: str
     car_description: str
     telegram_id: str
 
 class DriverUpdateLocation(BaseModel):
-    """Схема для оновлення локації через POST /drivers/{id}/location"""
-    location: str  # Очікує формат "50.45,30.52"
+    """Схема для оновлення локації"""
+    location: str  # Формат "50.45,30.52"
+  
