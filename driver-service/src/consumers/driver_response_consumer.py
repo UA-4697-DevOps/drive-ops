@@ -11,7 +11,6 @@ class DriverResponseConsumer:
     """Консюмер для обробки відповідей водія (Accept/Reject)"""
 
     def __init__(self, settings, response_service: DriverResponseService):
-        # Отримуємо налаштування з об'єкта settings
         self.host = settings.RABBITMQ_HOST
         self.port = settings.RABBITMQ_PORT
         self.user = settings.RABBITMQ_USER
