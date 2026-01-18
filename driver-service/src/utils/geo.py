@@ -4,11 +4,11 @@ from typing import List, Dict, Any
 
 def haversine_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """
-    Calculate distance between two points using Haversine formula
+    Розрахунок відстані між двома точками за формулою Гаверсину.
     
-    Returns: Distance in kilometers
+    Returns: Відстань у кілометрах
     """
-    R = 6371
+    R = 6371  # Радіус Землі в км
     
     lat1_rad = math.radians(lat1)
     lat2_rad = math.radians(lat2)
@@ -26,32 +26,35 @@ def haversine_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> fl
 def find_nearby_drivers(
     drivers: Dict[str, Dict[str, Any]],
     pickup_lat: float,
-    pickup_lon: float,
+    pickup_lng: float,  # Змінено з pickup_lon для консистентності
     radius_km: float = 5.0,
     max_drivers: int = 10
 ) -> List[Dict[str, Any]]:
-    """Find available drivers near pickup location"""
+    """Пошук доступних водіїв поруч із точкою посадки"""
     nearby = []
     
     for driver_id, driver in drivers.items():
+        # Тільки ті, хто на лінії та вільний
         if driver.get("status") not in ["AVAILABLE", "ONLINE"]:
             continue
         
         location = driver.get("location")
+        lat, lng = None, None
+
+        # Парсинг локації (підтримуємо і словник, і рядок "lat,lng")
         if isinstance(location, dict):
             lat = location.get("lat")
             lng = location.get("lng")
         elif isinstance(location, str) and "," in location:
             try:
                 lat, lng = map(float, location.split(",")[:2])
-            except (ValueError, AttributeError):
+            except (ValueError, TypeError):
                 continue
-        else:
-            continue
         
         if lat is None or lng is None:
             continue
         
+        # ВИПРАВЛЕНО: тепер використовуємо pickup_lng, як і в аргументах
         distance = haversine_distance(pickup_lat, pickup_lng, lat, lng)
         
         if distance <= radius_km:
@@ -59,5 +62,6 @@ def find_nearby_drivers(
             driver_copy["distance_km"] = round(distance, 2)
             nearby.append(driver_copy)
     
+    # Сортування: спочатку найближчі
     nearby.sort(key=lambda d: d["distance_km"])
     return nearby[:max_drivers]
