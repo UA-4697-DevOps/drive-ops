@@ -11,10 +11,10 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from dotenv import load_dotenv
 
-# Імпорт твоїх модулів
+# Імпорт модулів логіки
 from . import passenger
 from . import driver
-from .api_client import APIClient  # Використовуємо твій окремий файл для запитів
+from .api_client import APIClient
 from .logger_utils import create_trip_request_logger, generate_correlation_id
 
 # --- Конфігурація ---
@@ -32,9 +32,9 @@ def ensure_bot_token():
 # --- Глобальні стани ---
 user_orders = {}
 user_roles = {}
-tg_application = None  # Посилання на бот-додаток для використання у FastAPI
+tg_application = None  # Для доступу FastAPI до бота
 
-# --- Кнопки (Твоя логіка) ---
+# --- UI Дефініції ---
 BTN_PASSENGER = "\U0001F64B Я замовник таксі"
 BTN_DRIVER = "\U0001F697 Я таксист"
 BTN_CHANGE_ROLE = "\U0001F504 Змінити роль"
@@ -55,7 +55,6 @@ BUTTONS = {
     'BTN_CHECK_STATUS': "\U0001F50D Перевірити статус",
 }
 
-# --- Клавіатури (Важливо: додаємо посилання на функції з твоїх файлів) ---
 KEYBOARDS = {
     'role_selection_menu': lambda: ReplyKeyboardMarkup([[KeyboardButton(BTN_PASSENGER), KeyboardButton(BTN_DRIVER)]], resize_keyboard=True, one_time_keyboard=True),
     'passenger_menu': passenger.passenger_menu if hasattr(passenger, 'passenger_menu') else None,
@@ -65,8 +64,7 @@ KEYBOARDS = {
     'get_user_menu': lambda chat_id: driver.driver_menu_registered() if (chat_id in user_roles and isinstance(user_roles[chat_id], dict) and user_roles[chat_id].get('role') == 'driver') else passenger.passenger_menu()
 }
 
-# --- HELPERS (Стандартизована взаємодія за Таском 1) ---
-# Тут ми підв'язуємо функції з passenger.py та driver.py до APIClient
+# --- HELPERS (Task 1) ---
 HELPERS = {
     'submit_trip_request': lambda chat_id, order: APIClient.create_trip({**order, 'passenger_id': str(uuid.uuid5(uuid.NAMESPACE_DNS, f"tg-{chat_id}"))}),
     'fetch_trip_status': lambda trip_id, user_id=None: APIClient.get_trip_status(trip_id),
@@ -79,25 +77,30 @@ HELPERS = {
     'is_valid_address': lambda addr: addr is not None and len(addr) > 5
 }
 
-# --- Notification Server (FastAPI для Phase 2/4) ---
+# --- Notification Server (FastAPI) ---
 notification_app = FastAPI()
+
+@notification_app.get("/health")
+async def health_check():
+    """Ендпоінт для Docker HEALTHCHECK"""
+    return {"status": "ok", "bot_initialized": tg_application is not None}
 
 @notification_app.post("/notifications/driver/{chat_id}")
 async def api_notify_driver(chat_id: int, request: Request):
-    """Викликається Driver Service, коли знайдено замовлення (Phase 2)"""
+    """Phase 2: Нове замовлення для водія"""
     data = await request.json()
     success = await driver.notify_new_order(tg_application.bot, chat_id, data)
     return {"success": success}
 
 @notification_app.post("/notifications/passenger/{chat_id}")
 async def api_notify_passenger(chat_id: int, request: Request):
-    """Викликається Trip Service при зміні статусу поїздки (Phase 4)"""
+    """Phase 4: Сповіщення пасажира"""
     data = await request.json()
-    msg = f"🔔 *Оновлення поїздки!*\n\n{data.get('message', 'Статус змінився')}"
+    msg = f"🔔 *Оновлення поїздки!*\n\n{data.get('message', 'Статус вашої поїздки змінився')}"
     await tg_application.bot.send_message(chat_id, msg, parse_mode='Markdown')
     return {"success": True}
 
-# --- Основні хендлери ---
+# --- Основні хендлери бота ---
 async def start_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_roles.pop(chat_id, None)
@@ -107,21 +110,17 @@ async def start_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=KEYBOARDS['role_selection_menu']()
     )
 
-# --- Запуск ---
 async def run_bot_polling():
     global tg_application
     ensure_bot_token()
-    
-    # Ігноруємо попередження про CallbackHandler
     warnings.filterwarnings("ignore", message="If 'per_message=False'*")
     
     tg_application = Application.builder().token(BOT_TOKEN).build()
     
-    # Реєстрація базових команд
+    # Реєстрація хендлерів
     tg_application.add_handler(CommandHandler("start", start_message))
     tg_application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_CHANGE_ROLE)}$"), start_message))
     
-    # Реєстрація логіки з модулів
     passenger.register_handlers(tg_application, user_orders, user_roles, BUTTONS, KEYBOARDS, HELPERS)
     driver.register_handlers(tg_application, user_orders, user_roles, BUTTONS, KEYBOARDS, HELPERS, DEBUGGING=DEBUGGING)
     
@@ -129,15 +128,12 @@ async def run_bot_polling():
         await tg_application.initialize()
         await tg_application.start()
         await tg_application.updater.start_polling()
-        logger.info("Бот запущений у режимі Polling...")
-        while True:
-            await asyncio.sleep(1)
+        logger.info("Бот запущений (Polling mode)")
+        while True: await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    # Створюємо подію для запуску бота у фоні
     loop = asyncio.get_event_loop()
     loop.create_task(run_bot_polling())
     
-    # Запускаємо сервер сповіщень (блокуючий виклик)
     logger.info("Запуск сервера сповіщень на порту 8080...")
     uvicorn.run(notification_app, host="0.0.0.0", port=8080)
