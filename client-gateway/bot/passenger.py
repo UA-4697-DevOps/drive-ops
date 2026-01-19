@@ -84,6 +84,14 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     async def start_order_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
         
+        if chat_id not in user_roles:
+            await update.message.reply_text("Спочатку оберіть вашу роль за допомогою команди /start")
+            return ConversationHandler.END
+
+        if chat_id in user_orders and user_orders[chat_id].get('_in_progress'):
+            await update.message.reply_text("У вас вже є незавершене замовлення. Скасуйте командою /cancel_order або завершіть поточне.")
+            return ConversationHandler.END
+
         user_orders[chat_id] = {'pickup': None, 'dropoff': None, 'comment': None, '_in_progress': True}
         
         await update.message.reply_text(
@@ -95,6 +103,11 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
 
     async def process_pickup_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
+        
+        if chat_id not in user_orders or not user_orders.get(chat_id):
+            await safe_send(chat_id, "❌ Замовлення скасовано або закінчилось. Спробуйте знову.", context, reply_markup=get_user_menu(chat_id))
+            return ConversationHandler.END
+        
         address = update.message.text
 
         if not is_valid_address(address):
@@ -110,6 +123,11 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
 
     async def process_dropoff_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
+        
+        if chat_id not in user_orders or not user_orders.get(chat_id):
+            await safe_send(chat_id, "❌ Замовлення скасовано або закінчилось. Спробуйте знову.", context, reply_markup=get_user_menu(chat_id))
+            return ConversationHandler.END
+        
         address = update.message.text
 
         if not is_valid_address(address):
@@ -126,6 +144,12 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
 
     async def process_comment_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
+        logger.info("process_comment_step called for chat_id=%s, text=%s", chat_id, update.message.text)
+        
+        if chat_id not in user_orders or not user_orders.get(chat_id):
+            logger.warning("No active order for chat_id=%s in process_comment_step", chat_id)
+            await safe_send(chat_id, "❌ Замовлення скасовано або закінчилось. Спробуйте знову.", context, reply_markup=get_user_menu(chat_id))
+            return ConversationHandler.END
         
         if update.message.text == BTN_SKIP:
             user_orders[chat_id]['comment'] = "Не вказано"
@@ -133,12 +157,18 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             user_orders[chat_id]['comment'] = update.message.text
 
         order = user_orders[chat_id]
+        logger.info("Order data: pickup=%s, dropoff=%s, comment=%s", order.get('pickup'), order.get('dropoff'), order.get('comment'))
+        
+        # Escape HTML special characters
+        pickup = escape_html(order['pickup'])
+        dropoff = escape_html(order['dropoff'])
+        comment = escape_html(order['comment'])
         
         summary = (
             f"\U0001F695 <b>Підтвердження замовлення</b>\n\n"
-            f"\U0001F4CD <b>Звідки:</b> {escape_html(order['pickup'])}\n"
-            f"\U0001F3C1 <b>Куди:</b> {escape_html(order['dropoff'])}\n"
-            f"\U0001F4AC <b>Коментар:</b> {escape_html(order['comment'])}\n\n"
+            f"\U0001F4CD <b>Звідки:</b> {pickup}\n"
+            f"\U0001F3C1 <b>Куди:</b> {dropoff}\n"
+            f"\U0001F4AC <b>Коментар:</b> {comment}\n\n"
             f"\U0001F4B0 Вартість буде розрахована після підтвердження."
         )
 
@@ -149,14 +179,29 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             ]
         ])
         
+        logger.info("Sending confirmation message to chat_id=%s", chat_id)
         await update.message.reply_text(summary, parse_mode='HTML', reply_markup=markup)
         return ConversationHandler.END
 
     async def handle_quick_order_taxi(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
+        
         chat_id = query.message.chat.id
         
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception as e:
+            logger.exception("Failed to clear inline keyboard markup for quick_order_taxi: %s", e)
+        
+        if chat_id not in user_roles:
+            await context.bot.send_message(chat_id, "Спочатку оберіть вашу роль за допомогою команди /start")
+            return ConversationHandler.END
+
+        if chat_id in user_orders and user_orders[chat_id].get('_in_progress'):
+            await context.bot.send_message(chat_id, "У вас вже є незавершене замовлення. Скасуйте командою /cancel_order або завершіть поточне.")
+            return ConversationHandler.END
+
         user_orders[chat_id] = {'pickup': None, 'dropoff': None, 'comment': None, '_in_progress': True}
         
         await context.bot.send_message(
@@ -167,34 +212,89 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         )
         return PICKUP
 
+
     async def handle_order_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
         chat_id = query.message.chat.id
 
-        if query.data == "order_confirm":
-            order = user_orders.get(chat_id, {})
-            await query.edit_message_text("⏳ Створюємо замовлення...")
-            
-            result = await submit_trip_request(chat_id, order)
-            
-            if result.get('success'):
-                trip_data = result.get('data', {})
-                trip_id = trip_data.get('id') or trip_data.get('trip_id') or 'N/A'
-                await query.edit_message_text(
-                    f"✅ <b>Замовлення створено!</b>\n🆔 ID: <code>{trip_id}</code>\n\nШукаємо водія...", 
-                    parse_mode='HTML'
+        try:
+            if query.data == "order_confirm":
+                order = user_orders.get(chat_id) or {}
+                
+                # Логування спроби (важливо для дебагу)
+                logger.info(
+                    "Trip request confirmed: chat_id=%s pickup=%s dropoff=%s comment=%s",
+                    chat_id, order.get('pickup'), order.get('dropoff'), order.get('comment')
                 )
-            else:
-                err = result.get('error', {}).get('message', 'Помилка')
-                await query.edit_message_text(f"❌ Помилка: {err}")
-        
-        elif query.data == "order_cancel":
-            await query.edit_message_text("❌ Замовлення скасовано.")
-        
-        user_orders.pop(chat_id, None)
-        menu = passenger_menu_kb() if callable(passenger_menu_kb) else passenger_menu_kb
-        await context.bot.send_message(chat_id, "Головне меню:", reply_markup=menu)
+
+                await query.edit_message_text("⏳ Створюємо замовлення...")
+                
+                # Виклик API
+                result = await submit_trip_request(chat_id, order)
+                
+                # Отримання даних з результату
+                req_id = result.get('request_id')
+                # APIClient повертає 'data', всередині якого 'id'
+                trip_data = result.get('data', {})
+                trip_id = trip_data.get('id') or trip_data.get('trip_id') or result.get('trip_id')
+                error = result.get('error')
+
+                logger.info(
+                    "Trip request response: success=%s trip_id=%s error=%s",
+                    result.get('success'), trip_id, error
+                )
+
+                if result.get('success'):
+                    # Успішний сценарій
+                    status = result.get('status', 'PENDING').upper()
+                    
+                    # Маппінг для красивого відображення
+                    status_text_map = {
+                        'PENDING': '⏳ Очікує водія',
+                        'CONFIRMED': '✅ Підтверджено',
+                        'IN_PROGRESS': '🚗 В дорозі',
+                        'COMPLETED': '🏁 Завершено',
+                        'CANCELLED': '❌ Скасовано',
+                    }
+                    status_display = status_text_map.get(status, status)
+                    trip_display_id = trip_id or req_id or '—'
+                    
+                    await query.edit_message_text(
+                        text=(
+                            f"✅ <b>Замовлення прийнято!</b>\n"
+                            f"Шукаємо найближче авто...\n\n"
+                            f"🆔 Trip ID: <code>{trip_display_id}</code>\n"
+                            f"📦 Статус: {status_display}"
+                        ),
+                        parse_mode='HTML'
+                    )
+                else:
+                    # Сценарій помилки
+                    err_data = error if isinstance(error, dict) else {}
+                    err_msg = err_data.get('message', 'Невідома помилка бекенду')
+                    code = err_data.get('status_code')
+                    
+                    # Екрануємо текст помилки, щоб HTML не поламався
+                    safe_err_msg = html.escape(str(err_msg))
+                    
+                    error_text = f"❌ <b>Не вдалося створити поїздку</b>\nПричина: {safe_err_msg}"
+                    if code:
+                        error_text += f"\nКод: {code}"
+                        
+                    await query.edit_message_text(text=error_text, parse_mode='HTML')
+
+            elif query.data == "order_cancel":
+                await query.edit_message_text("❌ Замовлення скасовано.")
+
+            # Повертаємо користувача в головне меню
+            # Використовуємо get_user_menu, бо він знає контекст ролі
+            menu = get_user_menu(chat_id)
+            await context.bot.send_message(chat_id, "Головне меню:", reply_markup=menu)
+
+        finally:
+            # Очищуємо кошик замовлення в будь-якому випадку, щоб не зависало
+            user_orders.pop(chat_id, None)
 
     # --- Check Trip Status Flow ---
     async def start_check_status_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
