@@ -4,7 +4,6 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from dotenv import load_dotenv
 
-# Імпортуємо логіку пасажира та водія
 from . import passenger, driver
 from .api_client import APIClient
 from .logger_utils import create_trip_request_logger
@@ -16,9 +15,9 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 TRIP_SERVICE_URL = os.getenv('TRIP_SERVICE_URL', 'http://trip-service:8081')
 DRIVER_SERVICE_URL = os.getenv('DRIVER_SERVICE_URL', 'http://driver-service:8082')
+DEBUGGING = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
 
-# --- КОНСТАНТИ КНОПОК ---
-# Визначаємо всі кнопки, які можуть знадобитися в passenger.py та driver.py
+# --- Кнопки ---
 BTN_PASSENGER = "\U0001F64B Я замовник таксі"
 BTN_DRIVER = "\U0001F697 Я таксист"
 BTN_CHANGE_ROLE = "\U0001F504 Змінити роль"
@@ -33,11 +32,10 @@ BTN_DRIVER_STATUS = "\U0001F4CA Мій статус"
 BTN_FINISH_TRIP = "\U0001F3C1 Завершити поїздку"
 BTN_CHECK_STATUS = "\U0001F50D Перевірити статус"
 
-# Ін'єкція в модулі для уникнення NameError
+# Ін'єкція
 passenger.BTN_PASSENGER = BTN_PASSENGER
 driver.BTN_DRIVER = BTN_DRIVER
 
-# Повний словник кнопок (виправляє KeyError: 'BTN_RATES')
 BUTTONS = {
     'BTN_PASSENGER': BTN_PASSENGER,
     'BTN_DRIVER': BTN_DRIVER,
@@ -83,7 +81,7 @@ KEYBOARDS = {
     'driver_menu_registered': driver.driver_menu_registered,
 }
 
-# --- FastAPI ---
+# --- Server ---
 notification_app = FastAPI()
 
 @notification_app.get("/health")
@@ -97,22 +95,43 @@ async def notify(chat_id: int, request: Request):
         await driver.notify_new_order(tg_application.bot, chat_id, data)
     return {"success": True}
 
-# --- Основний запуск ---
+# --- Bot ---
 async def start_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Вітаємо! Оберіть роль:", reply_markup=KEYBOARDS['role_selection_menu']())
 
 async def main():
     global tg_application
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN missing")
+        return
+
     tg_application = Application.builder().token(BOT_TOKEN).build()
     tg_application.add_handler(CommandHandler("start", start_message))
     
-    passenger.register_handlers(tg_application, user_orders, user_roles, BUTTONS, KEYBOARDS, HELPERS)
-    driver.register_handlers(tg_application, user_roles, BUTTONS, KEYBOARDS, HELPERS)
+    # ВИПРАВЛЕНО: Явна передача аргументів по іменах
+    passenger.register_handlers(
+        application=tg_application, 
+        user_orders=user_orders, 
+        user_roles=user_roles, 
+        buttons=BUTTONS, 
+        keyboards=KEYBOARDS, 
+        helpers=HELPERS
+    )
+    
+    driver.register_handlers(
+        application=tg_application, 
+        user_orders=user_orders, # Додано, якщо модуль цього вимагає
+        user_roles=user_roles, 
+        buttons=BUTTONS, 
+        keyboards=KEYBOARDS, 
+        helpers=HELPERS, 
+        DEBUGGING=DEBUGGING
+    )
 
     config = uvicorn.Config(notification_app, host="0.0.0.0", port=8080, log_level="info")
     server = uvicorn.Server(config)
 
-    logger.info("🚀 Бот та Сервер готові до запуску...")
+    logger.info("🚀 Запуск Bot Polling + FastAPI...")
     async with tg_application:
         await tg_application.initialize()
         await tg_application.start()
@@ -120,5 +139,6 @@ async def main():
         await server.serve()
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt: pass
