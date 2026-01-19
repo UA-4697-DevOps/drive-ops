@@ -31,7 +31,8 @@ class APIClient:
         return await cls._request("POST", f"{TRIP_SERVICE_URL}/trips", json=payload)
 
     @classmethod
-    async def get_trip_status(cls, trip_id):
+    async def get_trip_status(cls, trip_id, **kwargs):
+        """Отримати статус поїздки (kwargs дозволяє приймати user_id та ігнорувати його)"""
         return await cls._request("GET", f"{TRIP_SERVICE_URL}/trips/{trip_id}")
 
     @classmethod
