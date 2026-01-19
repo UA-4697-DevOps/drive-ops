@@ -49,7 +49,24 @@ class TripEventsConsumer:
             )
             self.connection = pika.BlockingConnection(parameters)
             self.channel = self.connection.channel()
+
+            # Declare exchange (ensure it exists)
+            self.channel.exchange_declare(
+                exchange='trip_events',
+                exchange_type='topic',
+                durable=True
+            )
+
+            # Declare queue
             self.channel.queue_declare(queue=self.queue_name, durable=True)
+
+            # Bind queue to exchange with routing key
+            self.channel.queue_bind(
+                queue=self.queue_name,
+                exchange='trip_events',
+                routing_key='trip.event.created'
+            )
+
             logger.info(f"Connected to RabbitMQ queue: {self.queue_name}")
         except Exception as e:
             logger.error(f"Failed to connect to RabbitMQ: {e}")

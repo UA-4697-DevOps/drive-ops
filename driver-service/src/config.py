@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str = "guest"
     RABBITMQ_PASSWORD: str = "guest"
+    # Alias for compatibility with main.py
+    @property
+    def RABBITMQ_PASS(self) -> str:
+        return self.RABBITMQ_PASSWORD
     
     TRIP_EVENTS_QUEUE: str = "driver_service_trip_created"
     DRIVER_RESPONSES_QUEUE: str = "driver_service_responses"

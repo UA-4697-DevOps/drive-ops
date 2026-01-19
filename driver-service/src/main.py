@@ -22,8 +22,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # In-memory storage (will be replaced with database)
+# NOTE: These will be moved to app.state in lifespan
 drivers = {}
-trip_requests = {}  # NEW: Track trip requests for idempotency
+trip_requests = {}
 
 # Global services
 gateway_client = None
@@ -46,7 +47,11 @@ async def lifespan(app: FastAPI):
     
     # Startup
     logger.info("Starting Driver Service...")
-    
+
+    # Store references in app.state for endpoints
+    app.state.drivers_storage = drivers
+    app.state.trip_requests_storage = trip_requests
+
     # Initialize Gateway Client
     gateway_client = ClientGatewayClient(
         base_url=settings.CLIENT_GATEWAY_URL,
@@ -298,8 +303,9 @@ async def send_trip_request(notification: TripRequestNotification):
         )
     
     # NEW: Track trip request in storage
-    if notification.trip_id not in trip_requests:
-        trip_requests[notification.trip_id] = {
+    trip_requests_storage = app.state.trip_requests_storage
+    if notification.trip_id not in trip_requests_storage:
+        trip_requests_storage[notification.trip_id] = {
             "status": "pending",
             "notified_drivers": [notification.driver_id],
             "responses": {},
@@ -320,9 +326,10 @@ def list_trip_requests():
     """
     List all tracked trip requests (for monitoring/debugging)
     """
+    trip_requests_storage = app.state.trip_requests_storage
     return {
-        "trip_requests": trip_requests,
-        "count": len(trip_requests)
+        "trip_requests": trip_requests_storage,
+        "count": len(trip_requests_storage)
     }
 
 
@@ -331,13 +338,144 @@ def get_trip_request(trip_id: str):
     """
     Get specific trip request details
     """
-    trip_data = trip_requests.get(trip_id)
+    trip_requests_storage = app.state.trip_requests_storage
+    trip_data = trip_requests_storage.get(trip_id)
     if not trip_data:
         raise HTTPException(status_code=404, detail="Trip request not found")
-    
+
     return {
         "trip_id": trip_id,
         **trip_data
+    }
+
+
+@app.get("/drivers/{driver_id}/trips")
+async def get_driver_trips(driver_id: str):
+    """
+    Get available trips for driver (pending trips)
+    Used by Telegram bot "My Orders" button
+    """
+    # Use storage from app.state (shared with consumers)
+    drivers_storage = app.state.drivers_storage
+    trip_requests_storage = app.state.trip_requests_storage
+
+    # Verify driver exists
+    if driver_id not in drivers_storage:
+        raise HTTPException(status_code=404, detail="Driver not found")
+
+    # Get all pending trips
+    available_trips = []
+    for trip_id, trip_data in trip_requests_storage.items():
+        if trip_data.get("status") == "pending":
+            available_trips.append({
+                "trip_id": trip_id,
+                "pickup": trip_data.get("pickup", {}).get("address", "N/A"),
+                "dropoff": trip_data.get("dropoff", {}).get("address", "N/A"),
+                "pickup_address": trip_data.get("pickup", {}).get("address", "N/A"),
+                "dropoff_address": trip_data.get("dropoff", {}).get("address", "N/A"),
+                "comment": None,
+                "created_at": trip_data.get("created_at", "")
+            })
+
+    logger.info(f"Driver {driver_id} requested trips: {len(available_trips)} available")
+
+    return {
+        "trips": available_trips,
+        "count": len(available_trips)
+    }
+
+
+@app.post("/drivers/{driver_id}/trips/{trip_id}/accept")
+async def accept_trip(driver_id: str, trip_id: str):
+    """
+    Driver accepts trip request
+    Used by Telegram bot "Accept" button
+    """
+    if not response_service:
+        raise HTTPException(
+            status_code=503,
+            detail="Response service not initialized"
+        )
+
+    # Use storage from app.state
+    drivers_storage = app.state.drivers_storage
+    trip_requests_storage = app.state.trip_requests_storage
+
+    # Verify driver exists
+    if driver_id not in drivers_storage:
+        raise HTTPException(status_code=404, detail="Driver not found")
+
+    # Verify trip exists
+    if trip_id not in trip_requests_storage:
+        raise HTTPException(status_code=404, detail="Trip request not found")
+
+    # Process acceptance
+    from datetime import datetime
+    success = await response_service.handle_driver_accept(
+        driver_id=driver_id,
+        trip_id=trip_id,
+        timestamp=datetime.now()
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to process trip acceptance"
+        )
+
+    trip_data = trip_requests_storage.get(trip_id, {})
+
+    return {
+        "message": "Trip accepted successfully",
+        "trip_id": trip_id,
+        "driver_id": driver_id,
+        "pickup_address": trip_data.get("pickup", {}).get("address", "N/A"),
+        "dropoff_address": trip_data.get("dropoff", {}).get("address", "N/A")
+    }
+
+
+@app.post("/drivers/{driver_id}/trips/{trip_id}/reject")
+async def reject_trip(driver_id: str, trip_id: str):
+    """
+    Driver rejects trip request
+    Used by Telegram bot "Reject" button
+    """
+    if not response_service:
+        raise HTTPException(
+            status_code=503,
+            detail="Response service not initialized"
+        )
+
+    # Use storage from app.state
+    drivers_storage = app.state.drivers_storage
+    trip_requests_storage = app.state.trip_requests_storage
+
+    # Verify driver exists
+    if driver_id not in drivers_storage:
+        raise HTTPException(status_code=404, detail="Driver not found")
+
+    # Verify trip exists
+    if trip_id not in trip_requests_storage:
+        raise HTTPException(status_code=404, detail="Trip request not found")
+
+    # Process rejection
+    from datetime import datetime
+    success = await response_service.handle_driver_reject(
+        driver_id=driver_id,
+        trip_id=trip_id,
+        timestamp=datetime.now()
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to process trip rejection"
+        )
+
+    return {
+        "message": "Trip rejected successfully",
+        "trip_id": trip_id,
+        "driver_id": driver_id
     }
 
 
