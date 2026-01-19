@@ -4,6 +4,7 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from dotenv import load_dotenv
 
+# Імпорт модулів
 from . import passenger, driver
 from .api_client import APIClient
 from .logger_utils import create_trip_request_logger
@@ -13,11 +14,9 @@ load_dotenv()
 
 # --- Конфігурація ---
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-TRIP_SERVICE_URL = os.getenv('TRIP_SERVICE_URL', 'http://trip-service:8081')
-DRIVER_SERVICE_URL = os.getenv('DRIVER_SERVICE_URL', 'http://driver-service:8082')
 DEBUGGING = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
 
-# --- Кнопки ---
+# --- КНОПКИ ---
 BTN_PASSENGER = "\U0001F64B Я замовник таксі"
 BTN_DRIVER = "\U0001F697 Я таксист"
 BTN_CHANGE_ROLE = "\U0001F504 Змінити роль"
@@ -55,38 +54,43 @@ BUTTONS = {
 user_orders, user_roles = {}, {}
 tg_application = None
 
-# --- HELPERS ---
-async def fetch_trip_status(trip_id, user_id=None):
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{TRIP_SERVICE_URL}/trips/{trip_id}")
-            if resp.status_code == 200:
-                return {'success': True, 'trip': resp.json()}
-    except Exception: pass
-    return {'success': False, 'error': 'Сервіс недоступний'}
-
-HELPERS = {
-    'submit_trip_request': lambda c, o: APIClient.create_trip({**o, 'passenger_id': str(uuid.uuid4())}),
-    'register_driver_in_service': lambda c, n, car: APIClient.register_driver({'name': n, 'car_description': car, 'telegram_id': str(c)}),
-    'update_driver_status': lambda d, s: APIClient.update_driver_status(d, s),
-    'fetch_trip_status': fetch_trip_status,
-    'safe_send': lambda c_id, txt, ctx, **kw: ctx.bot.send_message(c_id, txt, **kw),
-    'is_valid_address': lambda addr: addr is not None and len(addr) > 5
-}
+# --- МЕНЮ (KEYBOARDS) ---
+def get_user_menu(chat_id):
+    """Повертає меню залежно від ролі"""
+    role = user_roles.get(chat_id, {}).get('role')
+    if role == 'driver':
+        return driver.driver_menu_registered()
+    return passenger.passenger_menu()
 
 KEYBOARDS = {
     'role_selection_menu': lambda: ReplyKeyboardMarkup([[KeyboardButton(BTN_PASSENGER), KeyboardButton(BTN_DRIVER)]], resize_keyboard=True),
     'passenger_menu': passenger.passenger_menu,
     'driver_menu_unregistered': driver.driver_menu_unregistered,
     'driver_menu_registered': driver.driver_menu_registered,
+    'skip_menu': lambda: ReplyKeyboardMarkup([[KeyboardButton(BTN_SKIP)]], resize_keyboard=True, one_time_keyboard=True),
+    'get_user_menu': get_user_menu 
 }
 
-# --- Server ---
+# --- HELPERS (API Calls) ---
+# Ми використовуємо APIClient, який ми оновили в попередньому кроці
+HELPERS = {
+    'submit_trip_request': lambda c, o: APIClient.create_trip({**o, 'passenger_id': str(uuid.uuid4())}),
+    'register_driver_in_service': lambda c, n, car: APIClient.register_driver({'name': n, 'car_description': car, 'telegram_id': str(c)}),
+    'update_driver_status': lambda d, s: APIClient.update_driver_status(d, s),
+    'fetch_trip_status': APIClient.get_trip_status,
+    'fetch_driver_trips': APIClient.fetch_driver_trips, # Це виправить KeyError
+    'send_trip_response': APIClient.respond_to_trip,
+    'finish_trip': APIClient.finish_trip,
+    'safe_send': lambda c_id, txt, ctx, **kw: ctx.bot.send_message(c_id, txt, **kw),
+    'is_valid_address': lambda addr: addr is not None and len(addr) > 5
+}
+
+# --- FastAPI ---
 notification_app = FastAPI()
 
 @notification_app.get("/health")
 async def health():
-    return {"status": "ok", "bot_running": tg_application is not None}
+    return {"status": "ok", "bot_initialized": tg_application is not None}
 
 @notification_app.post("/notifications/driver/{chat_id}")
 async def notify(chat_id: int, request: Request):
@@ -108,7 +112,7 @@ async def main():
     tg_application = Application.builder().token(BOT_TOKEN).build()
     tg_application.add_handler(CommandHandler("start", start_message))
     
-    # ВИПРАВЛЕНО: Явна передача аргументів по іменах
+    # Реєстрація хендлерів
     passenger.register_handlers(
         application=tg_application, 
         user_orders=user_orders, 
@@ -120,7 +124,7 @@ async def main():
     
     driver.register_handlers(
         application=tg_application, 
-        user_orders=user_orders, # Додано, якщо модуль цього вимагає
+        user_orders=user_orders, 
         user_roles=user_roles, 
         buttons=BUTTONS, 
         keyboards=KEYBOARDS, 
