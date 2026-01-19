@@ -45,3 +45,10 @@ class APIClient:
     @classmethod
     async def respond_to_trip(cls, driver_id, trip_id, action):
         return await cls._request("POST", f"{DRIVER_SERVICE_URL}/drivers/{driver_id}/trips/{trip_id}/{action}")
+    @classmethod
+    async def fetch_driver_trips(cls, driver_id):
+        return await cls._request("GET", f"{DRIVER_SERVICE_URL}/drivers/{driver_id}/trips")
+
+    @classmethod
+    async def finish_trip(cls, driver_id, trip_id):
+        return await cls._request("POST", f"{DRIVER_SERVICE_URL}/drivers/{driver_id}/trips/{trip_id}/complete")
