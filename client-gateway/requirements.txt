@@ -1,18 +1,8 @@
-# --- Core Framework ---
-fastapi>=0.115.4
-uvicorn==0.31.0
-pydantic-settings==2.5.2
-python-dotenv==1.0.1
-
-# --- Database ---
-sqlalchemy==2.0.35
-asyncpg>=0.30.0
-greenlet==3.1.1
-
-# --- Messaging & Communication ---
-pika==1.3.2
-httpx==0.27.2
-
-# --- Testing ---
-pytest==8.3.3
-pytest-asyncio==0.24.0
+python-telegram-bot>=21.0,<23.0
+python-dotenv>=1.0.0,<2.0.0
+pytest>=9.0.0,<10.0.0
+pytest-asyncio>=1.0.0,<2.0.0
+respx>=0.20.0,<1.0.0
+httpx>=0.21.0,<1.0.0
+fastapi>=0.100.0
+uvicorn>=0.22.0
