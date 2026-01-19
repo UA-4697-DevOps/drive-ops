@@ -4,33 +4,40 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
-        env_file_encoding="utf-8"
+        env_file_encoding="utf-8",
+        extra="ignore"
     )
     
-    # Application
+    # --- Application Settings ---
     APP_NAME: str = "Driver Service"
     DEBUG: bool = True
     PORT: int = 8082
     
-    # RabbitMQ
-    ENABLE_RABBITMQ: bool = False
-    RABBITMQ_HOST: str = "localhost"
+    # --- Database Settings ---
+    # Імена полів мають точно збігатися з ключами в .env
+    DB_HOST: str = "db"
+    DB_PORT: int = 5432
+    DB_USER: str = "postgres"
+    DB_PASSWORD: str = "postgres" # Збігається з DB_PASSWORD в .env
+    DRIVER_DB_NAME: str = "driver_db"
+
+    # --- RabbitMQ Settings ---
+    ENABLE_RABBITMQ: bool = True
+    RABBITMQ_HOST: str = "mq"
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str = "guest"
-    RABBITMQ_PASS: str = "guest"
+    RABBITMQ_PASSWORD: str = "guest" # ВИПРАВЛЕНО: тепер збігається з .env
     
-    # RabbitMQ Queues
-    TRIP_EVENTS_QUEUE: str = "trip.events"
-    DRIVER_RESPONSES_QUEUE: str = "driver.responses"
+    TRIP_EVENTS_QUEUE: str = "driver_service_trip_created"
+    DRIVER_RESPONSES_QUEUE: str = "driver_service_responses"
+    TRIP_EVENTS_EXCHANGE: str = "trip_events"
     
-    # RabbitMQ Exchanges
-    TRIP_EVENTS_EXCHANGE: str = "trip.events"
-    
-    # Client Gateway (Telegram Bot)
-    CLIENT_GATEWAY_URL: str = "http://localhost:8080"
+    # --- Client Gateway (Telegram Bot) ---
+    # У .env ця змінна називається GATEWAY_URL, тому міняємо ім'я тут
+    GATEWAY_URL: str = "http://client-gateway-bot:8080" 
     GATEWAY_TIMEOUT: int = 10
     
-    # Driver Service Settings
+    # --- Driver Business Logic Settings ---
     MAX_RETRY_ATTEMPTS: int = 3
     DRIVER_SEARCH_RADIUS_KM: float = 5.0
     MAX_DRIVERS_TO_NOTIFY: int = 10
