@@ -5,7 +5,7 @@ logger = logging.getLogger(__name__)
 
 class TripEventsConsumer:
     def __init__(self, settings, notification_service, session_factory: sessionmaker):
-        # Исправлено: теперь корректно принимает объект settings
+        # Отримуємо дані з об'єкта settings (як у main.py)
         self.host = settings.RABBITMQ_HOST
         self.port = settings.RABBITMQ_PORT
         self.user = settings.RABBITMQ_USER
@@ -22,7 +22,7 @@ class TripEventsConsumer:
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host, port=self.port, credentials=credentials))
         self.channel = self.connection.channel()
         self.channel.queue_declare(queue=self.queue_name, durable=True)
-        logger.info(f"✅ Подключено к очереди: {self.queue_name}")
+        logger.info(f"✅ TripEventsConsumer підключено до {self.queue_name}")
 
     def callback(self, ch, method, properties, body):
         try:
@@ -39,7 +39,7 @@ class TripEventsConsumer:
             loop.close()
             ch.basic_ack(delivery_tag=method.delivery_tag)
         except Exception as e:
-            logger.error(f"❌ Ошибка консьюмера: {e}")
+            logger.error(f"❌ Помилка обробки: {e}")
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
     def start_consuming(self):
