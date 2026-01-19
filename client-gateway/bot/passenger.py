@@ -1,15 +1,14 @@
 import re
 import html
-import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters, CommandHandler
+from .logger_utils import create_trip_request_logger
 from telegram.error import BadRequest
 
-# Використовуємо стандартний логер, який ти налаштував
-logger = logging.getLogger('drive_ops')
+logger = create_trip_request_logger()
 
-# Словник статусів для Phase 4
+# Status mapping for trip statuses
 STATUS_MAPPING = {
     'PENDING': ('⏳ Очікує водія', 'Ваше замовлення в черзі. Очікуємо підтвердження від водія.'),
     'CONFIRMED': ('✅ Підтверджено', 'Водій прийняв замовлення і прямує до вас.'),
@@ -19,11 +18,13 @@ STATUS_MAPPING = {
     'CANCELLED': ('❌ Скасовано', 'Цю поїздку було скасовано.'),
 }
 
-# Стейт-машина для діалогів
+# Conversation states
 PICKUP, DROPOFF, COMMENT = range(3)
-CHECK_TRIP_ID = 10
+CHECK_TRIP_ID = 10 
 
-# --- Глобальні функції меню (щоб main.py їх бачив) ---
+def escape_html(text: str) -> str:
+    return html.escape(str(text))
+
 def passenger_menu():
     keyboard = [
         [KeyboardButton("🚖 Замовити таксі"), KeyboardButton("💰 Тарифи")],
@@ -32,80 +33,141 @@ def passenger_menu():
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-def escape_html(text: str) -> str:
-    return html.escape(str(text))
-
-# --- Реєстрація хендлерів ---
 def register_handlers(application, user_orders, user_roles, buttons, keyboards, helpers):
     
-    # Витягуємо хелпери, які ми прописали в main.py
-    submit_trip_request = helpers['submit_trip_request']
-    fetch_trip_status = helpers['fetch_trip_status']
-    is_valid_address = helpers['is_valid_address']
-    safe_send = helpers['safe_send']
-    
-    # Кнопки з main.py
+    BTN_PASSENGER = buttons['BTN_PASSENGER']
     BTN_ORDER_TAXI = buttons['BTN_ORDER_TAXI']
     BTN_RATES = buttons['BTN_RATES']
-    BTN_CHECK_STATUS = buttons['BTN_CHECK_STATUS']
     BTN_SKIP = buttons['BTN_SKIP']
-
+    BTN_CHECK_STATUS = buttons['BTN_CHECK_STATUS']
+    
+    # Використовуємо передані клавіатури або локальну
+    passenger_menu_kb = keyboards.get('passenger_menu', passenger_menu)
+    skip_menu = keyboards['skip_menu']
+    get_user_menu = keyboards['get_user_menu']
+    
+    safe_send = helpers['safe_send']
+    submit_trip_request = helpers['submit_trip_request']
+    is_valid_address = helpers['is_valid_address']
+    fetch_trip_status = helpers['fetch_trip_status']
+    
     async def select_passenger_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
         user_roles[chat_id] = {'role': 'passenger'}
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton("🚖 Замовити зараз", callback_data="quick_order_taxi")]])
-        await update.message.reply_text("✅ Ви обрали роль: Замовник", reply_markup=passenger_menu())
-        await update.message.reply_text("Бажаєте поїхати?", reply_markup=markup)
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("\U0001F695 Замовити таксі зараз", callback_data="quick_order_taxi")]
+        ])
+        
+        await update.message.reply_text(
+            "\u2705 Ви обрали роль: Замовник\n\n"
+            "\U0001F697 Готові замовити таксі? Натисніть кнопку нижче або скористайтесь меню:",
+            reply_markup=markup
+        )
+        # Викликаємо меню як функцію, якщо це функція, або просто передаємо якщо об'єкт
+        menu = passenger_menu_kb() if callable(passenger_menu_kb) else passenger_menu_kb
+        await update.message.reply_text("Меню:", reply_markup=menu)
 
-    # --- Потік створення замовлення (Phase 1) ---
+    async def show_rates(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(
+            "\U0001F695 Тариф 'Стандарт': 15 грн/км\n\U0001F3E2 Тариф 'Комфорт': 25 грн/км"
+        )
+
+    async def cancel_order_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        if chat_id in user_orders:
+            user_orders.pop(chat_id, None)
+            await safe_send(chat_id, "\u274C Ваше незавершене замовлення скасовано.", context, reply_markup=get_user_menu(chat_id))
+        else:
+            await safe_send(chat_id, "У вас немає активного незавершеного замовлення.", context, reply_markup=get_user_menu(chat_id))
+        return ConversationHandler.END
+
     async def start_order_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
+        
         user_orders[chat_id] = {'pickup': None, 'dropoff': None, 'comment': None, '_in_progress': True}
-        await update.message.reply_text("📍 **Крок 1/3**: Звідки вас забрати?", parse_mode='Markdown', reply_markup=ReplyKeyboardRemove())
+        
+        await update.message.reply_text(
+            "\U0001F4CD *Крок 1/3*: Введіть адресу відправлення (напр. вул. Хрещатик, 1):",
+            parse_mode='Markdown',
+            reply_markup=ReplyKeyboardRemove()
+        )
         return PICKUP
 
     async def process_pickup_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
         address = update.message.text
+
         if not is_valid_address(address):
-            await update.message.reply_text("❌ Адреса занадто коротка. Спробуйте ще раз:")
+            await update.message.reply_text("\u274C Адреса занадто коротка. Спробуйте ще раз:")
             return PICKUP
+
         user_orders[chat_id]['pickup'] = address
-        await update.message.reply_text("🏁 **Крок 2/3**: Куди їдемо?", parse_mode='Markdown')
+        await update.message.reply_text(
+            "\U0001F3C1 *Крок 2/3*: Куди їдемо? (Введіть адресу призначення):",
+            parse_mode='Markdown'
+        )
         return DROPOFF
 
     async def process_dropoff_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
         address = update.message.text
+
         if not is_valid_address(address):
-            await update.message.reply_text("❌ Будь ласка, вкажіть повну адресу:")
+            await update.message.reply_text("\u274C Будь ласка, вкажіть повну адресу призначення:")
             return DROPOFF
+
         user_orders[chat_id]['dropoff'] = address
-        skip_kb = ReplyKeyboardMarkup([[KeyboardButton(BTN_SKIP)]], resize_keyboard=True)
-        await update.message.reply_text("💬 **Крок 3/3**: Коментар для водія?", reply_markup=skip_kb, parse_mode='Markdown')
+        await update.message.reply_text(
+            "\U0001F4AC *Крок 3/3*: Додайте коментар (під'їзд, дитяче крісло тощо) або натисніть кнопку нижче:", 
+            reply_markup=skip_menu(),
+            parse_mode='Markdown'
+        )
         return COMMENT
 
     async def process_comment_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
-        text = update.message.text
-        user_orders[chat_id]['comment'] = "Не вказано" if text == BTN_SKIP else text
         
+        if update.message.text == BTN_SKIP:
+            user_orders[chat_id]['comment'] = "Не вказано"
+        else:
+            user_orders[chat_id]['comment'] = update.message.text
+
         order = user_orders[chat_id]
+        
         summary = (
-            f"🚖 <b>Підтвердження замовлення</b>\n\n"
-            f"📍 <b>Звідки:</b> {escape_html(order['pickup'])}\n"
-            f"🏁 <b>Куди:</b> {escape_html(order['dropoff'])}\n"
-            f"💬 <b>Коментар:</b> {escape_html(order['comment'])}"
+            f"\U0001F695 <b>Підтвердження замовлення</b>\n\n"
+            f"\U0001F4CD <b>Звідки:</b> {escape_html(order['pickup'])}\n"
+            f"\U0001F3C1 <b>Куди:</b> {escape_html(order['dropoff'])}\n"
+            f"\U0001F4AC <b>Коментар:</b> {escape_html(order['comment'])}\n\n"
+            f"\U0001F4B0 Вартість буде розрахована після підтвердження."
         )
+
         markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Підтвердити", callback_data="order_confirm"),
-             InlineKeyboardButton("❌ Скасувати", callback_data="order_cancel")]
+            [
+                InlineKeyboardButton("\u2705 Підтвердити", callback_data="order_confirm"),
+                InlineKeyboardButton("\u274C Скасувати", callback_data="order_cancel")
+            ]
         ])
+        
         await update.message.reply_text(summary, parse_mode='HTML', reply_markup=markup)
         return ConversationHandler.END
 
-    # --- Обробка результату (Phase 1 Response) ---
-    async def handle_order_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_quick_order_taxi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        chat_id = query.message.chat.id
+        
+        user_orders[chat_id] = {'pickup': None, 'dropoff': None, 'comment': None, '_in_progress': True}
+        
+        await context.bot.send_message(
+            chat_id, 
+            "\U0001F4CD *Крок 1/3*: Введіть адресу відправлення (напр. вул. Хрещатик, 1):",
+            parse_mode='Markdown',
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return PICKUP
+
+    async def handle_order_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
         chat_id = query.message.chat.id
@@ -114,79 +176,80 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             order = user_orders.get(chat_id, {})
             await query.edit_message_text("⏳ Створюємо замовлення...")
             
-            # Виклик API через наш новий APIClient
             result = await submit_trip_request(chat_id, order)
             
-            if result['success']:
-                # Витягуємо ID з поля data, як прописано в APIClient
-                trip_id = result.get('data', {}).get('id', 'N/A')
+            if result.get('success'):
+                trip_data = result.get('data', {})
+                trip_id = trip_data.get('id') or trip_data.get('trip_id') or 'N/A'
                 await query.edit_message_text(
-                    f"✅ <b>Замовлення створено!</b>\n\n🆔 ID поїздки: <code>{trip_id}</code>\n"
-                    f"Шукаємо водія. Ви отримаєте сповіщення.", 
+                    f"✅ <b>Замовлення створено!</b>\n🆔 ID: <code>{trip_id}</code>\n\nШукаємо водія...", 
                     parse_mode='HTML'
                 )
             else:
-                msg = result.get('error', {}).get('message', 'Бекенд недоступний')
-                await query.edit_message_text(f"❌ Помилка: {msg}")
+                err = result.get('error', {}).get('message', 'Помилка')
+                await query.edit_message_text(f"❌ Помилка: {err}")
         
-        else:
+        elif query.data == "order_cancel":
             await query.edit_message_text("❌ Замовлення скасовано.")
         
         user_orders.pop(chat_id, None)
-        await context.bot.send_message(chat_id, "Головне меню:", reply_markup=passenger_menu())
+        menu = passenger_menu_kb() if callable(passenger_menu_kb) else passenger_menu_kb
+        await context.bot.send_message(chat_id, "Головне меню:", reply_markup=menu)
 
-    # --- Перевірка статусу (Phase 4) ---
-    async def start_check_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("🔍 Введіть ID поїздки для перевірки:", reply_markup=ReplyKeyboardRemove())
+    # --- Check Trip Status Flow ---
+    async def start_check_status_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(
+            "\U0001F50D *Перевірка статусу поїздки*\nВведіть ID поїздки:",
+            parse_mode='Markdown'
+        )
         return CHECK_TRIP_ID
-
-    async def process_trip_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
+    async def process_trip_id_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
         trip_id = update.message.text.strip()
-        msg = await update.message.reply_text("⏳ Отримуємо дані...")
         
-        result = await fetch_trip_status(trip_id, update.effective_chat.id)
+        result = await fetch_trip_status(trip_id, user_id=chat_id)
         
-        if result['success']:
-            trip = result['data'] # Дані тепер тут
-            status = trip.get('status', 'PENDING').upper()
-            emoji, desc = STATUS_MAPPING.get(status, ('❓', 'Невідомий статус'))
-            
-            response = (
-                f"📋 <b>Статус поїздки</b>\n\n"
-                f"🆔 <code>{trip_id}</code>\n"
-                f"📦 Статус: {emoji} {status}\n"
-                f"📍 Від: {escape_html(trip.get('pickup', '—'))}\n"
-                f"🏁 До: {escape_html(trip.get('dropoff', '—'))}\n\n"
-                f"💡 <i>{desc}</i>"
-            )
-            markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Оновити", callback_data=f"refresh_status_{trip_id}")]])
-            await msg.edit_text(response, parse_mode='HTML', reply_markup=markup)
+        if result.get('success'):
+            trip = result['data']
+            status = trip.get('status', 'UNKNOWN')
+            emoji = STATUS_MAPPING.get(status, ('❓', ''))[0]
+            await update.message.reply_text(f"Поїздка {trip_id}:\nСтатус: {emoji} {status}")
         else:
-            await msg.edit_text("❌ Поїздку не знайдено або сервіс тимчасово лежить.")
-        
-        await context.bot.send_message(update.effective_chat.id, "Меню:", reply_markup=passenger_menu())
+            await update.message.reply_text("❌ Поїздку не знайдено.")
+            
+        menu = get_user_menu(chat_id)
+        await context.bot.send_message(chat_id, "Меню:", reply_markup=menu)
         return ConversationHandler.END
 
-    # --- Реєстрація в Telegram Application ---
+    async def cancel_check_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        menu = get_user_menu(chat_id)
+        await update.message.reply_text("❌ Скасовано.", reply_markup=menu)
+        return ConversationHandler.END
+
+    # --- Handlers ---
     order_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex(f"^{re.escape(BTN_ORDER_TAXI)}$"), start_order_flow),
-                      CallbackQueryHandler(start_order_flow, pattern="^quick_order_taxi$")],
+        entry_points=[
+            MessageHandler(filters.Regex(f"^{re.escape(BTN_ORDER_TAXI)}$"), start_order_flow),
+            CallbackQueryHandler(handle_quick_order_taxi, pattern="^quick_order_taxi$"),
+        ],
         states={
             PICKUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_pickup_step)],
             DROPOFF: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_dropoff_step)],
             COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_comment_step)],
         },
-        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)]
+        fallbacks=[CommandHandler("cancel_order", cancel_order_command)],
     )
 
     status_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex(f"^{re.escape(BTN_CHECK_STATUS)}$"), start_check_status)],
-        states={CHECK_TRIP_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_trip_id)]},
-        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)]
+        entry_points=[MessageHandler(filters.Regex(f"^{re.escape(BTN_CHECK_STATUS)}$"), start_check_status_flow)],
+        states={CHECK_TRIP_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_trip_id_step)]},
+        fallbacks=[CommandHandler("cancel", cancel_check_status)],
     )
 
+    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_PASSENGER)}$"), select_passenger_role))
+    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_RATES)}$"), show_rates))
     application.add_handler(order_conv)
     application.add_handler(status_conv)
-    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_PASSENGER)}$"), select_passenger_role))
-    application.add_handler(MessageHandler(filters.Regex(f"^{re.escape(BTN_RATES)}$"), lambda u, c: u.message.reply_text("💰 Тариф: 15 грн/км")))
-    application.add_handler(CallbackQueryHandler(handle_order_callback, pattern="^order_"))
+    application.add_handler(CallbackQueryHandler(handle_order_status, pattern="^order_"))
