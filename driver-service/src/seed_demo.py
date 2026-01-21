@@ -15,8 +15,12 @@ async def seed_data():
         
         for driver_data in DEMO_DRIVERS:
             # Перевірка, чи водій вже існує (за номером телефону)
-            existing = await repo.get_by_id(0) # Можна додати метод get_by_phone у репозиторій
-            
+            existing = await repo.get_by_phone_number(driver_data["phone_number"])
+
+            if existing:
+                print(f"⏭️  Пропущено (вже існує): {driver_data['first_name']} {driver_data['last_name']} ({driver_data['phone_number']})")
+                continue
+
             try:
                 new_driver = await repo.create(**driver_data)
                 print(f"✅ Додано водія: {new_driver.first_name} {new_driver.last_name}")

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 from uuid import UUID
 from fastapi import FastAPI, HTTPException, status, Depends
@@ -415,11 +416,11 @@ async def accept_trip(driver_id: str, trip_id: str):
         raise HTTPException(status_code=404, detail="Trip request not found")
 
     # Process acceptance
-    from datetime import datetime
+    from datetime import datetime, timezone
     success = await response_service.handle_driver_accept(
         driver_id=driver_id,
         trip_id=trip_id,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
 
     if not success:
@@ -469,11 +470,11 @@ async def reject_trip(driver_id: str, trip_id: str):
         raise HTTPException(status_code=404, detail="Trip request not found")
 
     # Process rejection
-    from datetime import datetime
+    from datetime import datetime, timezone
     success = await response_service.handle_driver_reject(
         driver_id=driver_id,
         trip_id=trip_id,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
 
     if not success:
@@ -495,7 +496,7 @@ async def complete_trip(driver_id: str, trip_id: str):
     Driver completes trip
     Used by Telegram bot "Finish Trip" button
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     # Use storage from app.state
     drivers_storage = app.state.drivers_storage
@@ -510,38 +511,82 @@ async def complete_trip(driver_id: str, trip_id: str):
         logger.warning(f"Trip {trip_id} not found in storage. Available trips: {list(trip_requests_storage.keys())}")
         raise HTTPException(status_code=404, detail="Trip request not found")
 
+    # Save previous status for rollback in case of event publishing failure
+    previous_status = trip_requests_storage[trip_id]["status"]
+
     # Update trip status to completed
     trip_requests_storage[trip_id]["status"] = "completed"
-    logger.info(f"Trip {trip_id} marked as completed by driver {driver_id}")
+    logger.info(f"Trip {trip_id} marked as completed by driver {driver_id} (previous status: {previous_status})")
+
+    # Track event publishing status
+    event_published = False
+    event_warning = None
 
     # Publish trip.event.completed to RabbitMQ so trip-service can update its database
     if rabbitmq_publisher:
-        try:
-            # Use UTC timestamp with Z suffix (RFC3339 format for Go)
-            completed_at = datetime.utcnow().isoformat() + 'Z'
+        # Use UTC timestamp with Z suffix (RFC3339 format for Go)
+        # datetime.now(timezone.utc).isoformat() returns format with +00:00, convert to Z for Go
+        completed_at = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
-            payload = {
-                "trip_id": trip_id,
-                "driver_id": driver_id,
-                "completed_at": completed_at
-            }
+        payload = {
+            "trip_id": trip_id,
+            "driver_id": driver_id,
+            "completed_at": completed_at
+        }
 
-            rabbitmq_publisher.publish_event(
-                event_type="trip.event.completed",
-                payload=payload,
-                routing_key="trip.event.completed"
-            )
-            logger.info(f"✅ Published trip.event.completed for trip {trip_id} to RabbitMQ")
-        except Exception as e:
-            logger.error(f"❌ Failed to publish trip.event.completed: {e}")
-            # Don't fail the request if event publishing fails
+        # Retry logic: 3 attempts with exponential backoff
+        max_retries = 3
+        retry_delay = 0.5  # Start with 500ms
 
-    return {
-        "message": "Trip completed successfully",
+        for attempt in range(1, max_retries + 1):
+            try:
+                rabbitmq_publisher.publish_event(
+                    event_type="trip.event.completed",
+                    payload=payload,
+                    routing_key="trip.event.completed"
+                )
+                logger.info(f"✅ Published trip.event.completed for trip {trip_id} to RabbitMQ (attempt {attempt})")
+                event_published = True
+                break
+            except Exception as e:
+                logger.error(
+                    f"❌ Failed to publish trip.event.completed (attempt {attempt}/{max_retries}) for trip_id={trip_id}, "
+                    f"driver_id={driver_id}: {type(e).__name__}: {str(e)}",
+                    exc_info=True
+                )
+
+                if attempt < max_retries:
+                    # Wait before retry with exponential backoff
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Double the delay for next attempt
+                else:
+                    # All retries failed - rollback the status change
+                    logger.error(
+                        f"🔄 Rolling back trip {trip_id} status from 'completed' to '{previous_status}' "
+                        f"due to event publishing failure after {max_retries} attempts"
+                    )
+                    trip_requests_storage[trip_id]["status"] = previous_status
+
+                    event_warning = (
+                        f"Trip status could not be synchronized with trip-service due to messaging failure. "
+                        f"Status rolled back to '{previous_status}'. Please try again or contact support."
+                    )
+
+    # Build response with warning if event publishing failed
+    response = {
+        "message": "Trip completed successfully" if event_published else "Trip completion failed - status not synchronized",
         "trip_id": trip_id,
         "driver_id": driver_id,
-        "status": "completed"
+        "status": trip_requests_storage[trip_id]["status"]
     }
+
+    if event_warning:
+        response["warning"] = event_warning
+        response["event_published"] = False
+    else:
+        response["event_published"] = True
+
+    return response
 
 
 @app.get("/health")

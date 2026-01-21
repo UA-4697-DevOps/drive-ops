@@ -40,7 +40,7 @@ def get_url():
         # Запасний варіант, якщо DATABASE_URL не задано
         user = os.getenv("DB_USER", "postgres")
         pw = os.getenv("DB_PASSWORD", "postgres")
-        db = os.getenv("TRIP_DB_NAME", "driver_db")
+        db = os.getenv("DRIVER_DB_NAME", "driver_db")
         host = os.getenv("DB_HOST", "localhost")
         url = f"postgresql://{user}:{pw}@{host}:5432/{db}"
     return url

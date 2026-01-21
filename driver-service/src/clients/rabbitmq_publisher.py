@@ -5,7 +5,7 @@ import json
 import logging
 import pika
 from typing import Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ class RabbitMQPublisher:
             event_data = {
                 "event_type": event_type,
                 "payload": fixed_payload,
-                "timestamp": datetime.utcnow().isoformat() + 'Z'
+                "timestamp": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
             }
 
             message = json.dumps(event_data)

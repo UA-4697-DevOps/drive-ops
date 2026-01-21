@@ -160,7 +160,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                 f"\U0001F464 Ім'я: {escape_markdown(name)}\n"
                 f"\U0001F697 Авто: {escape_markdown(car_description)}\n"
                 f"\U0001F194 ID водія: {escape_markdown(str(driver_id))}\n\n"
-                "\U0001F4A1 Тепер ви можете війти на лінію та отримувати замовлення.",
+                "\U0001F4A1 Тепер ви можете вийти на лінію та отримувати замовлення.",
                 parse_mode='Markdown',
                 reply_markup=driver_menu_registered(is_online=False, active_trip=False)
             )
