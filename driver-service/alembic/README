@@ -1,1 +1,184 @@
-Generic single-database configuration.
+# Alembic Database Migrations
+
+This directory contains database migration scripts for the driver-service using Alembic.
+
+## Overview
+
+Alembic is a database migration tool for SQLAlchemy. It tracks changes to your database schema over time, allowing you to version control your database structure alongside your code.
+
+## How It Works
+
+### 1. Migration Files
+
+Migrations are stored in `alembic/versions/` as Python scripts:
+- Each migration has a unique revision ID (e.g., `42f496ca8ae8`)
+- Contains `upgrade()` and `downgrade()` functions
+- Applied sequentially to modify database schema
+
+Example migration:
+```python
+def upgrade():
+    op.create_table('drivers',
+        sa.Column('id', postgresql.UUID(), nullable=False),
+        sa.Column('first_name', sa.String(50), nullable=False),
+        ...
+    )
+
+def downgrade():
+    op.drop_table('drivers')
+```
+
+### 2. Version Tracking
+
+Alembic maintains a table `alembic_version` in your database:
+- Stores the current migration revision
+- Ensures migrations are applied exactly once
+- Enables rollback to previous versions
+
+### 3. Docker Integration
+
+Migrations run automatically via docker-compose:
+
+```yaml
+driver-migrations:
+  build: ./driver-service
+  dockerfile: Dockerfile.migrations
+  command: alembic upgrade head
+  depends_on:
+    db: service_healthy
+```
+
+**Execution flow:**
+1. PostgreSQL container starts and becomes healthy
+2. `driver-migrations` container runs `alembic upgrade head`
+3. Alembic checks `alembic_version` in database
+4. Applies any pending migrations
+5. Container exits successfully
+6. `driver-service` starts (depends on migrations completion)
+
+### 4. Configuration
+
+**alembic.ini** - Main configuration file
+- Database URL (overridden by environment variables)
+- Migration script location
+- Logging settings
+
+**env.py** - Runtime environment
+- Loads environment variables from `.env`
+- Imports SQLAlchemy models from `src/driver_models.py`
+- Configures database connection
+- Defines migration execution context
+
+## Common Operations
+
+### Create a New Migration
+
+After modifying `src/driver_models.py`:
+
+```bash
+# Auto-generate migration from model changes
+alembic revision --autogenerate -m "add car_model column"
+
+# Manually create empty migration
+alembic revision -m "add custom index"
+```
+
+### Apply Migrations
+
+```bash
+# Upgrade to latest version
+alembic upgrade head
+
+# Upgrade by one version
+alembic upgrade +1
+
+# Downgrade by one version
+alembic downgrade -1
+
+# Downgrade to specific revision
+alembic downgrade 42f496ca8ae8
+```
+
+### Check Migration Status
+
+```bash
+# Show current revision
+alembic current
+
+# Show migration history
+alembic history
+
+# Show pending migrations
+alembic heads
+```
+
+## Local Development
+
+### Run migrations manually:
+
+```bash
+cd driver-service
+
+# Set database URL
+export DATABASE_URL="postgresql://user:pass@localhost:5432/driver_db"
+
+# Apply migrations
+alembic upgrade head
+```
+
+### Test migrations in Docker:
+
+```bash
+# Build migration image
+docker compose build driver-migrations
+
+# Run migrations
+docker compose up driver-migrations
+
+# Check logs
+docker compose logs driver-migrations
+```
+
+## CI/CD Integration
+
+Migrations are automatically applied during deployment:
+
+1. `docker compose up -d` starts all services
+2. `driver-migrations` runs before `driver-service`
+3. If migrations fail, `driver-service` won't start
+4. Ensures database schema is always up-to-date
+
+## Troubleshooting
+
+### "relation already exists"
+Database has existing tables. Either:
+- Drop the table: `DROP TABLE drivers CASCADE;`
+- Mark migration as applied: `alembic stamp head`
+
+### "target database has been stamped with a version that is newer"
+Your code is behind the database. Pull latest code or downgrade:
+```bash
+alembic downgrade <revision>
+```
+
+### Migration fails mid-way
+Alembic uses transactions, but some operations (like CREATE INDEX CONCURRENTLY) can't be rolled back:
+```bash
+# Force set version (use carefully!)
+alembic stamp <revision>
+```
+
+## Best Practices
+
+1. **Always review auto-generated migrations** - Alembic may miss some changes
+2. **Test migrations on a copy of production data** before deploying
+3. **Never edit applied migrations** - create a new migration to fix issues
+4. **Keep migrations small and focused** - one logical change per migration
+5. **Write reversible migrations** - implement both upgrade() and downgrade()
+6. **Backup production database** before running migrations
+
+## Further Reading
+
+- [Alembic Documentation](https://alembic.sqlalchemy.org/)
+- [Alembic Tutorial](https://alembic.sqlalchemy.org/en/latest/tutorial.html)
+- [SQLAlchemy Core Operations](https://docs.sqlalchemy.org/en/20/core/schema.html)
