@@ -105,7 +105,7 @@ sequenceDiagram
 
 ## 4. Directory Structure
 * `client-gateway/` - Telegram Bot Gateway (Python). BFF for handling user interactions via Telegram API.
-* `driver-service/` - Driver Service (Python, Postgres, PostGIS). Manages driver availability and geospatial search.
+* `driver-service/` - Driver Service (Python, Postgres). Manages driver availability and geospatial search.
 * `trip-service/` - Trip Service (Go, Postgres). Handles trip lifecycle and state management.
 * `infra/` - Infrastructure as Code (Ansible, Vagrant). Server provisioning and local VM setup.
 * `scripts/hooks/`: Contains `pre-commit` script to enforce linting/formatting before commits.
@@ -117,21 +117,26 @@ sequenceDiagram
 ### `client-gateway/`
 **Role:** Telegram Bot Interface (BFF).
 **Language:** Python.
-**Dependencies:** Defined in `requirements.txt`.
 **Structure:**
 * `bot/`: Core application logic.
   * `main.py`: Entry point. Initializes the bot and webhook listeners.
+  * `api_client.py`: **Internal HTTP Client**. Wraps async calls (`httpx`) to `trip-service` and `driver-service`. Handles logging, latency tracking, and Correlation IDs.
   * `passenger.py`: Handlers for passenger commands (e.g., `/order`, status checks).
   * `driver.py`: Handlers for driver interactions (e.g., accepting trips via buttons).
-  * `logger_utils.py`: Logging configuration.
+  * `logger_utils.py`: Logging configuration and correlation ID generation.
+* `requirements.txt`: Python dependencies (pinned `python-telegram-bot`, `fastapi`, `httpx`).
 * `Dockerfile`: Python container configuration for deployment.
 * `tests/`: Unit and integration tests for bot logic.
 
 ### `driver-service/`
 **Role:** Driver Management & Geospatial Search.
 **Language:** Python.
-**Dependencies:** Defined in `requirements.txt`.
 **Structure:**
+* `alembic.ini`: **Alembic Configuration**. Root config pointing to `alembic/` script location and database URL.
+* `alembic/`: **Database Migrations**. Managed via Alembic (SQLAlchemy).
+  * `versions/`: Migration scripts.
+  * `env.py`: Migration environment configuration.
+  * `script.py.mako`: Template for generating new migration scripts.
 * `src/`: Core application source code.
   * `clients/`: Outbound communication.
     * `gateway_client.py`: HTTP client for calling Client Gateway webhooks.
@@ -142,12 +147,21 @@ sequenceDiagram
   * `services/`: Core Business Logic.
     * `driver_notification_service.py`: Logic to find and notify drivers.
     * `driver_response_service.py`: Logic to handle driver acceptance actions.
+    * `driver_repository.py`: **Data Access Layer**. Abstraction for DB queries (Repository Pattern).
   * `schemas/`: Pydantic models (Data Transfer Objects).
     * `trip_request.py`: Schema for incoming trip data.
-    * `driver_response.py`: Schema for driver actions (Accept/Decline).
+    * `driver_response.py`: Schema for driver actions.
+    * `driver_schemas.py`: internal driver data schemas.
+  * `utils/`:
+    * `geo.py`: Geospatial calculations (distance, radius).
   * `main.py`: App entry point & dependency injection.
   * `config.py`: Environment configuration.
-* `Dockerfile`: Container configuration.
+  * `database.py`: **DB Connection**. Handles SQLAlchemy engine and session creation.
+  * `driver_models.py`: **ORM Models**. Defines `Driver` table schema (SQLAlchemy).
+  * `seed_demo.py`: Script to seed initial dummy data for development.
+* `requirements.txt`: Python dependencies (pinned `fastapi`, `sqlalchemy`, `asyncpg`, `pika`).
+* `Dockerfile`: **Main Service**. Container configuration for the FastAPI application.
+* `Dockerfile.migrations`: **Migration Runner**. Dedicated container to install Alembic dependencies and execute `upgrade head` on startup.
 * `tests/`: Unit tests for driver logic.
 
 ### `trip-service/`
@@ -155,49 +169,48 @@ sequenceDiagram
 **Language:** Go (Golang).
 **Architecture:** Standard Go Project Layout (Clean Architecture).
 **Structure:**
-* `cmd/server/`:
-  * `main.go`: Application entry point. Bootstraps DB, RabbitMQ, and HTTP server.
+* `cmd/server/`: Main application entry point.
+* `internal/`: Private code (Library pattern).
+  * `api/http/`: REST API handlers.
+    * `handler.go`: REST API handlers (e.g., `POST /internal/trips`).
+  * `broker/`: RabbitMQ Publisher/Consumer implementation.
+    * `consumer.go`: RabbitMQ consumer logic (handling `driver_assigned`, `completed`).
+    * `consumer_test.go`: Unit tests for consumer handlers.
+    * `events.go`: Event builders and payload structures.
+    * `publisher.go`: Message publisher interface and implementation.
+  * `domain/`: Struct definitions and Domain Errors.
+    * `trip.go`: Core entities and errors (`ErrInvalidTripStatus`, etc.).
+    * `events.go`: Event structs (`TripCreatedEvent`, etc.).
+  * `repository/`: Data Access Layer (GORM).
+    * `trip_repository.go`: DB operations (Atomic updates, locking).
+    * `trip_repository_test.go`: **Integration tests** using **Testcontainers** (Postgres). Co-located with code.
+  * `service/`: Business Logic.
+    * `trip_service.go`: Service orchestration.
+* `tests/integration/`: System-wide E2E tests (optional, distinct from repo integration tests).
 * `db/`: Database management.
-  * `migrations/`: SQL migration files (`up`/`down`) for PostgreSQL.
-  * `seeds/`: Initial data for development (`sample_trips.sql`).
-* `internal/`: Private application code (Library pattern).
-  * `api/http/`: HTTP Transport layer.
-    * `handler.go`: REST API handlers (e.g., POST /internal/trips).
-  * `broker/`: Asynchronous Messaging (RabbitMQ).
-    * `publisher.go`: Sends events (e.g., `trip.event.created`).
-    * `events.go`: Broker-specific definitions (Topic names, Routing Keys, Payload structs).
-    * `consumer.go`: Listens for events (e.g., `trip.event.driver_assigned`).
-    * `config.go`: RabbitMQ connection settings.
-  * `domain/`: Core Business Entities.
-    * `trip.go`: Struct definitions (Trip model).
-    * `events.go`: Event payload structures.
-  * `repository/`: Data Access Layer (PostgreSQL).
-    * `trip_repository.go`: SQL queries and DB interactions.
-    * `trip_repository_test.go`: Unit tests co-located with source code following Go standards.
-  * `service/`: Business Logic Layer.
-    * `trip_service.go`: Orchestrates flow between Repository and Broker.
-    * `trip_mock.go`: Mocks for unit testing.
-* `tests/integration/`: End-to-end integration tests.
-* `go.mod` / `go.sum`: Go module definitions.
-* `Dockerfile` & `Dockerfile.migrations`: Container configurations for App and Migrator.
+  * `migrations/`: SQL migration files (`up`/`down`).
+  * `seeds/`: Initial data for development.
+* `Dockerfile`: Container configuration for the Go app.
+* `Dockerfile.migrations`: **Migration Runner**. Uses `migrate/migrate` image.
+* `run-migrations.sh`: Entrypoint script for the migration container (constructs DB URL and runs migrations).
 
 ### `infra/`
-**Role:** Infrastructure as Code (IaC) & Local Development Environment.
-**Tools:** Ansible, Vagrant, Docker.
+**Role:** IaC & Local Development.
 **Structure:**
-* `ansible/`: Configuration Management.
-  * `inventory/`: Defines target environments.
-    * `hosts`: Production/Staging inventory.
-    * `localhost`: Local development inventory.
-  * `roles/`: Modular tasks for provisioning services.
-    * `client-gateway/`: Tasks to deploy the Python Bot.
-    * `driver-service/`: Tasks to deploy the Driver Backend (Python).
-    * `trip-service/`: Tasks to deploy the Trip Backend (Go).
-    * `docker/`: Installs Docker engine and dependencies.
-    * `infra/`: Creates `/opt/drive-ops` root. Securely copies `.env` and `docker-compose.yml`. Starts `db`, `mq` and waits for health checks.
+* `ansible/`: Modular roles for environment provisioning.
+  * `inventory/`: Target environments.
+    * `hosts`: Production/Staging inventory file.
+    * `localhost`: Local development inventory file.
+  * `roles/`:
+    * `client-gateway/`: **Python Bot Deployment**. Symlinks source code to `/opt/drive-ops` to enable hot-reloading. Deploys container via Docker Compose.
+    * `docker/`: **Engine Setup**. Installs Docker Engine, Buildx plugin, and `python3-docker` SDK. Handles GPG keys and architecture mapping (AMD64/ARM64).
+    * `driver-service/`: **Driver Backend Deployment**. Symlinks source code. Orchestrates both `driver-service` and `driver-migrations` containers.
+    * `infra/`: **Core Environment Setup**. Creates `/opt/drive-ops` root. Securely copies `.env` and `docker-compose.yml`. Starts shared services (`db`, `mq`) and waits for health checks (ports 5432/5672).
+    * `trip-service/`: **Go Backend Deployment**. Symlinks source code. Orchestrates both `trip-service` and `trip-migrations` containers.
   * `playbook.yaml`: Main entry point orchestrating all roles.
 * `postgres/init-db/`:
-  * `init.sql`: Bootstrap script for driver_db.
-  * `Note on DB Initialization`: The trip_db is automatically created by the container's POSTGRES_DB environment variable. Since Postgres only auto-creates one database on startup, driver_db must be initialized manually via this script.
+  * `init.sql`: **Database Creation Only**. Executes `CREATE DATABASE driver_db`.
+  * **Note on Schema:** Tables are **NOT** created here. The `drivers` table schema is managed via Alembic migrations located in `driver-service/alembic/`.
+  * **Note on DB Initialization:** The `trip_db` is automatically created by the container's `POSTGRES_DB` environment variable. `driver_db` is manually created via this script to support the microservices pattern.
 * `vagrant/`: Virtual Machine configuration.
   * `Vagrantfile`: Ruby-based config defining the local VM (OS, Network, Resources).
