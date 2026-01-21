@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import time
 from contextlib import asynccontextmanager
 from uuid import UUID
 from fastapi import FastAPI, HTTPException, status, Depends
@@ -540,11 +539,17 @@ async def complete_trip(driver_id: str, trip_id: str):
 
         for attempt in range(1, max_retries + 1):
             try:
-                rabbitmq_publisher.publish_event(
+                # Capture return value to detect silent failures
+                success = rabbitmq_publisher.publish_event(
                     event_type="trip.event.completed",
                     payload=payload,
                     routing_key="trip.event.completed"
                 )
+
+                # Treat False return as failure
+                if success is False:
+                    raise RuntimeError("RabbitMQ publisher returned False indicating publish failure")
+
                 logger.info(f"✅ Published trip.event.completed for trip {trip_id} to RabbitMQ (attempt {attempt})")
                 event_published = True
                 break
@@ -556,8 +561,8 @@ async def complete_trip(driver_id: str, trip_id: str):
                 )
 
                 if attempt < max_retries:
-                    # Wait before retry with exponential backoff
-                    time.sleep(retry_delay)
+                    # Wait before retry with exponential backoff (async to avoid blocking event loop)
+                    await asyncio.sleep(retry_delay)
                     retry_delay *= 2  # Double the delay for next attempt
                 else:
                     # All retries failed - rollback the status change
@@ -577,14 +582,13 @@ async def complete_trip(driver_id: str, trip_id: str):
         "message": "Trip completed successfully" if event_published else "Trip completion failed - status not synchronized",
         "trip_id": trip_id,
         "driver_id": driver_id,
-        "status": trip_requests_storage[trip_id]["status"]
+        "status": trip_requests_storage[trip_id]["status"],
+        "event_published": event_published
     }
 
+    # Only add warning if there was an actual failure
     if event_warning:
         response["warning"] = event_warning
-        response["event_published"] = False
-    else:
-        response["event_published"] = True
 
     return response
 
