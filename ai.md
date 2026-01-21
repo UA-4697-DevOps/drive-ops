@@ -17,29 +17,7 @@
   * `Trip Service` -> `Driver Service` (Topic: `trip.event.created`)
   * `Driver Service` -> `Trip Service` (Topic: `trip.event.driver_assigned`)
 
-## 2. Tech Stack & Versions
-### **Core Services**
-* **Trip Service:**
-  * **Language:** Go (Golang) 1.25.5+ (Alpine-based)
-  * **Database:** PostgreSQL 15.15+ (Alpine-based)
-  * **Architecture:** Clean Architecture (Standard Go Layout)
-  * **Key Libs:** `amqp091-go` (RabbitMQ), standard `net/http`, `database/sql` with migrations.
-* **Driver Service:**
-  * **Language:** Python 3.13+ (Slim Trixie-based)
-  * **Database:** PostgreSQL 15.15+ with **PostGIS** extension.
-  * **Architecture:** Service-Layer Pattern.
-  * **Key Libs:** `aio_pika` (RabbitMQ Async Client), `pydantic` v2, `fastapi`, `asyncio`.
-* **Client Gateway:**
-  * **Language:** Python 3.11+ (Slim-based)
-  * **Interface:** Telegram Bot API.
-  * **Key Libs:** `aiogram` v3, `pydantic`.
-
-### **Data & Messaging**
-* **Message Broker:** RabbitMQ 3.13+ (Management Plugin-enabled, Alpine-based).
-* **Database:** PostgreSQL 15.15+ (Official Docker Image `postgres:15-alpine`).
-* **Geo-Spatial:** PostGIS (for Driver location index).
-
-## 3. Infrastructure & DevOps Principles
+## 2. Infrastructure & DevOps Principles
 **Environment:**
 * **Local Development:** Virtualized via **Vagrant** (Debian 12 / Ubuntu).
 * **Containerization:** **Docker** & **Docker Compose V2**.
@@ -55,7 +33,7 @@
 * **Hooks:** `pre-commit` (Linting/Formatting) located in `scripts/hooks`.
 * **CI:** GitHub Actions (defined in `.github/`).
 
-## 4. System Data Flow (Source of Truth)
+## 3. System Data Flow (Source of Truth)
 This diagram defines the canonical flow for Ride Creation and Assignment.
 ```mermaid
 sequenceDiagram
@@ -125,7 +103,7 @@ sequenceDiagram
 
 * Step 20-21: Trip Service returns a Trip DTO containing the current status and driver details. The Client Gateway parses this DTO and sends a formatted "Trip description" message to the Passenger.
 
-## 5. Directory Structure
+## 4. Directory Structure
 * `client-gateway/` - Telegram Bot Gateway (Python). BFF for handling user interactions via Telegram API.
 * `driver-service/` - Driver Service (Python, Postgres, PostGIS). Manages driver availability and geospatial search.
 * `trip-service/` - Trip Service (Go, Postgres). Handles trip lifecycle and state management.
@@ -167,8 +145,6 @@ sequenceDiagram
   * `schemas/`: Pydantic models (Data Transfer Objects).
     * `trip_request.py`: Schema for incoming trip data.
     * `driver_response.py`: Schema for driver actions (Accept/Decline).
-  * `utils/`:
-    * `geo.py`: Geospatial calculations (distance, radius).
   * `main.py`: App entry point & dependency injection.
   * `config.py`: Environment configuration.
 * `Dockerfile`: Container configuration.
@@ -197,6 +173,7 @@ sequenceDiagram
     * `events.go`: Event payload structures.
   * `repository/`: Data Access Layer (PostgreSQL).
     * `trip_repository.go`: SQL queries and DB interactions.
+    * `trip_repository_test.go`: Unit tests co-located with source code following Go standards.
   * `service/`: Business Logic Layer.
     * `trip_service.go`: Orchestrates flow between Repository and Broker.
     * `trip_mock.go`: Mocks for unit testing.
@@ -220,6 +197,7 @@ sequenceDiagram
     * `infra/`: Creates `/opt/drive-ops` root. Securely copies `.env` and `docker-compose.yml`. Starts `db`, `mq` and waits for health checks.
   * `playbook.yaml`: Main entry point orchestrating all roles.
 * `postgres/init-db/`:
-  * `init.sql`: Explicitly creates `driver_db` and the `drivers` table schema. *Note: `trip_db` is automatically created by the Postgres container via env vars.*
+  * `init.sql`: Bootstrap script for driver_db.
+  * `Note on DB Initialization`: The trip_db is automatically created by the container's POSTGRES_DB environment variable. Since Postgres only auto-creates one database on startup, driver_db must be initialized manually via this script.
 * `vagrant/`: Virtual Machine configuration.
   * `Vagrantfile`: Ruby-based config defining the local VM (OS, Network, Resources).
