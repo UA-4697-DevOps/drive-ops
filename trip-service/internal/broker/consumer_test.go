@@ -36,6 +36,11 @@ func (m *MockTripService) AssignDriver(ctx context.Context, tripID uuid.UUID, dr
 	return args.Error(0)
 }
 
+func (m *MockTripService) CompleteTrip(ctx context.Context, tripID uuid.UUID) error {
+	args := m.Called(ctx, tripID)
+	return args.Error(0)
+}
+
 func (m *MockTripService) CheckHealth(ctx context.Context) error {
 	args := m.Called(ctx)
 	return args.Error(0)
@@ -84,10 +89,63 @@ func TestRabbitMQConsumer_HandleDriverAssigned(t *testing.T) {
 		event := domain.DriverAssignedEvent{}
 		event.Payload.TripID = "not-a-uuid"
 		event.Payload.DriverID = uuid.New().String()
-		
+
 		body, _ := json.Marshal(event)
 
 		err := consumer.handleDriverAssigned(context.Background(), body)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid trip ID")
+	})
+}
+
+func TestRabbitMQConsumer_HandleTripCompleted(t *testing.T) {
+	// Setup generic mock service
+	mockSvc := new(MockTripService)
+	consumer := &RabbitMQConsumer{
+		service: mockSvc,
+	}
+
+	t.Run("Success", func(t *testing.T) {
+		tripID := uuid.New()
+		driverID := uuid.New()
+
+		// Create a valid event payload
+		event := domain.TripCompletedEvent{
+			BaseEvent: domain.BaseEvent{
+				EventType: "trip.event.completed",
+				Timestamp: time.Now(),
+			},
+		}
+		event.Payload.TripID = tripID.String()
+		event.Payload.DriverID = driverID.String()
+		event.Payload.CompletedAt = time.Now()
+
+		body, _ := json.Marshal(event)
+
+		// Expect CompleteTrip to be called
+		mockSvc.On("CompleteTrip", mock.Anything, tripID).Return(nil).Once()
+
+		// Execute
+		err := consumer.handleTripCompleted(context.Background(), body)
+		assert.NoError(t, err)
+
+		mockSvc.AssertExpectations(t)
+	})
+
+	t.Run("Invalid JSON", func(t *testing.T) {
+		err := consumer.handleTripCompleted(context.Background(), []byte("invalid json"))
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to unmarshal JSON")
+	})
+
+	t.Run("Invalid Trip ID", func(t *testing.T) {
+		event := domain.TripCompletedEvent{}
+		event.Payload.TripID = "not-a-uuid"
+		event.Payload.DriverID = uuid.New().String()
+
+		body, _ := json.Marshal(event)
+
+		err := consumer.handleTripCompleted(context.Background(), body)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid trip ID")
 	})

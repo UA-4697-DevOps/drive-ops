@@ -77,9 +77,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 func setupEnums(db *gorm.DB) error {
 	_ = db.Exec("DROP TYPE IF EXISTS trip_status").Error
-	enumSQL := fmt.Sprintf("CREATE TYPE trip_status AS ENUM ('%s', '%s', '%s', '%s', '%s')",
+	enumSQL := fmt.Sprintf("CREATE TYPE trip_status AS ENUM ('%s', '%s', '%s', '%s')",
 		domain.TripStatusPending,
-		domain.TripStatusConfirmed,
 		domain.TripStatusActive,
 		domain.TripStatusCompleted,
 		domain.TripStatusCancelled,
@@ -109,10 +108,10 @@ func TestTripRepository_AssignDriver(t *testing.T) {
 		
 		found, err := repo.GetByID(ctx, tripID)
 		assert.NoError(t, err)
-		
+
 		// FIXED: Nil guard before dereferencing DriverID to prevent test panic
 		require.NotNil(t, found.DriverID, "DriverID should not be nil after assignment")
-		assert.Equal(t, domain.TripStatusConfirmed, found.Status)
+		assert.Equal(t, domain.TripStatusActive, found.Status)
 		assert.Equal(t, driverID, *found.DriverID)
 	})
 
@@ -124,7 +123,7 @@ func TestTripRepository_AssignDriver(t *testing.T) {
 			PassengerID: uuid.New(),
 			Pickup:      "Point C",
 			Dropoff:     "Point D",
-			Status:      domain.TripStatusConfirmed,
+			Status:      domain.TripStatusActive,
 			DriverID:    &existingDriverID,
 		}
 		require.NoError(t, repo.Create(ctx, trip))
