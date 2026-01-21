@@ -20,23 +20,23 @@
 ## 2. Tech Stack & Versions
 ### **Core Services**
 * **Trip Service:**
-  * **Language:** Go (Golang) 1.21+
-  * **Database:** PostgreSQL 15+
+  * **Language:** Go (Golang) 1.25.5+ (Alpine based)
+  * **Database:** PostgreSQL 15.15+ (Alpine based)
   * **Architecture:** Clean Architecture (Standard Go Layout)
-  * **Key Libs:** `amqp` (RabbitMQ), standard `net/http`, `database/sql` with migrations.
+  * **Key Libs:** `amqp091-go` (RabbitMQ), standard `net/http`, `database/sql` with migrations.
 * **Driver Service:**
-  * **Language:** Python 3.10+
-  * **Database:** PostgreSQL 15+ with **PostGIS** extension.
+  * **Language:** Python 3.13+ (Slim Trixie based)
+  * **Database:** PostgreSQL 15.15+ with **PostGIS** extension.
   * **Architecture:** Service-Layer Pattern.
-  * **Key Libs:** `pydantic` (Data Validation), `fastapi` (implied for Webhooks), `asyncio`.
+  * **Key Libs:** `aio_pika` (RabbitMQ Async Client), `pydantic` v2, `fastapi`, `asyncio`.
 * **Client Gateway:**
-  * **Language:** Python 3.10+
+  * **Language:** Python 3.11+ (Slim based)
   * **Interface:** Telegram Bot API.
-  * **Key Libs:** `aiogram` or standard `requests`, `pydantic`.
+  * **Key Libs:** `aiogram` v3, `pydantic`.
 
 ### **Data & Messaging**
-* **Message Broker:** RabbitMQ (Management Plugin enabled).
-* **Database:** PostgreSQL (Official Docker Image).
+* **Message Broker:** RabbitMQ 3.13+ (Management Plugin enabled, Alpine based).
+* **Database:** PostgreSQL 15 (Official Docker Image `postgres:15-alpine`).
 * **Geo-Spatial:** PostGIS (for Driver location index).
 
 ## 3. Infrastructure & DevOps Principles
