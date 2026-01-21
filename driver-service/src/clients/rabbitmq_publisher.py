@@ -29,6 +29,36 @@ class RabbitMQPublisher:
         self.connection = None
         self.channel = None
     
+    def _fix_datetime_format(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Recursively fix datetime strings to have 'Z' suffix for Go RFC3339 parsing
+
+        Args:
+            data: Dictionary that may contain datetime strings
+
+        Returns:
+            Dictionary with fixed datetime strings
+        """
+        if not isinstance(data, dict):
+            return data
+
+        result = {}
+        for key, value in data.items():
+            if isinstance(value, str):
+                # Check if it looks like ISO datetime without 'Z'
+                # Format: YYYY-MM-DDTHH:MM:SS.microseconds
+                if 'T' in value and not value.endswith('Z') and not value.endswith('+00:00'):
+                    # Add 'Z' suffix for UTC timezone
+                    result[key] = value + 'Z'
+                else:
+                    result[key] = value
+            elif isinstance(value, dict):
+                result[key] = self._fix_datetime_format(value)
+            else:
+                result[key] = value
+
+        return result
+
     def connect(self):
         """Establish connection to RabbitMQ"""
         try:
@@ -63,29 +93,32 @@ class RabbitMQPublisher:
     ) -> bool:
         """
         Publish event to RabbitMQ exchange
-        
+
         Args:
             event_type: Type of event (e.g., 'trip.event.driver_assigned')
             payload: Event payload
             routing_key: Optional routing key (defaults to event_type)
-        
+
         Returns:
             True if published successfully, False otherwise
         """
         if not routing_key:
             routing_key = event_type
-        
+
         try:
             # Ensure connection and channel (FIXED: added channel check)
             if not self.connection or self.connection.is_closed or not self.channel or self.channel.is_closed:
                 self.connect()
-            
+
+            # Fix all datetime strings in payload to have 'Z' suffix for Go RFC3339 parsing
+            fixed_payload = self._fix_datetime_format(payload)
+
             event_data = {
                 "event_type": event_type,
-                "payload": payload,
-                "timestamp": datetime.utcnow().isoformat()
+                "payload": fixed_payload,
+                "timestamp": datetime.utcnow().isoformat() + 'Z'
             }
-            
+
             message = json.dumps(event_data)
             
             self.channel.basic_publish(

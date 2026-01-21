@@ -32,9 +32,10 @@ class TripEventsConsumer:
         self.rabbitmq_pass = rabbitmq_pass
         self.queue_name = queue_name
         self.notification_service = notification_service
-        self.trip_requests = trip_requests_storage or {}
+        self.trip_requests = trip_requests_storage if trip_requests_storage is not None else {}
         self.connection = None
         self.channel = None
+        logger.info(f"TripEventsConsumer.__init__: received storage_id={id(trip_requests_storage)}, using storage_id={id(self.trip_requests)}")
     
     def connect(self):
         """Establish connection to RabbitMQ"""
@@ -132,7 +133,7 @@ class TripEventsConsumer:
                 "pickup": pickup_data,
                 "dropoff": dropoff_data
             }
-            logger.info(f"Tracked trip request {trip_id} in storage")
+            logger.info(f"Tracked trip request {trip_id} in storage (storage_id={id(self.trip_requests)}, total_trips={len(self.trip_requests)})")
             
             logger.info(
                 f"Trip {trip_id} processing complete. "

@@ -1,7 +1,7 @@
 """
 Event schemas for driver responses to trip requests
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from datetime import datetime
 from typing import Literal
 
@@ -12,12 +12,12 @@ class DriverResponsePayload(BaseModel):
     trip_id: str = Field(..., description="ID of the trip being responded to")
     decision: Literal["accept", "reject"] = Field(..., description="Driver's decision")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="Response timestamp")
-    
+
 
 class DriverResponseEvent(BaseModel):
     """
     Event structure for driver responses
-    
+
     Commands from Client Gateway (Telegram Bot):
     - driver.cmd.trip_accept
     - driver.cmd.trip_reject
@@ -31,6 +31,11 @@ class DriverAssignedPayload(BaseModel):
     trip_id: str = Field(..., description="ID of the trip")
     driver_id: str = Field(..., description="ID of assigned driver")
     assigned_at: datetime = Field(default_factory=datetime.utcnow, description="Assignment timestamp")
+
+    @field_serializer('assigned_at')
+    def serialize_assigned_at(self, value: datetime) -> str:
+        """Serialize datetime to RFC3339 format with Z suffix for Go compatibility"""
+        return value.isoformat() + 'Z' if not value.isoformat().endswith('Z') else value.isoformat()
 
 
 class DriverAssignedEvent(BaseModel):

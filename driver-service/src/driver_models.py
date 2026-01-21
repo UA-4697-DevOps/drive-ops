@@ -1,5 +1,7 @@
-from sqlalchemy import String, Integer, Boolean
+from sqlalchemy import String, Boolean
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+import uuid
 
 # Це основний клас, який Alembic шукає в env.py
 class Base(DeclarativeBase):
@@ -9,7 +11,7 @@ class Base(DeclarativeBase):
 class Driver(Base):
     __tablename__ = "drivers"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     first_name: Mapped[str] = mapped_column(String(50), nullable=False)
     last_name: Mapped[str] = mapped_column(String(50), nullable=False)
     phone_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)

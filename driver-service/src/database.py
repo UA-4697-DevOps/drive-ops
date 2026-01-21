@@ -1,17 +1,21 @@
 import os
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from dotenv import load_dotenv
 
-# Вказуємо шлях до .env явно, якщо він на рівень вище
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-load_dotenv(os.path.join(BASE_DIR, ".env"))
-
-raw_url = os.getenv("DATABASE_URL")
+# Try to read DATABASE_URL from environment
+raw_url = os.environ.get("DATABASE_URL")
 
 if not raw_url:
-    # Якщо DATABASE_URL не знайдено, використовуємо дефолтний для локальної розробки
-    print("⚠️ DATABASE_URL не знайдено в .env, використовую дефолтний шлях")
-    raw_url = "postgresql://postgres:postgres@localhost:5432/driver_db"
+    # Build DATABASE_URL from individual env vars (docker-compose passes these)
+    db_user = os.environ.get("DB_USER", "postgres")
+    db_password = os.environ.get("DB_PASSWORD", "postgres")
+    db_host = os.environ.get("DB_HOST", "localhost")
+    db_port = os.environ.get("DB_PORT", "5432")
+    db_name = os.environ.get("DRIVER_DB_NAME", "driver_db")
+
+    raw_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+    print(f"✅ Built DATABASE_URL from env vars: postgresql://{db_user}:***@{db_host}:{db_port}/{db_name}")
+else:
+    print(f"✅ Using DATABASE_URL from environment")
 
 # Для асинхронної роботи SQLAlchemy потрібен драйвер +asyncpg
 DATABASE_URL = raw_url.replace("postgresql://", "postgresql+asyncpg://")

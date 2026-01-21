@@ -17,6 +17,7 @@ type TripServiceInterface interface {
 	CreateTrip(ctx context.Context, trip *domain.Trip) error
 	GetTrip(ctx context.Context, id uuid.UUID) (*domain.Trip, error)
 	AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error
+	CompleteTrip(ctx context.Context, tripID uuid.UUID) error
 	CheckHealth(ctx context.Context) error
 }
 
@@ -79,6 +80,30 @@ func (s *TripService) AssignDriver(ctx context.Context, tripID uuid.UUID, driver
 	}
 
 	return s.repo.AssignDriver(ctx, tripID, driverID)
+}
+
+// CompleteTrip handles the business logic for completing a trip
+func (s *TripService) CompleteTrip(ctx context.Context, tripID uuid.UUID) error {
+	if tripID == uuid.Nil {
+		return domain.ErrInvalidID
+	}
+
+	// Get the trip to update its status
+	trip, err := s.repo.GetByID(ctx, tripID)
+	if err != nil {
+		return err
+	}
+
+	// Update status to COMPLETED
+	trip.Status = domain.TripStatusCompleted
+
+	// Save the updated trip
+	if err := s.repo.Update(ctx, trip); err != nil {
+		return err
+	}
+
+	log.Printf("Trip %s marked as COMPLETED", tripID)
+	return nil
 }
 
 // CheckHealth verifies the database connection status.

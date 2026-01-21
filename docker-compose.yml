@@ -103,6 +103,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app/src
+      - DATABASE_URL=postgresql://postgres:postgres@drive-ops-db:5432/driver_db
     ports:
       - "8082:8082" # Unified internal and external port
     healthcheck:
