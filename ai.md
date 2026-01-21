@@ -9,30 +9,30 @@
 
 **Communication Channels:**
 * **Synchronous (HTTP/REST):**
-    * `TG User` <-> `Client Gateway` (Telegram API)
-    * `Client Gateway` -> `Trip Service` (Create Order / Poll Status)
-    * `Client Gateway` -> `Driver Service` (Accept Order)
-    * `Driver Service` -> `Client Gateway` (Webhook: Notify Driver)
+  * `TG User` <-> `Client Gateway` (Telegram API)
+  * `Client Gateway` -> `Trip Service` (Create Order / Poll Status)
+  * `Client Gateway` -> `Driver Service` (Accept Order)
+  * `Driver Service` -> `Client Gateway` (Webhook: Notify Driver)
 * **Asynchronous (RabbitMQ):**
-    * `Trip Service` -> `Driver Service` (Topic: `trip.created`)
-    * `Driver Service` -> `Trip Service` (Topic: `trip.driver_assigned`)
+  * `Trip Service` -> `Driver Service` (Topic: `trip.event.created`)
+  * `Driver Service` -> `Trip Service` (Topic: `trip.event.driver_assigned`)
 
 ## 2. Tech Stack & Versions
 ### **Core Services**
 * **Trip Service:**
-    * **Language:** Go (Golang) 1.21+
-    * **Database:** PostgreSQL 15+
-    * **Architecture:** Clean Architecture (Standard Go Layout)
-    * **Key Libs:** `amqp` (RabbitMQ), standard `net/http`, `database/sql` with migrations.
+  * **Language:** Go (Golang) 1.21+
+  * **Database:** PostgreSQL 15+
+  * **Architecture:** Clean Architecture (Standard Go Layout)
+  * **Key Libs:** `amqp` (RabbitMQ), standard `net/http`, `database/sql` with migrations.
 * **Driver Service:**
-    * **Language:** Python 3.10+
-    * **Database:** PostgreSQL 15+ with **PostGIS** extension.
-    * **Architecture:** Service-Layer Pattern.
-    * **Key Libs:** `pydantic` (Data Validation), `fastapi` (implied for Webhooks), `asyncio`.
+  * **Language:** Python 3.10+
+  * **Database:** PostgreSQL 15+ with **PostGIS** extension.
+  * **Architecture:** Service-Layer Pattern.
+  * **Key Libs:** `pydantic` (Data Validation), `fastapi` (implied for Webhooks), `asyncio`.
 * **Client Gateway:**
-    * **Language:** Python 3.10+
-    * **Interface:** Telegram Bot API.
-    * **Key Libs:** `aiogram` or standard `requests`, `pydantic`.
+  * **Language:** Python 3.10+
+  * **Interface:** Telegram Bot API.
+  * **Key Libs:** `aiogram` or standard `requests`, `pydantic`.
 
 ### **Data & Messaging**
 * **Message Broker:** RabbitMQ (Management Plugin enabled).
@@ -142,10 +142,10 @@ sequenceDiagram
 **Dependencies:** Defined in `requirements.txt`.
 **Structure:**
 * `bot/`: Core application logic.
-    * `main.py`: Entry point. Initializes the bot and webhook listeners.
-    * `passenger.py`: Handlers for passenger commands (e.g., `/order`, status checks).
-    * `driver.py`: Handlers for driver interactions (e.g., accepting trips via buttons).
-    * `logger_utils.py`: Logging configuration.
+  * `main.py`: Entry point. Initializes the bot and webhook listeners.
+  * `passenger.py`: Handlers for passenger commands (e.g., `/order`, status checks).
+  * `driver.py`: Handlers for driver interactions (e.g., accepting trips via buttons).
+  * `logger_utils.py`: Logging configuration.
 * `Dockerfile`: Python container configuration for deployment.
 * `tests/`: Unit and integration tests for bot logic.
 
@@ -155,22 +155,22 @@ sequenceDiagram
 **Dependencies:** Defined in `requirements.txt`.
 **Structure:**
 * `src/`: Core application source code.
-    * `clients/`: Outbound communication.
-        * `gateway_client.py`: HTTP client for calling Client Gateway webhooks.
-        * `rabbitmq_publisher.py`: Publishes events (`trip.event.driver_assigned`).
-    * `consumers/`: Inbound RabbitMQ handlers.
-        * `trip_events_consumer.py`: Listens for `trip.event.created` (New ride requests).
-        * `driver_response_consumer.py`: Handles asynchronous driver responses or status updates.
-    * `services/`: Core Business Logic.
-        * `driver_notification_service.py`: Logic to find and notify drivers.
-        * `driver_response_service.py`: Logic to handle driver acceptance actions.
-    * `schemas/`: Pydantic models (Data Transfer Objects).
-        * `trip_request.py`: Schema for incoming trip data.
-        * `driver_response.py`: Schema for driver actions (Accept/Decline).
-    * `utils/`:
-        * `geo.py`: Geospatial calculations (distance, radius).
-    * `main.py`: App entry point & dependency injection.
-    * `config.py`: Environment configuration.
+  * `clients/`: Outbound communication.
+    * `gateway_client.py`: HTTP client for calling Client Gateway webhooks.
+    * `rabbitmq_publisher.py`: Publishes events (`trip.event.driver_assigned`).
+  * `consumers/`: Inbound RabbitMQ handlers.
+    * `trip_events_consumer.py`: Listens for `trip.event.created` (New ride requests).
+    * `driver_response_consumer.py`: Handles asynchronous driver responses or status updates.
+  * `services/`: Core Business Logic.
+    * `driver_notification_service.py`: Logic to find and notify drivers.
+    * `driver_response_service.py`: Logic to handle driver acceptance actions.
+  * `schemas/`: Pydantic models (Data Transfer Objects).
+    * `trip_request.py`: Schema for incoming trip data.
+    * `driver_response.py`: Schema for driver actions (Accept/Decline).
+  * `utils/`:
+    * `geo.py`: Geospatial calculations (distance, radius).
+  * `main.py`: App entry point & dependency injection.
+  * `config.py`: Environment configuration.
 * `Dockerfile`: Container configuration.
 * `tests/`: Unit tests for driver logic.
 
@@ -180,26 +180,26 @@ sequenceDiagram
 **Architecture:** Standard Go Project Layout (Clean Architecture).
 **Structure:**
 * `cmd/server/`:
-    * `main.go`: Application entry point. Bootstraps DB, RabbitMQ, and HTTP server.
+  * `main.go`: Application entry point. Bootstraps DB, RabbitMQ, and HTTP server.
 * `db/`: Database management.
-    * `migrations/`: SQL migration files (`up`/`down`) for PostgreSQL.
-    * `seeds/`: Initial data for development (`sample_trips.sql`).
+  * `migrations/`: SQL migration files (`up`/`down`) for PostgreSQL.
+  * `seeds/`: Initial data for development (`sample_trips.sql`).
 * `internal/`: Private application code (Library pattern).
-    * `api/http/`: HTTP Transport layer.
-        * `handler.go`: REST API handlers (e.g., `POST /trips`).
-    * `broker/`: Asynchronous Messaging (RabbitMQ).
-        * `publisher.go`: Sends events (e.g., `trip.event.created`).
-        * `events.go`: Broker-specific definitions (Topic names, Routing Keys, Payload structs).
-        * `consumer.go`: Listens for events (e.g., `trip.event.driver_assigned`).
-        * `config.go`: RabbitMQ connection settings.
-    * `domain/`: Core Business Entities.
-        * `trip.go`: Struct definitions (Trip model).
-        * `events.go`: Event payload structures.
-    * `repository/`: Data Access Layer (PostgreSQL).
-        * `trip_repository.go`: SQL queries and DB interactions.
-    * `service/`: Business Logic Layer.
-        * `trip_service.go`: Orchestrates flow between Repository and Broker.
-        * `trip_mock.go`: Mocks for unit testing.
+  * `api/http/`: HTTP Transport layer.
+    * `handler.go`: REST API handlers (e.g., `POST /trips`).
+  * `broker/`: Asynchronous Messaging (RabbitMQ).
+    * `publisher.go`: Sends events (e.g., `trip.event.created`).
+    * `events.go`: Broker-specific definitions (Topic names, Routing Keys, Payload structs).
+    * `consumer.go`: Listens for events (e.g., `trip.event.driver_assigned`).
+    * `config.go`: RabbitMQ connection settings.
+  * `domain/`: Core Business Entities.
+    * `trip.go`: Struct definitions (Trip model).
+    * `events.go`: Event payload structures.
+  * `repository/`: Data Access Layer (PostgreSQL).
+    * `trip_repository.go`: SQL queries and DB interactions.
+  * `service/`: Business Logic Layer.
+    * `trip_service.go`: Orchestrates flow between Repository and Broker.
+    * `trip_mock.go`: Mocks for unit testing.
 * `tests/integration/`: End-to-end integration tests.
 * `go.mod` / `go.sum`: Go module definitions.
 * `Dockerfile` & `Dockerfile.migrations`: Container configurations for App and Migrator.
@@ -209,17 +209,17 @@ sequenceDiagram
 **Tools:** Ansible, Vagrant, Docker.
 **Structure:**
 * `ansible/`: Configuration Management.
-    * `inventory/`: Defines target environments.
-        * `hosts`: Production/Staging inventory.
-        * `localhost`: Local development inventory.
-    * `roles/`: Modular tasks for provisioning services.
-        * `client-gateway/`: Tasks to deploy the Python Bot.
-        * `driver-service/`: Tasks to deploy the Driver Backend (Python).
-        * `trip-service/`: Tasks to deploy the Trip Backend (Go).
-        * `docker/`: Installs Docker engine and dependencies.
-        * `infra/`: Creates `/opt/drive-ops` root. Securely copies `.env` and `docker-compose.yml`. Starts `db`, `mq` and waits for health checks.
-    * `playbook.yaml`: Main entry point orchestrating all roles.
+  * `inventory/`: Defines target environments.
+    * `hosts`: Production/Staging inventory.
+    * `localhost`: Local development inventory.
+  * `roles/`: Modular tasks for provisioning services.
+    * `client-gateway/`: Tasks to deploy the Python Bot.
+    * `driver-service/`: Tasks to deploy the Driver Backend (Python).
+    * `trip-service/`: Tasks to deploy the Trip Backend (Go).
+    * `docker/`: Installs Docker engine and dependencies.
+    * `infra/`: Creates `/opt/drive-ops` root. Securely copies `.env` and `docker-compose.yml`. Starts `db`, `mq` and waits for health checks.
+  * `playbook.yaml`: Main entry point orchestrating all roles.
 * `postgres/init-db/`:
-    * `init.sql`: Explicitly creates `driver_db` and the `drivers` table schema. *Note: `trip_db` is automatically created by the Postgres container via env vars.*
+  * `init.sql`: Explicitly creates `driver_db` and the `drivers` table schema. *Note: `trip_db` is automatically created by the Postgres container via env vars.*
 * `vagrant/`: Virtual Machine configuration.
-    * `Vagrantfile`: Ruby-based config defining the local VM (OS, Network, Resources).
+  * `Vagrantfile`: Ruby-based config defining the local VM (OS, Network, Resources).
