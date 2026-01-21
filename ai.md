@@ -162,7 +162,7 @@ sequenceDiagram
   * `seeds/`: Initial data for development (`sample_trips.sql`).
 * `internal/`: Private application code (Library pattern).
   * `api/http/`: HTTP Transport layer.
-    * `handler.go`: REST API handlers (e.g., `POST /trips`).
+    * `handler.go`: REST API handlers (e.g., POST /internal/trips).
   * `broker/`: Asynchronous Messaging (RabbitMQ).
     * `publisher.go`: Sends events (e.g., `trip.event.created`).
     * `events.go`: Broker-specific definitions (Topic names, Routing Keys, Payload structs).
