@@ -190,8 +190,8 @@ async def test_update_driver_status_calls_driver_service(monkeypatch):
     assert client_instances, 'AsyncClient should be instantiated'
     client = client_instances[-1]
     expected_url = f"{main.DRIVER_SERVICE_URL}/drivers/{driver_id}/status"
-    # Status is converted to uppercase and sent as query parameter
-    client.post.assert_awaited_once_with(expected_url, params={'status': status.upper()})
+    # Status is converted to is_active boolean and sent via PATCH
+    client.patch.assert_awaited_once_with(expected_url, params={'is_active': True})
 
 # =============================================================================
 # Driver Menu and UI Tests
