@@ -1,0 +1,19 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Install required packages for Alembic migrations
+RUN pip install --no-cache-dir \
+    alembic \
+    psycopg2-binary \
+    sqlalchemy \
+    python-dotenv
+
+# Copy Alembic configuration and migrations
+COPY alembic.ini .
+COPY alembic ./alembic
+COPY src/driver_models.py ./src/driver_models.py
+COPY src/__init__.py ./src/__init__.py
+
+# Run migrations
+CMD ["alembic", "upgrade", "head"]

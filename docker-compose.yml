@@ -94,6 +94,24 @@ services:
     networks:
       - drive-ops-net
 
+  # Database Migrations for Driver Service
+  driver-migrations:
+    build:
+      context: ./driver-service
+      dockerfile: Dockerfile.migrations
+    container_name: driver-migrations
+    environment:
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DRIVER_DB_NAME=${DRIVER_DB_NAME}
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:5432/${DRIVER_DB_NAME}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - drive-ops-net
+
   # Driver Service (Python/FastAPI)
   driver-service:
     build:
@@ -120,6 +138,8 @@ services:
         condition: service_healthy
       mq:
         condition: service_healthy
+      driver-migrations:
+        condition: service_completed_successfully
     networks:
       - drive-ops-net
 
