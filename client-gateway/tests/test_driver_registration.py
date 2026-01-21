@@ -173,6 +173,7 @@ async def test_update_driver_status_calls_driver_service(monkeypatch):
     class DummyAsyncClient:
         def __init__(self, *args, **kwargs):
             self.post = AsyncMock(return_value=mock_response)
+            self.patch = AsyncMock(return_value=mock_response)
             client_instances.append(self)
 
         async def __aenter__(self):
@@ -979,6 +980,10 @@ async def test_send_trip_response_accept(monkeypatch):
     driver_id = 'drv_123'
     trip_id = 'trip_001'
     mock_response = MagicMock(status_code=200, text='ok')
+    mock_response.json.return_value = {
+        'pickup_address': 'Test Pickup',
+        'dropoff_address': 'Test Dropoff'
+    }
     client_instances = []
 
     class DummyAsyncClient:
@@ -996,7 +1001,12 @@ async def test_send_trip_response_accept(monkeypatch):
 
     result = await main.send_trip_response(driver_id, trip_id, 'accept')
 
-    assert result == {'success': True, 'error': None}
+    assert result == {
+        'success': True,
+        'error': None,
+        'pickup_address': 'Test Pickup',
+        'dropoff_address': 'Test Dropoff'
+    }
     assert client_instances, 'AsyncClient should be instantiated'
     client = client_instances[-1]
     expected_url = f"{main.DRIVER_SERVICE_URL}/drivers/{driver_id}/trips/{trip_id}/accept"
@@ -1009,6 +1019,7 @@ async def test_send_trip_response_reject(monkeypatch):
     driver_id = 'drv_123'
     trip_id = 'trip_001'
     mock_response = MagicMock(status_code=200, text='ok')
+    mock_response.json.return_value = {}
     client_instances = []
 
     class DummyAsyncClient:
@@ -1026,7 +1037,12 @@ async def test_send_trip_response_reject(monkeypatch):
 
     result = await main.send_trip_response(driver_id, trip_id, 'reject')
 
-    assert result == {'success': True, 'error': None}
+    assert result == {
+        'success': True,
+        'error': None,
+        'pickup_address': None,
+        'dropoff_address': None
+    }
     assert client_instances, 'AsyncClient should be instantiated'
     client = client_instances[-1]
     expected_url = f"{main.DRIVER_SERVICE_URL}/drivers/{driver_id}/trips/{trip_id}/reject"
