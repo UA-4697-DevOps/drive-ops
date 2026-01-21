@@ -40,7 +40,7 @@ func (r *TripRepository) Update(ctx context.Context, trip *domain.Trip) error {
 	return r.db.WithContext(ctx).Save(trip).Error
 }
 
-// AssignDriver atomically assigns a driver and updates status to CONFIRMED.
+// AssignDriver atomically assigns a driver and updates status to ACTIVE.
 // It prevents race conditions using atomic SQL updates.
 func (r *TripRepository) AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error {
 	// Atomic update with guard: only update if trip is PENDING and has no driver
@@ -49,7 +49,7 @@ func (r *TripRepository) AssignDriver(ctx context.Context, tripID uuid.UUID, dri
 		Where("id = ? AND status = ? AND driver_id IS NULL", tripID, domain.TripStatusPending).
 		Updates(map[string]interface{}{
 			"driver_id": driverID,
-			"status":    domain.TripStatusConfirmed,
+			"status":    domain.TripStatusActive,
 		})
 
 	if result.Error != nil {

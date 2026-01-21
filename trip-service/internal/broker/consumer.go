@@ -16,6 +16,7 @@ import (
 // TripAssigner defines the capability required by the consumer
 type TripAssigner interface {
 	AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error
+	CompleteTrip(ctx context.Context, tripID uuid.UUID) error
 }
 
 // Consumer defines the interface for consuming events
@@ -86,7 +87,7 @@ func NewRabbitMQConsumer(config *Config, svc TripAssigner) (*RabbitMQConsumer, e
 		cleanup()
 		return nil, fmt.Errorf("failed to declare queue: %w", err)
 	}
-	// Bind queue to exchange
+	// Bind queue to exchange for driver_assigned events
 	err = channel.QueueBind(
 		q.Name,                       // queue name
 		"trip.event.driver_assigned", // routing key
@@ -96,7 +97,20 @@ func NewRabbitMQConsumer(config *Config, svc TripAssigner) (*RabbitMQConsumer, e
 	)
 	if err != nil {
 		cleanup()
-		return nil, fmt.Errorf("failed to bind queue: %w", err)
+		return nil, fmt.Errorf("failed to bind queue to driver_assigned: %w", err)
+	}
+
+	// Bind queue to exchange for completed events
+	err = channel.QueueBind(
+		q.Name,                  // queue name
+		"trip.event.completed",  // routing key
+		config.ExchangeName,     // exchange
+		false,
+		nil,
+	)
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("failed to bind queue to completed: %w", err)
 	}
 
 	return &RabbitMQConsumer{
@@ -155,9 +169,15 @@ func (c *RabbitMQConsumer) handleDelivery(ctx context.Context, d amqp.Delivery) 
 		}
 	}()
 
-	if d.RoutingKey == "trip.event.driver_assigned" {
+	switch d.RoutingKey {
+	case "trip.event.driver_assigned":
 		if err := c.handleDriverAssigned(ctx, d.Body); err != nil {
 			log.Printf("Error handling driver assigned event: %v", err)
+			return
+		}
+	case "trip.event.completed":
+		if err := c.handleTripCompleted(ctx, d.Body); err != nil {
+			log.Printf("Error handling trip completed event: %v", err)
 			return
 		}
 	}
@@ -188,6 +208,29 @@ func (c *RabbitMQConsumer) handleDriverAssigned(ctx context.Context, body []byte
 	}
 
 	log.Printf("Successfully processed driver assignment for trip %s", tripID)
+	return nil
+}
+
+func (c *RabbitMQConsumer) handleTripCompleted(ctx context.Context, body []byte) error {
+	var event domain.TripCompletedEvent
+	if err := json.Unmarshal(body, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	// Validate trip ID
+	tripID, err := uuid.Parse(event.Payload.TripID)
+	if err != nil {
+		return fmt.Errorf("invalid trip ID '%s': %w", event.Payload.TripID, err)
+	}
+
+	log.Printf("Processing trip completion: trip=%s, driver=%s", tripID, event.Payload.DriverID)
+
+	// Delegate to service
+	if err := c.service.CompleteTrip(ctx, tripID); err != nil {
+		return fmt.Errorf("failed to complete trip via service: %w", err)
+	}
+
+	log.Printf("Successfully processed trip completion for trip %s", tripID)
 	return nil
 }
 

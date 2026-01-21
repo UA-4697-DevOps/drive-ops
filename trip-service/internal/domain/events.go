@@ -41,3 +41,13 @@ type DriverAssignedEvent struct {
 		AssignedAt time.Time `json:"assigned_at"`
 	} `json:"payload"`
 }
+
+// TripCompletedEvent відповідає схемі trip.event.completed
+type TripCompletedEvent struct {
+	BaseEvent
+	Payload struct {
+		TripID      string    `json:"trip_id"`
+		DriverID    string    `json:"driver_id"`
+		CompletedAt time.Time `json:"completed_at"`
+	} `json:"payload"`
+}

@@ -452,10 +452,16 @@ async def register_driver_in_service(chat_id, name, car_description):
     start_time = time.time()
     correlation_id = generate_correlation_id()
     
+    # Split name into first_name and last_name (simple split by space)
+    name_parts = name.strip().split(maxsplit=1)
+    first_name = name_parts[0] if name_parts else "Driver"
+    last_name = name_parts[1] if len(name_parts) > 1 else str(chat_id)
+
     payload = {
-        'name': name,
-        'car_description': car_description,
-        'telegram_id': str(chat_id),
+        'first_name': first_name,
+        'last_name': last_name,
+        'phone_number': f"+{chat_id}",  # Use Telegram ID as phone for now
+        'is_active': True
     }
     
     # Sanitize PII for logs: use short hashes instead of raw values
@@ -606,16 +612,16 @@ async def update_driver_status(driver_id, status):
 
     try:
         url = f"{DRIVER_SERVICE_URL}/drivers/{driver_id}/status"
-        # Convert status to uppercase to match driver-service API expectations
-        status_upper = status.upper()
+        # Convert status to is_active boolean (online → True, offline → False)
+        is_active = (status.lower() == 'online')
         logger.info(
-            "Sending POST %s with status=%s",
-            url, status_upper,
+            "Sending PATCH %s with is_active=%s",
+            url, is_active,
             extra={'correlationId': correlation_id}
         )
 
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url, params={'status': status_upper})
+            resp = await client.patch(url, params={'is_active': is_active})
         
         latency = int((time.time() - start_time) * 1000)
         
@@ -976,10 +982,18 @@ async def send_trip_response(driver_id, trip_id, action):
                 driver_id, trip_id, action, latency,
                 extra={'correlationId': correlation_id}
             )
-            
+
+            # Parse response data (includes pickup_address, dropoff_address for accept)
+            try:
+                data = resp.json()
+            except Exception:
+                data = {}
+
             return {
                 'success': True,
                 'error': None,
+                'pickup_address': data.get('pickup_address'),
+                'dropoff_address': data.get('dropoff_address'),
             }
         elif resp.status_code == 410:
             # Trip request expired

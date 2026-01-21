@@ -26,17 +26,17 @@ def haversine_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> fl
 def find_nearby_drivers(
     drivers: Dict[str, Dict[str, Any]],
     pickup_lat: float,
-    pickup_lon: float,
+    pickup_lng: float,
     radius_km: float = 5.0,
     max_drivers: int = 10
 ) -> List[Dict[str, Any]]:
     """Find available drivers near pickup location"""
     nearby = []
-    
+
     for driver_id, driver in drivers.items():
         if driver.get("status") not in ["AVAILABLE", "ONLINE"]:
             continue
-        
+
         location = driver.get("location")
         if isinstance(location, dict):
             lat = location.get("lat")
@@ -48,10 +48,10 @@ def find_nearby_drivers(
                 continue
         else:
             continue
-        
+
         if lat is None or lng is None:
             continue
-        
+
         distance = haversine_distance(pickup_lat, pickup_lng, lat, lng)
         
         if distance <= radius_km:

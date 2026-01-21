@@ -25,9 +25,7 @@ var (
 const (
 	// TripStatusPending: Passenger created a request, searching for drivers
 	TripStatusPending   = "PENDING"
-	// TripStatusConfirmed: Driver accepted the request, moving to pickup point
-	TripStatusConfirmed = "CONFIRMED"
-	// TripStatusActive: Trip is currently in progress (passenger is in the vehicle)
+	// TripStatusActive: Driver accepted the request and trip is in progress
 	TripStatusActive    = "ACTIVE"
 	// TripStatusCompleted: Trip finished successfully
 	TripStatusCompleted = "COMPLETED"

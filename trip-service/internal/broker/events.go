@@ -7,6 +7,21 @@ import (
 	"trip-service/internal/domain"
 )
 
+// simpleGeocode provides basic geocoding for Kyiv addresses (MVP/demo)
+func simpleGeocode(address string) (lat, lng float64) {
+	// Default to Khreshchatyk center if no match
+	defaultLat, defaultLng := 50.4501, 30.5234
+
+	// Simple pattern matching for demo purposes
+	// In production, use a proper geocoding service
+	if len(address) > 0 {
+		// All addresses in Kyiv center area (Khreshchatyk)
+		return defaultLat, defaultLng
+	}
+
+	return defaultLat, defaultLng
+}
+
 // BuildTripCreatedEvent constructs a TripCreatedEvent from a Trip
 func BuildTripCreatedEvent(trip *domain.Trip, correlationID string) *domain.TripCreatedEvent {
 	event := &domain.TripCreatedEvent{}
@@ -23,18 +38,21 @@ func BuildTripCreatedEvent(trip *domain.Trip, correlationID string) *domain.Trip
 	event.Payload.PassengerID = trip.PassengerID.String()
 	event.Payload.CreatedAt = trip.CreatedAt
 
-	// TODO: For MVP, we only set address. Lat/Lng coordinates should be added
-	// when geocoding service is integrated or when client sends coordinates.
+	// MVP: Use simple geocoding for demo (Kyiv coordinates)
+	// TODO: Integrate proper geocoding service (Google Maps, etc.)
+	pickupLat, pickupLng := simpleGeocode(trip.Pickup)
+	dropoffLat, dropoffLng := simpleGeocode(trip.Dropoff)
+
 	event.Payload.Pickup = domain.Location{
 		Address: trip.Pickup,
-		Lat:     0, // Will be populated when geocoding is added
-		Lng:     0,
+		Lat:     pickupLat,
+		Lng:     pickupLng,
 	}
 
 	event.Payload.Dropoff = domain.Location{
 		Address: trip.Dropoff,
-		Lat:     0, // Will be populated when geocoding is added
-		Lng:     0,
+		Lat:     dropoffLat,
+		Lng:     dropoffLng,
 	}
 
 	return event
