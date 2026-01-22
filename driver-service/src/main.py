@@ -525,7 +525,7 @@ def get_trip_request(trip_id: str):
 @app.get("/drivers/{driver_id}/trips")
 async def get_driver_trips(driver_id: str):
     """
-    Get available trips for driver (pending trips)
+    Get available trips for driver (only pending trips that are not yet assigned)
     Used by Telegram bot "My Orders" button
     """
     # Use storage from app.state (shared with consumers), fallback to globals
@@ -543,7 +543,8 @@ async def get_driver_trips(driver_id: str):
     if driver_id not in drivers_storage:
         raise HTTPException(status_code=404, detail="Driver not found")
 
-    # Get pending trips (available for all drivers) and assigned trips for this driver
+    # Get only PENDING trips (not assigned yet)
+    # Exclude assigned/completed trips to prevent showing them again
     available_trips = []
     for trip_id, trip_data in trip_requests_storage.items():
         status = trip_data.get("status")
@@ -551,13 +552,12 @@ async def get_driver_trips(driver_id: str):
 
         logger.info(f"  Trip {trip_id}: status={status}, assigned_driver={assigned_driver_id}")
 
-        # Include if: pending OR (assigned to this driver)
-        if status == "pending" or (status == "assigned" and assigned_driver_id == driver_id):
+        # Include ONLY pending trips (not yet assigned to anyone)
+        if status == "pending":
             pickup_data = trip_data.get("pickup", {})
             dropoff_data = trip_data.get("dropoff", {})
 
-            trip_status = "PENDING" if status == "pending" else "ACTIVE"
-            logger.info(f"  ✅ Trip {trip_id}: {trip_status}, pickup={pickup_data}, dropoff={dropoff_data}")
+            logger.info(f"  ✅ Trip {trip_id}: PENDING, pickup={pickup_data}, dropoff={dropoff_data}")
 
             available_trips.append({
                 "trip_id": trip_id,
@@ -565,12 +565,12 @@ async def get_driver_trips(driver_id: str):
                 "dropoff": dropoff_data.get("address", "N/A"),
                 "pickup_address": pickup_data.get("address", "N/A"),
                 "dropoff_address": dropoff_data.get("address", "N/A"),
-                "status": trip_status,
+                "status": "PENDING",
                 "comment": None,
                 "created_at": trip_data.get("created_at", "")
             })
         else:
-            logger.info(f"  ❌ Trip {trip_id}: status={status}, assigned_to={assigned_driver_id}, skipping")
+            logger.info(f"  ❌ Trip {trip_id}: status={status}, assigned_to={assigned_driver_id}, skipping (not pending)")
 
     logger.info(f"Driver {driver_id} requested trips: {len(available_trips)} available")
 
@@ -581,7 +581,7 @@ async def get_driver_trips(driver_id: str):
 
 
 @app.post("/drivers/{driver_id}/trips/{trip_id}/accept")
-async def accept_trip(driver_id: str, trip_id: str):
+async def accept_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(get_db)):
     """
     Driver accepts trip request
     Used by Telegram bot "Accept" button
@@ -596,9 +596,27 @@ async def accept_trip(driver_id: str, trip_id: str):
     drivers_storage = app.state.drivers_storage
     trip_requests_storage = app.state.trip_requests_storage
 
-    # Verify driver exists
-    if driver_id not in drivers_storage:
-        raise HTTPException(status_code=404, detail="Driver not found")
+    # Verify driver exists in database and sync to memory if needed
+    from uuid import UUID
+    try:
+        driver_uuid = UUID(driver_id)
+        driver_repo = DriverRepository(db)
+        driver = await driver_repo.get_by_id(driver_uuid)
+        if not driver:
+            raise HTTPException(status_code=404, detail="Driver not found in database")
+
+        # Ensure driver is in memory storage
+        if driver_id not in drivers_storage:
+            logger.warning(f"Driver {driver_id} not in memory storage, adding now")
+            drivers_storage[driver_id] = {
+                "id": driver_id,
+                "name": f"{driver.first_name} {driver.last_name}",
+                "status": "ONLINE" if driver.is_active else "OFFLINE",
+                "latitude": 50.4501,
+                "longitude": 30.5234
+            }
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid driver ID format")
 
     # Verify trip exists
     if trip_id not in trip_requests_storage:
@@ -635,7 +653,7 @@ async def accept_trip(driver_id: str, trip_id: str):
 
 
 @app.post("/drivers/{driver_id}/trips/{trip_id}/reject")
-async def reject_trip(driver_id: str, trip_id: str):
+async def reject_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(get_db)):
     """
     Driver rejects trip request
     Used by Telegram bot "Reject" button
@@ -650,9 +668,27 @@ async def reject_trip(driver_id: str, trip_id: str):
     drivers_storage = app.state.drivers_storage
     trip_requests_storage = app.state.trip_requests_storage
 
-    # Verify driver exists
-    if driver_id not in drivers_storage:
-        raise HTTPException(status_code=404, detail="Driver not found")
+    # Verify driver exists in database and sync to memory if needed
+    from uuid import UUID
+    try:
+        driver_uuid = UUID(driver_id)
+        driver_repo = DriverRepository(db)
+        driver = await driver_repo.get_by_id(driver_uuid)
+        if not driver:
+            raise HTTPException(status_code=404, detail="Driver not found in database")
+
+        # Ensure driver is in memory storage
+        if driver_id not in drivers_storage:
+            logger.warning(f"Driver {driver_id} not in memory storage, adding now")
+            drivers_storage[driver_id] = {
+                "id": driver_id,
+                "name": f"{driver.first_name} {driver.last_name}",
+                "status": "ONLINE" if driver.is_active else "OFFLINE",
+                "latitude": 50.4501,
+                "longitude": 30.5234
+            }
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid driver ID format")
 
     # Verify trip exists
     if trip_id not in trip_requests_storage:
@@ -680,32 +716,47 @@ async def reject_trip(driver_id: str, trip_id: str):
 
 
 @app.post("/drivers/{driver_id}/trips/{trip_id}/complete")
-async def complete_trip(driver_id: str, trip_id: str):
+async def complete_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(get_db)):
     """
     Driver completes trip
     Used by Telegram bot "Finish Trip" button
     """
     from datetime import datetime, timezone
+    from uuid import UUID
 
     # Use storage from app.state
     drivers_storage = app.state.drivers_storage
     trip_requests_storage = app.state.trip_requests_storage
 
-    # Verify driver exists
-    if driver_id not in drivers_storage:
-        raise HTTPException(status_code=404, detail="Driver not found")
+    # Verify driver exists in database
+    try:
+        driver_uuid = UUID(driver_id)
+        driver_repo = DriverRepository(db)
+        driver = await driver_repo.get_by_id(driver_uuid)
+        if not driver:
+            raise HTTPException(status_code=404, detail="Driver not found in database")
 
-    # Verify trip exists
-    if trip_id not in trip_requests_storage:
-        logger.warning(f"Trip {trip_id} not found in storage. Available trips: {list(trip_requests_storage.keys())}")
-        raise HTTPException(status_code=404, detail="Trip request not found")
+        # Ensure driver is in memory storage for RabbitMQ events
+        if driver_id not in drivers_storage:
+            logger.warning(f"Driver {driver_id} not in memory storage, adding now")
+            drivers_storage[driver_id] = {
+                "id": driver_id,
+                "name": f"{driver.first_name} {driver.last_name}",
+                "status": "ONLINE" if driver.is_active else "OFFLINE",
+                "latitude": 50.4501,
+                "longitude": 30.5234
+            }
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid driver ID format")
 
-    # Save previous status for rollback in case of event publishing failure
-    previous_status = trip_requests_storage[trip_id]["status"]
-
-    # Update trip status to completed
-    trip_requests_storage[trip_id]["status"] = "completed"
-    logger.info(f"Trip {trip_id} marked as completed by driver {driver_id} (previous status: {previous_status})")
+    # Update local storage if trip exists there
+    previous_status = None
+    if trip_id in trip_requests_storage:
+        previous_status = trip_requests_storage[trip_id]["status"]
+        trip_requests_storage[trip_id]["status"] = "completed"
+        logger.info(f"Trip {trip_id} marked as completed in local storage by driver {driver_id} (previous status: {previous_status})")
+    else:
+        logger.info(f"Trip {trip_id} not in local storage (likely after restart), will send completion event to trip-service")
 
     # Track event publishing status
     event_published = False
@@ -755,24 +806,31 @@ async def complete_trip(driver_id: str, trip_id: str):
                     await asyncio.sleep(retry_delay)
                     retry_delay *= 2  # Double the delay for next attempt
                 else:
-                    # All retries failed - rollback the status change
-                    logger.error(
-                        f"🔄 Rolling back trip {trip_id} status from 'completed' to '{previous_status}' "
-                        f"due to event publishing failure after {max_retries} attempts"
-                    )
-                    trip_requests_storage[trip_id]["status"] = previous_status
+                    # All retries failed - rollback the status change if trip is in local storage
+                    if trip_id in trip_requests_storage and previous_status:
+                        logger.error(
+                            f"🔄 Rolling back trip {trip_id} status from 'completed' to '{previous_status}' "
+                            f"due to event publishing failure after {max_retries} attempts"
+                        )
+                        trip_requests_storage[trip_id]["status"] = previous_status
+                    else:
+                        logger.error(
+                            f"❌ Failed to publish trip completion event for trip {trip_id} after {max_retries} attempts. "
+                            f"Trip not in local storage, cannot rollback."
+                        )
 
                     event_warning = (
                         f"Trip status could not be synchronized with trip-service due to messaging failure. "
-                        f"Status rolled back to '{previous_status}'. Please try again or contact support."
+                        f"Please try again or contact support."
                     )
 
     # Build response with warning if event publishing failed
+    current_status = trip_requests_storage[trip_id]["status"] if trip_id in trip_requests_storage else "unknown"
     response = {
         "message": "Trip completed successfully" if event_published else "Trip completion failed - status not synchronized",
         "trip_id": trip_id,
         "driver_id": driver_id,
-        "status": trip_requests_storage[trip_id]["status"],
+        "status": current_status,
         "event_published": event_published
     }
 

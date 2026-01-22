@@ -395,6 +395,19 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             return
 
         is_online = bot_user.get('driver_status') == 'online'
+        active_trip_id = bot_user.get('active_trip_id')
+
+        # If driver has active trip, show only active trip info
+        if active_trip_id:
+            await update.message.reply_text(
+                f"\U0001F6A8 *У вас є активна поїздка*\n\n"
+                f"\U0001F194 ID поїздки: `{escape_markdown(str(active_trip_id))}`\n\n"
+                "🏁 Завершіть поточну поїздку, щоб побачити нові замовлення.\n"
+                "Натисніть кнопку *Завершити поїздку* внизу.",
+                parse_mode='Markdown',
+                reply_markup=driver_menu_registered(is_online=False, active_trip=True)
+            )
+            return
 
         if not is_online:
             await update.message.reply_text(
@@ -454,39 +467,52 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         if DEBUGGING and not result['success']:
             debug_prefix = "\u26A0\uFE0F *Режим налагодження*: Змодельовані замовлення\n\n"
         
-        logger.info("Found %d pending trips for driver: chat_id=%s driver_id=%s", len(trips), chat_id, driver_id)
-        
-        # Display each trip with Accept/Reject buttons
-        for trip in trips:
+        logger.info("Found %d trips for driver: chat_id=%s driver_id=%s", len(trips), chat_id, driver_id)
+
+        # Filter only PENDING trips (exclude ACTIVE/assigned trips)
+        pending_trips = [trip for trip in trips if trip.get('status') == 'PENDING']
+
+        if not pending_trips:
+            await update.message.reply_text(
+                "\U0001F4ED У вас немає нових замовлень\n\n"
+                "\U0001F4A1 Нові замовлення з'являться тут автоматично.",
+                reply_markup=driver_menu_registered(is_online=True, active_trip=False)
+            )
+            return
+
+        logger.info("Showing %d pending trips (filtered from %d total)", len(pending_trips), len(trips))
+
+        # Display each PENDING trip with Accept/Reject buttons
+        for trip in pending_trips:
             trip_id = trip.get('id') or trip.get('trip_id') or 'N/A'
             pickup = trip.get('pickup') or trip.get('pickup_address') or 'Не вказано'
             dropoff = trip.get('dropoff') or trip.get('dropoff_address') or 'Не вказано'
             comment = trip.get('comment') or ''
-            
+
             text = (
                 "\U0001F6A8 *Нове замовлення*\n\n"
                 f"\U0001F194 ID: `{escape_markdown(str(trip_id))}`\n"
                 f"\U0001F4CD *Звідки:* {escape_markdown(str(pickup))}\n"
                 f"\U0001F3C1 *Куди:* {escape_markdown(str(dropoff))}\n"
             )
-            
+
             if comment:
                 text += f"\U0001F4AC *Коментар:* {escape_markdown(str(comment))}\n"
-            
+
             markup = InlineKeyboardMarkup([
                 [
                     InlineKeyboardButton("\u2705 Прийняти", callback_data=f"accept_trip_{trip_id}"),
                     InlineKeyboardButton("\u274C Відхилити", callback_data=f"decline_trip_{trip_id}")
                 ]
             ])
-            
+
             await update.message.reply_text(
                 text,
                 parse_mode='Markdown',
                 reply_markup=markup
             )
         
-        summary_text = f"\U0001F4CB Знайдено замовлень: {len(trips)}"
+        summary_text = f"\U0001F4CB Знайдено замовлень: {len(pending_trips)}"
         if debug_prefix:
             summary_text = debug_prefix + summary_text
         
