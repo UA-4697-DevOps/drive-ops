@@ -59,8 +59,8 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     
     driver_menu_unregistered = keyboards['driver_menu_unregistered']
     driver_menu_registered = keyboards['driver_menu_registered']
-    
-    register_driver_in_service = helpers['register_driver_in_service']
+
+    # Helper functions for API calls (some now replaced by APIClient methods)
     update_driver_status = helpers['update_driver_status']
     fetch_driver_trips = helpers['fetch_driver_trips']
     send_trip_response = helpers['send_trip_response']
