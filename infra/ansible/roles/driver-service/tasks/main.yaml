@@ -8,7 +8,7 @@
     dest: "/opt/drive-ops/driver-service"
     state: link
     force: yes
-  tags: [ infrastructure, driver ]
+  tags: [ app, driver ]
 
 - name: Start driver-service and migrations
   # Orchestrates both the migration container and the main service
@@ -19,4 +19,4 @@
       - "driver-migrations"
       - "driver-service"
     build: "{{ docker_build_strategy | default('always') }}"
-  tags: [ infrastructure, driver ]
+  tags: [ app, driver ]
