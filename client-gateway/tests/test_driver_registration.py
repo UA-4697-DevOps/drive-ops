@@ -3,11 +3,12 @@ Tests for driver registration and status management functionality.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import bot modules
 from bot import main
 from bot import driver
+from bot.api_client import APIClient
 
 
 @pytest.fixture
@@ -57,30 +58,56 @@ def cleanup_user_roles():
         pass
 
 
+@pytest.fixture
+def mock_api_client():
+    """Mock APIClient for all tests"""
+    with patch.object(APIClient, 'get_bot_user') as get_user, \
+         patch.object(APIClient, 'get_or_create_bot_user') as create_user, \
+         patch.object(APIClient, 'register_bot_user_as_driver') as register_driver, \
+         patch.object(APIClient, 'update_bot_user_driver_status') as update_status, \
+         patch.object(APIClient, 'change_bot_user_role') as change_role, \
+         patch.object(APIClient, 'set_bot_user_active_trip') as set_trip:
+
+        # Default successful responses
+        get_user.return_value = {'success': False, 'data': None}
+        create_user.return_value = {'success': True, 'data': {'current_role': 'driver', 'driver_id': None}}
+        register_driver.return_value = {'success': True, 'data': {'driver_id': 'drv_123', 'current_role': 'driver'}}
+        update_status.return_value = {'success': True}
+        change_role.return_value = {'success': True}
+        set_trip.return_value = {'success': True}
+
+        yield {
+            'get_bot_user': get_user,
+            'get_or_create_bot_user': create_user,
+            'register_bot_user_as_driver': register_driver,
+            'update_bot_user_driver_status': update_status,
+            'change_bot_user_role': change_role,
+            'set_bot_user_active_trip': set_trip,
+        }
+
+
 # =============================================================================
 # Driver Registration Tests
 # =============================================================================
 
 
 @pytest.mark.asyncio
-async def test_process_driver_car_handler_service_unavailable(mock_update, mock_context):
+async def test_process_driver_car_handler_service_unavailable(mock_update, mock_context, mock_api_client):
     """Ensure the handler surface handles service unavailability."""
     chat_id = 12345
-    mock_response = {
+
+    # Configure APIClient to return service unavailable error
+    mock_api_client['register_bot_user_as_driver'].return_value = {
         'success': False,
-        'driver_id': None,
+        'data': None,
         'error': {
             'status_code': 503,
             'message': 'Сервіс недоступний. Спробуйте пізніше.'
-        },
-        'raw_response': None
+        }
     }
 
-    mock_register = AsyncMock(return_value=mock_response)
     helpers = {
         'safe_send': main.safe_send,
-        'register_driver_in_service': mock_register,
-        'update_driver_status': AsyncMock(),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
         'finish_trip': AsyncMock(return_value={'success': True}),
@@ -104,8 +131,7 @@ async def test_process_driver_car_handler_service_unavailable(mock_update, mock_
 
     await driver.process_driver_car_handler(mock_update, mock_context)
 
-    mock_register.assert_called_once_with(chat_id, 'Test Driver', 'Toyota Camry')
-    assert chat_id not in main.user_roles
+    mock_api_client['register_bot_user_as_driver'].assert_called_once_with(chat_id, 'Test Driver', 'Toyota Camry')
 
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert 'Помилка реєстрації' in last_reply
@@ -113,24 +139,22 @@ async def test_process_driver_car_handler_service_unavailable(mock_update, mock_
 
 
 @pytest.mark.asyncio
-async def test_process_driver_car_handler_timeout(mock_update, mock_context):
+async def test_process_driver_car_handler_timeout(mock_update, mock_context, mock_api_client):
     """Ensure the handler surface handles timeouts gracefully."""
     chat_id = 12345
-    mock_response = {
+
+    # Configure APIClient to return timeout error
+    mock_api_client['register_bot_user_as_driver'].return_value = {
         'success': False,
-        'driver_id': None,
+        'data': None,
         'error': {
             'status_code': 504,
             'message': 'Сервіс не відповідає. Спробуйте пізніше.'
-        },
-        'raw_response': None
+        }
     }
 
-    mock_register = AsyncMock(return_value=mock_response)
     helpers = {
         'safe_send': main.safe_send,
-        'register_driver_in_service': mock_register,
-        'update_driver_status': AsyncMock(),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
         'finish_trip': AsyncMock(return_value={'success': True}),
@@ -154,8 +178,7 @@ async def test_process_driver_car_handler_timeout(mock_update, mock_context):
 
     await driver.process_driver_car_handler(mock_update, mock_context)
 
-    mock_register.assert_called_once_with(chat_id, 'Test Driver', 'Toyota Camry')
-    assert chat_id not in main.user_roles
+    mock_api_client['register_bot_user_as_driver'].assert_called_once_with(chat_id, 'Test Driver', 'Toyota Camry')
 
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert 'Помилка реєстрації' in last_reply
@@ -245,24 +268,24 @@ def test_driver_menu_registered_online():
 
 
 @pytest.mark.asyncio
-async def test_driver_info_persistence(mock_update, mock_context):
-    """Test that driver info is properly stored in `main.user_roles` via handler."""
+async def test_driver_info_persistence(mock_update, mock_context, mock_api_client):
+    """Test that driver info is properly registered via API."""
     chat_id = 12345
 
-    # Prepare mocked helper that returns a successful registration
-    mock_register = AsyncMock()
-    mock_register.return_value = {
+    # Configure APIClient to return successful registration
+    mock_api_client['register_bot_user_as_driver'].return_value = {
         'success': True,
-        'driver_id': 'drv_123',
-        'error': None,
-        'raw_response': {'id': 'drv_123'}
+        'data': {
+            'driver_id': 'drv_123',
+            'current_role': 'driver',
+            'driver_status': 'offline'
+        },
+        'error': None
     }
 
     # Build helpers passed into register_handlers
     helpers = {
         'safe_send': main.safe_send,
-        'register_driver_in_service': mock_register,
-        'update_driver_status': AsyncMock(),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
         'finish_trip': AsyncMock(return_value={'success': True}),
@@ -284,39 +307,32 @@ async def test_driver_info_persistence(mock_update, mock_context):
     # Invoke the process_driver_car handler directly
     await driver.process_driver_car_handler(mock_update, mock_context)
 
-    # Verify shared state was updated
-    assert chat_id in main.user_roles
-    entry = main.user_roles[chat_id]
-    assert entry['role'] == 'driver'
-    assert entry['registered'] is True
-    assert entry['driver_id'] == 'drv_123'
-    assert entry['status'] == 'offline'
-    mock_register.assert_called_once_with(chat_id, 'Test Driver', 'Toyota Camry')
+    # Verify API was called correctly
+    mock_api_client['register_bot_user_as_driver'].assert_called_once_with(chat_id, 'Test Driver', 'Toyota Camry')
 
 
 @pytest.mark.asyncio
-async def test_driver_status_update(mock_update, mock_context):
-    """Test that driver status is properly updated via handlers."""
+async def test_driver_status_update(mock_update, mock_context, mock_api_client):
+    """Test that driver status is properly updated via API."""
     chat_id = 12345
 
-    # Seed main.user_roles with a registered driver
-    main.user_roles[chat_id] = {
-        'role': 'driver',
-        'registered': True,
-        'driver_id': 'drv_123',
-        'name': 'Test Driver',
-        'car_description': 'Toyota Camry',
-        'status': 'offline'
+    # Configure APIClient to return registered driver
+    mock_api_client['get_bot_user'].return_value = {
+        'success': True,
+        'data': {
+            'current_role': 'driver',
+            'driver_id': 'drv_123',
+            'driver_name': 'Test Driver',
+            'car_description': 'Toyota Camry',
+            'driver_status': 'offline'
+        }
     }
 
-    # Prepare mocked update_driver_status helper
-    mock_update_status = AsyncMock()
-    mock_update_status.return_value = {'success': True, 'error': None}
+    # Configure status update to succeed
+    mock_api_client['update_bot_user_driver_status'].return_value = {'success': True}
 
     helpers = {
         'safe_send': main.safe_send,
-        'register_driver_in_service': AsyncMock(),
-        'update_driver_status': mock_update_status,
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
         'finish_trip': AsyncMock(return_value={'success': True}),
@@ -332,33 +348,34 @@ async def test_driver_status_update(mock_update, mock_context):
     driver.register_handlers(application, main.user_orders, main.user_roles, main.BUTTONS, main.KEYBOARDS, helpers, DEBUGGING=False)
 
     await driver.go_online_handler(mock_update, mock_context)
-    assert main.user_roles[chat_id]['status'] == 'online'
-    mock_update_status.assert_called_once_with('drv_123', 'online')
+    mock_api_client['update_bot_user_driver_status'].assert_called_with(chat_id, is_online=True)
 
-    # Now mock going offline
-    mock_update_status.reset_mock()
-    mock_update_status.return_value = {'success': True, 'error': None}
+    # Now test going offline
+    mock_api_client['update_bot_user_driver_status'].reset_mock()
 
     await driver.go_offline_handler(mock_update, mock_context)
-    assert main.user_roles[chat_id]['status'] == 'offline'
-    mock_update_status.assert_called_once_with('drv_123', 'offline')
+    mock_api_client['update_bot_user_driver_status'].assert_called_with(chat_id, is_online=False)
 
 
 @pytest.mark.asyncio
-async def test_go_online_handler_service_unavailable(mock_update, mock_context):
-    """Handler keeps driver offline when the service cannot be reached."""
+async def test_go_online_handler_service_unavailable(mock_update, mock_context, mock_api_client):
+    """Handler shows error when the service cannot be reached."""
     chat_id = 12345
-    main.user_roles[chat_id] = {
-        'role': 'driver',
-        'registered': True,
-        'driver_id': 'drv_123',
-        'name': 'Test Driver',
-        'car_description': 'Toyota Camry',
-        'status': 'offline'
+
+    # Configure APIClient to return registered driver
+    mock_api_client['get_bot_user'].return_value = {
+        'success': True,
+        'data': {
+            'current_role': 'driver',
+            'driver_id': 'drv_123',
+            'driver_name': 'Test Driver',
+            'car_description': 'Toyota Camry',
+            'driver_status': 'offline'
+        }
     }
 
-    mock_update_status = AsyncMock()
-    mock_update_status.return_value = {
+    # Configure status update to fail
+    mock_api_client['update_bot_user_driver_status'].return_value = {
         'success': False,
         'error': {
             'status_code': 503,
@@ -368,8 +385,6 @@ async def test_go_online_handler_service_unavailable(mock_update, mock_context):
 
     helpers = {
         'safe_send': main.safe_send,
-        'register_driver_in_service': AsyncMock(),
-        'update_driver_status': mock_update_status,
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
         'finish_trip': AsyncMock(return_value={'success': True}),
@@ -383,8 +398,7 @@ async def test_go_online_handler_service_unavailable(mock_update, mock_context):
     driver.register_handlers(application, main.user_orders, main.user_roles, main.BUTTONS, main.KEYBOARDS, helpers, DEBUGGING=False)
 
     await driver.go_online_handler(mock_update, mock_context)
-    assert main.user_roles[chat_id]['status'] == 'offline'
-    mock_update_status.assert_called_once_with('drv_123', 'online')
+    mock_api_client['update_bot_user_driver_status'].assert_called_once_with(chat_id, is_online=True)
 
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert 'Помилка' in last_reply
@@ -396,27 +410,19 @@ async def test_go_online_handler_service_unavailable(mock_update, mock_context):
 # =============================================================================
 
 
-def _build_driver_helpers(register_return=None):
-    register_mock = AsyncMock(return_value=register_return or {
-        'success': True,
-        'driver_id': 'drv_test',
-        'error': None,
-        'raw_response': {'id': 'drv_test'}
-    })
+def _build_driver_helpers():
     return {
         'safe_send': main.safe_send,
-        'register_driver_in_service': register_mock,
-        'update_driver_status': AsyncMock(),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
         'finish_trip': AsyncMock(return_value={'success': True}),
-    }, register_mock
+    }
 
 
 @pytest.mark.asyncio
-async def test_driver_name_validation_too_short(mock_update, mock_context):
+async def test_driver_name_validation_too_short(mock_update, mock_context, mock_api_client):
     """Handler returns DRIVER_NAME when the supplied name is too short."""
-    helpers, register_mock = _build_driver_helpers()
+    helpers = _build_driver_helpers()
     application = MagicMock()
     driver.register_handlers(
         application,
@@ -436,13 +442,13 @@ async def test_driver_name_validation_too_short(mock_update, mock_context):
     assert result == driver.DRIVER_NAME
     last_reply = mock_update.message.reply_text.call_args[0][0]
     assert "занадто коротке" in last_reply
-    register_mock.assert_not_awaited()
+    mock_api_client['register_bot_user_as_driver'].assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_driver_name_validation_accepts_valid_name(mock_update, mock_context):
+async def test_driver_name_validation_accepts_valid_name(mock_update, mock_context, mock_api_client):
     """Handler proceeds to car step when the name is valid."""
-    helpers, register_mock = _build_driver_helpers()
+    helpers = _build_driver_helpers()
     application = MagicMock()
     driver.register_handlers(
         application,
@@ -463,13 +469,13 @@ async def test_driver_name_validation_accepts_valid_name(mock_update, mock_conte
     assert mock_context.user_data['driver_name'] == "John Doe"
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert "Опишіть ваше авто" in last_reply
-    register_mock.assert_not_awaited()
+    mock_api_client['register_bot_user_as_driver'].assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_driver_car_validation_too_short(mock_update, mock_context):
+async def test_driver_car_validation_too_short(mock_update, mock_context, mock_api_client):
     """Handler keeps asking for car description when the text is too short."""
-    helpers, register_mock = _build_driver_helpers()
+    helpers = _build_driver_helpers()
     application = MagicMock()
     driver.register_handlers(
         application,
@@ -490,26 +496,24 @@ async def test_driver_car_validation_too_short(mock_update, mock_context):
     assert result == driver.DRIVER_CAR
     last_reply = mock_update.message.reply_text.call_args[0][0]
     assert "Опис авто занадто короткий" in last_reply
-    register_mock.assert_not_awaited()
+    mock_api_client['register_bot_user_as_driver'].assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_driver_car_validation_accepts_valid_description(mock_update, mock_context):
+async def test_driver_car_validation_accepts_valid_description(mock_update, mock_context, mock_api_client):
     """Handler registers the driver after receiving a valid car description."""
-    register_mock = AsyncMock(return_value={
+    # Configure API to return successful registration
+    mock_api_client['register_bot_user_as_driver'].return_value = {
         'success': True,
-        'driver_id': 'drv_123',
-        'error': None,
-        'raw_response': {'id': 'drv_123'}
-    })
-    helpers = {
-        'safe_send': main.safe_send,
-        'register_driver_in_service': register_mock,
-        'update_driver_status': AsyncMock(),
-        'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
-        'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
-        'finish_trip': AsyncMock(return_value={'success': True}),
+        'data': {
+            'driver_id': 'drv_123',
+            'current_role': 'driver',
+            'driver_status': 'offline'
+        },
+        'error': None
     }
+
+    helpers = _build_driver_helpers()
     application = MagicMock()
     driver.register_handlers(
         application,
@@ -529,9 +533,7 @@ async def test_driver_car_validation_accepts_valid_description(mock_update, mock
     result = await driver.process_driver_car_handler(mock_update, mock_context)
 
     assert result == driver.ConversationHandler.END
-    register_mock.assert_awaited_once_with(chat_id, "Test Driver", "Toyota Camry")
-    role_entry = main.user_roles.get(chat_id)
-    assert role_entry and role_entry['registered'] is True
+    mock_api_client['register_bot_user_as_driver'].assert_called_once_with(chat_id, "Test Driver", "Toyota Camry")
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert "Реєстрацію завершено" in last_reply
 
@@ -563,11 +565,17 @@ def _build_trip_helpers(fetch_trips_response=None, trip_response_result=None):
 
 
 @pytest.mark.asyncio
-async def test_show_driver_orders_unregistered(mock_update, mock_context):
+async def test_show_driver_orders_unregistered(mock_update, mock_context, mock_api_client):
     """Test that unregistered drivers cannot see orders."""
+    # Configure API to return no user data
+    mock_api_client['get_bot_user'].return_value = {
+        'success': False,
+        'data': None
+    }
+
     helpers, fetch_mock, _ = _build_trip_helpers()
     application = MagicMock()
-    
+
     driver.register_handlers(
         application,
         main.user_orders,
@@ -577,30 +585,35 @@ async def test_show_driver_orders_unregistered(mock_update, mock_context):
         helpers,
         DEBUGGING=False
     )
-    
+
     mock_update.message = mock_update.effective_message
-    
+
     await driver.show_driver_orders_handler(mock_update, mock_context)
-    
+
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert 'зареєструйтесь як водій' in last_reply
     fetch_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_show_driver_orders_offline(mock_update, mock_context):
+async def test_show_driver_orders_offline(mock_update, mock_context, mock_api_client):
     """Test that offline drivers get a message to go online first."""
+    chat_id = mock_update.effective_chat.id
+
+    # Configure API to return offline driver
+    mock_api_client['get_bot_user'].return_value = {
+        'success': True,
+        'data': {
+            'current_role': 'driver',
+            'driver_id': 'drv_123',
+            'driver_status': 'offline',
+            'active_trip_id': None
+        }
+    }
+
     helpers, fetch_mock, _ = _build_trip_helpers()
     application = MagicMock()
-    
-    chat_id = mock_update.effective_chat.id
-    main.user_roles[chat_id] = {
-        'role': 'driver',
-        'registered': True,
-        'driver_id': 'drv_123',
-        'status': 'offline'
-    }
-    
+
     driver.register_handlers(
         application,
         main.user_orders,
@@ -610,34 +623,39 @@ async def test_show_driver_orders_offline(mock_update, mock_context):
         helpers,
         DEBUGGING=False
     )
-    
+
     mock_update.message = mock_update.effective_message
-    
+
     await driver.show_driver_orders_handler(mock_update, mock_context)
-    
+
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert 'офлайн' in last_reply.lower()
     fetch_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_show_driver_orders_no_trips(mock_update, mock_context):
+async def test_show_driver_orders_no_trips(mock_update, mock_context, mock_api_client):
     """Test showing empty trips list for online driver."""
+    chat_id = mock_update.effective_chat.id
+
+    # Configure API to return online driver
+    mock_api_client['get_bot_user'].return_value = {
+        'success': True,
+        'data': {
+            'current_role': 'driver',
+            'driver_id': 'drv_123',
+            'driver_status': 'online',
+            'active_trip_id': None
+        }
+    }
+
     helpers, fetch_mock, _ = _build_trip_helpers({
         'success': True,
         'trips': [],
         'error': None,
     })
     application = MagicMock()
-    
-    chat_id = mock_update.effective_chat.id
-    main.user_roles[chat_id] = {
-        'role': 'driver',
-        'registered': True,
-        'driver_id': 'drv_123',
-        'status': 'online'
-    }
-    
+
     driver.register_handlers(
         application,
         main.user_orders,
@@ -647,22 +665,35 @@ async def test_show_driver_orders_no_trips(mock_update, mock_context):
         helpers,
         DEBUGGING=False
     )
-    
+
     mock_update.message = mock_update.effective_message
-    
+
     await driver.show_driver_orders_handler(mock_update, mock_context)
-    
+
     fetch_mock.assert_awaited_once_with('drv_123')
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert 'немає нових замовлень' in last_reply
 
 
 @pytest.mark.asyncio
-async def test_show_driver_orders_with_trips(mock_update, mock_context):
+async def test_show_driver_orders_with_trips(mock_update, mock_context, mock_api_client):
     """Test showing pending trips for online driver."""
+    chat_id = mock_update.effective_chat.id
+
+    # Configure API to return online driver
+    mock_api_client['get_bot_user'].return_value = {
+        'success': True,
+        'data': {
+            'current_role': 'driver',
+            'driver_id': 'drv_123',
+            'driver_status': 'online',
+            'active_trip_id': None
+        }
+    }
+
     trips = [
-        {'id': 'trip_001', 'pickup': 'вул. Хрещатик, 1', 'dropoff': 'пл. Незалежності', 'comment': 'Швидко'},
-        {'id': 'trip_002', 'pickup': 'Центральний вокзал', 'dropoff': 'Аеропорт', 'comment': ''}
+        {'id': 'trip_001', 'status': 'PENDING', 'pickup': 'вул. Хрещатик, 1', 'dropoff': 'пл. Незалежності', 'comment': 'Швидко'},
+        {'id': 'trip_002', 'status': 'PENDING', 'pickup': 'Центральний вокзал', 'dropoff': 'Аеропорт', 'comment': ''}
     ]
     helpers, fetch_mock, _ = _build_trip_helpers({
         'success': True,
@@ -670,15 +701,7 @@ async def test_show_driver_orders_with_trips(mock_update, mock_context):
         'error': None,
     })
     application = MagicMock()
-    
-    chat_id = mock_update.effective_chat.id
-    main.user_roles[chat_id] = {
-        'role': 'driver',
-        'registered': True,
-        'driver_id': 'drv_123',
-        'status': 'online'
-    }
-    
+
     driver.register_handlers(
         application,
         main.user_orders,
@@ -688,18 +711,18 @@ async def test_show_driver_orders_with_trips(mock_update, mock_context):
         helpers,
         DEBUGGING=False
     )
-    
+
     mock_update.message = mock_update.effective_message
-    
+
     await driver.show_driver_orders_handler(mock_update, mock_context)
-    
+
     fetch_mock.assert_awaited_once_with('drv_123')
-    
+
     # Should have called reply_text multiple times (loading + trips + summary)
     reply_calls = mock_update.message.reply_text.call_args_list
     # At least: loading message, 2 trips, summary
     assert len(reply_calls) >= 4
-    
+
     # Check that trip info is displayed (underscores may be escaped for Markdown)
     all_replies = ' '.join([call[0][0] for call in reply_calls])
     # trip_001 becomes trip\_001 in Markdown, so check for either
@@ -710,23 +733,28 @@ async def test_show_driver_orders_with_trips(mock_update, mock_context):
 
 
 @pytest.mark.asyncio
-async def test_show_driver_orders_service_error(mock_update, mock_context):
+async def test_show_driver_orders_service_error(mock_update, mock_context, mock_api_client):
     """Test error handling when trip service is unavailable."""
+    chat_id = mock_update.effective_chat.id
+
+    # Configure API to return online driver
+    mock_api_client['get_bot_user'].return_value = {
+        'success': True,
+        'data': {
+            'current_role': 'driver',
+            'driver_id': 'drv_123',
+            'driver_status': 'online',
+            'active_trip_id': None
+        }
+    }
+
     helpers, fetch_mock, _ = _build_trip_helpers({
         'success': False,
         'trips': [],
         'error': {'status_code': 503, 'message': 'Сервіс недоступний. Спробуйте пізніше.'},
     })
     application = MagicMock()
-    
-    chat_id = mock_update.effective_chat.id
-    main.user_roles[chat_id] = {
-        'role': 'driver',
-        'registered': True,
-        'driver_id': 'drv_123',
-        'status': 'online'
-    }
-    
+
     driver.register_handlers(
         application,
         main.user_orders,
@@ -736,11 +764,11 @@ async def test_show_driver_orders_service_error(mock_update, mock_context):
         helpers,
         DEBUGGING=False
     )
-    
+
     mock_update.message = mock_update.effective_message
-    
+
     await driver.show_driver_orders_handler(mock_update, mock_context)
-    
+
     fetch_mock.assert_awaited_once_with('drv_123')
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert 'Помилка отримання замовлень' in last_reply
@@ -748,25 +776,30 @@ async def test_show_driver_orders_service_error(mock_update, mock_context):
 
 
 @pytest.mark.asyncio
-async def test_accept_trip_success(mock_update, mock_context, mock_callback_query):
+async def test_accept_trip_success(mock_update, mock_context, mock_callback_query, mock_api_client):
     """Test successful trip acceptance."""
+    chat_id = 12345
+
+    # Configure API to return online driver
+    mock_api_client['get_bot_user'].return_value = {
+        'success': True,
+        'data': {
+            'current_role': 'driver',
+            'driver_id': 'drv_123',
+            'driver_status': 'online',
+            'active_trip_id': None
+        }
+    }
+
     helpers, _, send_mock = _build_trip_helpers(
         trip_response_result={'success': True, 'error': None}
     )
     application = MagicMock()
-    
-    chat_id = 12345
+
     mock_callback_query.data = 'accept_trip_trip_001'
     mock_callback_query.message.chat.id = chat_id
     mock_update.callback_query = mock_callback_query
-    
-    main.user_roles[chat_id] = {
-        'role': 'driver',
-        'registered': True,
-        'driver_id': 'drv_123',
-        'status': 'online'
-    }
-    
+
     driver.register_handlers(
         application,
         main.user_orders,
@@ -776,20 +809,33 @@ async def test_accept_trip_success(mock_update, mock_context, mock_callback_quer
         helpers,
         DEBUGGING=False
     )
-    
+
     await driver.accept_trip_handler(mock_update, mock_context)
-    
+
     mock_callback_query.answer.assert_awaited_once()
     send_mock.assert_awaited_once_with('drv_123', 'trip_001', 'accept')
-    
+
     # Check final message contains success
     last_edit = mock_callback_query.edit_message_text.call_args_list[-1]
     assert 'прийнято' in last_edit[1]['text'].lower()
 
 
 @pytest.mark.asyncio
-async def test_accept_trip_expired(mock_update, mock_context, mock_callback_query):
+async def test_accept_trip_expired(mock_update, mock_context, mock_callback_query, mock_api_client):
     """Test accepting an expired trip."""
+    chat_id = 12345
+
+    # Configure API to return online driver
+    mock_api_client['get_bot_user'].return_value = {
+        'success': True,
+        'data': {
+            'current_role': 'driver',
+            'driver_id': 'drv_123',
+            'driver_status': 'online',
+            'active_trip_id': None
+        }
+    }
+
     helpers, _, send_mock = _build_trip_helpers(
         trip_response_result={
             'success': False,
@@ -797,19 +843,11 @@ async def test_accept_trip_expired(mock_update, mock_context, mock_callback_quer
         }
     )
     application = MagicMock()
-    
-    chat_id = 12345
+
     mock_callback_query.data = 'accept_trip_trip_001'
     mock_callback_query.message.chat.id = chat_id
     mock_update.callback_query = mock_callback_query
-    
-    main.user_roles[chat_id] = {
-        'role': 'driver',
-        'registered': True,
-        'driver_id': 'drv_123',
-        'status': 'online'
-    }
-    
+
     driver.register_handlers(
         application,
         main.user_orders,
@@ -819,35 +857,40 @@ async def test_accept_trip_expired(mock_update, mock_context, mock_callback_quer
         helpers,
         DEBUGGING=False
     )
-    
+
     await driver.accept_trip_handler(mock_update, mock_context)
-    
+
     send_mock.assert_awaited_once_with('drv_123', 'trip_001', 'accept')
-    
+
     last_edit = mock_callback_query.edit_message_text.call_args_list[-1]
     assert 'недоступне' in last_edit[1]['text'].lower()
 
 
 @pytest.mark.asyncio
-async def test_decline_trip_success(mock_update, mock_context, mock_callback_query):
+async def test_decline_trip_success(mock_update, mock_context, mock_callback_query, mock_api_client):
     """Test successful trip rejection."""
+    chat_id = 12345
+
+    # Configure API to return online driver
+    mock_api_client['get_bot_user'].return_value = {
+        'success': True,
+        'data': {
+            'current_role': 'driver',
+            'driver_id': 'drv_123',
+            'driver_status': 'online',
+            'active_trip_id': None
+        }
+    }
+
     helpers, _, send_mock = _build_trip_helpers(
         trip_response_result={'success': True, 'error': None}
     )
     application = MagicMock()
-    
-    chat_id = 12345
+
     mock_callback_query.data = 'decline_trip_trip_001'
     mock_callback_query.message.chat.id = chat_id
     mock_update.callback_query = mock_callback_query
-    
-    main.user_roles[chat_id] = {
-        'role': 'driver',
-        'registered': True,
-        'driver_id': 'drv_123',
-        'status': 'online'
-    }
-    
+
     driver.register_handlers(
         application,
         main.user_orders,
@@ -857,19 +900,32 @@ async def test_decline_trip_success(mock_update, mock_context, mock_callback_que
         helpers,
         DEBUGGING=False
     )
-    
+
     await driver.decline_trip_handler(mock_update, mock_context)
-    
+
     mock_callback_query.answer.assert_awaited_once()
     send_mock.assert_awaited_once_with('drv_123', 'trip_001', 'reject')
-    
+
     last_edit = mock_callback_query.edit_message_text.call_args_list[-1]
     assert 'відхилено' in last_edit[1]['text'].lower()
 
 
 @pytest.mark.asyncio
-async def test_decline_trip_service_unavailable(mock_update, mock_context, mock_callback_query):
+async def test_decline_trip_service_unavailable(mock_update, mock_context, mock_callback_query, mock_api_client):
     """Test rejecting trip when service is unavailable."""
+    chat_id = 12345
+
+    # Configure API to return online driver
+    mock_api_client['get_bot_user'].return_value = {
+        'success': True,
+        'data': {
+            'current_role': 'driver',
+            'driver_id': 'drv_123',
+            'driver_status': 'online',
+            'active_trip_id': None
+        }
+    }
+
     helpers, _, send_mock = _build_trip_helpers(
         trip_response_result={
             'success': False,
@@ -877,19 +933,11 @@ async def test_decline_trip_service_unavailable(mock_update, mock_context, mock_
         }
     )
     application = MagicMock()
-    
-    chat_id = 12345
+
     mock_callback_query.data = 'decline_trip_trip_001'
     mock_callback_query.message.chat.id = chat_id
     mock_update.callback_query = mock_callback_query
-    
-    main.user_roles[chat_id] = {
-        'role': 'driver',
-        'registered': True,
-        'driver_id': 'drv_123',
-        'status': 'online'
-    }
-    
+
     driver.register_handlers(
         application,
         main.user_orders,
@@ -899,29 +947,33 @@ async def test_decline_trip_service_unavailable(mock_update, mock_context, mock_
         helpers,
         DEBUGGING=False
     )
-    
+
     await driver.decline_trip_handler(mock_update, mock_context)
-    
+
     send_mock.assert_awaited_once_with('drv_123', 'trip_001', 'reject')
-    
+
     last_edit = mock_callback_query.edit_message_text.call_args_list[-1]
     assert 'помилка' in last_edit[1]['text'].lower()
 
 
 @pytest.mark.asyncio
-async def test_accept_trip_unregistered_driver(mock_update, mock_context, mock_callback_query):
+async def test_accept_trip_unregistered_driver(mock_update, mock_context, mock_callback_query, mock_api_client):
     """Test that unregistered drivers cannot accept trips."""
+    chat_id = 12345
+
+    # Configure API to return no user
+    mock_api_client['get_bot_user'].return_value = {
+        'success': False,
+        'data': None
+    }
+
     helpers, _, send_mock = _build_trip_helpers()
     application = MagicMock()
-    
-    chat_id = 12345
+
     mock_callback_query.data = 'accept_trip_trip_001'
     mock_callback_query.message.chat.id = chat_id
     mock_update.callback_query = mock_callback_query
-    
-    # No driver registered
-    main.user_roles.clear()
-    
+
     driver.register_handlers(
         application,
         main.user_orders,
@@ -931,9 +983,9 @@ async def test_accept_trip_unregistered_driver(mock_update, mock_context, mock_c
         helpers,
         DEBUGGING=False
     )
-    
+
     await driver.accept_trip_handler(mock_update, mock_context)
-    
+
     send_mock.assert_not_awaited()
     last_edit = mock_callback_query.edit_message_text.call_args_list[-1]
     assert 'не зареєстровані' in last_edit[1]['text'].lower()
