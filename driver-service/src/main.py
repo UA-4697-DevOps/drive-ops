@@ -2,13 +2,23 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from uuid import UUID
-from fastapi import FastAPI, HTTPException, status, Depends
+from typing import Optional
+from fastapi import FastAPI, HTTPException, status, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import update
 
 # Імпорти модулів проекту
 from src.database import get_db
+from src.driver_models import Driver, BotUser
 from src.services.driver_repository import DriverRepository
+from src.services.bot_user_repository import BotUserRepository
 from src.schemas.driver_schemas import DriverCreate, DriverResponse
+from src.schemas.bot_user_schemas import (
+    BotUserCreate,
+    BotUserUpdate,
+    BotUserResponse,
+    BotUserDriverRegistration
+)
 from src.config import settings
 
 # Імпорти для Task #41
@@ -264,6 +274,231 @@ async def update_driver_status(driver_id: UUID, is_active: bool, db: AsyncSessio
 
     return updated
 
+# ========== BOT USERS MANAGEMENT ==========
+
+@app.post("/api/bot-users", response_model=BotUserResponse, tags=["Bot Users"])
+async def create_or_get_bot_user(
+    user_data: BotUserCreate,
+    response: Response,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get or create bot user by telegram_chat_id.
+    Used when user first interacts with the bot.
+    Returns HTTP 201 if created, HTTP 200 if retrieved existing.
+    """
+    repo = BotUserRepository(db)
+    bot_user, created = await repo.get_or_create(
+        chat_id=user_data.telegram_chat_id,
+        defaults={'current_role': user_data.current_role}
+    )
+
+    # Set appropriate status code based on whether user was created or retrieved
+    if created:
+        response.status_code = status.HTTP_201_CREATED
+        logger.info(f"Created new bot user: chat_id={bot_user.telegram_chat_id}")
+    else:
+        response.status_code = status.HTTP_200_OK
+        logger.info(f"Retrieved existing bot user: chat_id={bot_user.telegram_chat_id}")
+
+    return bot_user
+
+
+@app.get("/api/bot-users/{chat_id}", response_model=BotUserResponse, tags=["Bot Users"])
+async def get_bot_user(chat_id: int, db: AsyncSession = Depends(get_db)):
+    """Get bot user profile by telegram chat ID"""
+    repo = BotUserRepository(db)
+    bot_user = await repo.get_by_chat_id(chat_id)
+    if not bot_user:
+        raise HTTPException(status_code=404, detail="Bot user not found")
+    return bot_user
+
+
+@app.patch("/api/bot-users/{chat_id}", response_model=BotUserResponse, tags=["Bot Users"])
+async def update_bot_user(chat_id: int, updates: BotUserUpdate, db: AsyncSession = Depends(get_db)):
+    """Update bot user fields"""
+    repo = BotUserRepository(db)
+
+    # Filter out None values
+    update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    bot_user = await repo.update(chat_id, **update_data)
+    if not bot_user:
+        raise HTTPException(status_code=404, detail="Bot user not found")
+
+    return bot_user
+
+
+@app.post("/api/bot-users/register-driver", response_model=BotUserResponse, tags=["Bot Users"])
+async def register_bot_user_as_driver(
+    registration: BotUserDriverRegistration,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Register bot user as driver.
+    Creates Driver record and updates BotUser with driver info.
+    All operations are performed within a single database transaction to ensure atomicity.
+    """
+    bot_user_repo = BotUserRepository(db)
+    driver_repo = DriverRepository(db)
+
+    # Get or create bot user (this has its own transaction handling)
+    bot_user, created = await bot_user_repo.get_or_create(registration.telegram_chat_id)
+
+    # Check if already registered as driver
+    if bot_user.driver_id:
+        logger.info(f"Bot user {registration.telegram_chat_id} already registered as driver")
+        return bot_user
+
+    # Split name into first_name and last_name
+    name_parts = registration.driver_name.strip().split(maxsplit=1)
+    first_name = name_parts[0] if name_parts else "Driver"
+    last_name = name_parts[1] if len(name_parts) > 1 else str(registration.telegram_chat_id)
+
+    # Generate safe phone number from telegram_chat_id
+    # Use last 10 digits to avoid exceeding phone number length limits
+    chat_id_str = str(registration.telegram_chat_id)
+    phone_suffix = chat_id_str[-10:] if len(chat_id_str) >= 10 else chat_id_str.zfill(10)
+    phone_number = f"+{phone_suffix}"
+
+    # Check if driver with this phone already exists (outside transaction)
+    existing_driver = await driver_repo.get_by_phone_number(phone_number)
+
+    # Perform driver creation and bot user update in a single transaction
+    # Using manual transaction control to ensure atomicity
+    try:
+        if existing_driver:
+            driver = existing_driver
+            driver_id = driver.id
+            logger.info(f"Found existing driver for phone {phone_number}: {driver_id}")
+        else:
+            # Create Driver record without auto-commit
+            driver = Driver(
+                first_name=first_name,
+                last_name=last_name,
+                phone_number=phone_number,
+                is_active=True
+            )
+            db.add(driver)
+            await db.flush()  # Flush to get driver.id without committing
+            driver_id = driver.id
+            logger.info(f"Created new driver: {driver_id}")
+
+        # Update BotUser directly without using repository method (to avoid auto-commit)
+        stmt = (
+            update(BotUser)
+            .where(BotUser.telegram_chat_id == registration.telegram_chat_id)
+            .values(
+                driver_id=driver_id,
+                driver_name=registration.driver_name,
+                car_description=registration.car_description,
+                current_role='driver'
+            )
+            .returning(BotUser)
+        )
+        result = await db.execute(stmt)
+        bot_user = result.scalar_one_or_none()
+
+        if not bot_user:
+            raise HTTPException(status_code=404, detail="Failed to update bot user with driver info")
+
+        # Commit the transaction (both driver create and bot user update)
+        await db.commit()
+        await db.refresh(bot_user)
+
+        # Transaction succeeded, now sync with in-memory storage
+        drivers_storage = app.state.drivers_storage
+        drivers_storage[str(driver_id)] = {
+            "id": str(driver_id),
+            "name": registration.driver_name,
+            "status": "OFFLINE",  # Start as offline
+            "latitude": 50.4501,
+            "longitude": 30.5234
+        }
+
+        logger.info(f"Bot user {registration.telegram_chat_id} registered as driver {driver_id}")
+        return bot_user
+
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to register bot user as driver: chat_id={registration.telegram_chat_id} error={str(e)}")
+        raise HTTPException(status_code=500, detail=f"Driver registration failed: {str(e)}")
+
+
+@app.patch("/api/bot-users/{chat_id}/role", response_model=BotUserResponse, tags=["Bot Users"])
+async def change_bot_user_role(chat_id: int, role: str, db: AsyncSession = Depends(get_db)):
+    """
+    Change user's current role (driver/passenger).
+    Preserves all data - user can switch between roles freely.
+    """
+    if role not in ['driver', 'passenger']:
+        raise HTTPException(status_code=400, detail="Role must be 'driver' or 'passenger'")
+
+    repo = BotUserRepository(db)
+    bot_user = await repo.update_role(chat_id, role)
+
+    if not bot_user:
+        raise HTTPException(status_code=404, detail="Bot user not found")
+
+    logger.info(f"Bot user {chat_id} changed role to {role}")
+    return bot_user
+
+
+@app.patch("/api/bot-users/{chat_id}/driver-status", response_model=BotUserResponse, tags=["Bot Users"])
+async def update_bot_user_driver_status(
+    chat_id: int,
+    is_online: bool,
+    db: AsyncSession = Depends(get_db)
+):
+    """Update driver's online/offline status"""
+    repo = BotUserRepository(db)
+    bot_user = await repo.get_by_chat_id(chat_id)
+
+    if not bot_user or not bot_user.driver_id:
+        raise HTTPException(status_code=404, detail="Bot user not registered as driver")
+
+    new_status = 'online' if is_online else 'offline'
+    bot_user = await repo.update_driver_status(chat_id, new_status)
+
+    # Sync with in-memory storage
+    drivers_storage = app.state.drivers_storage
+    driver_key = str(bot_user.driver_id)
+    if driver_key in drivers_storage:
+        drivers_storage[driver_key]["status"] = "ONLINE" if is_online else "OFFLINE"
+
+    logger.info(f"Bot user {chat_id} driver status changed to {new_status}")
+    return bot_user
+
+
+@app.patch("/api/bot-users/{chat_id}/active-trip", response_model=BotUserResponse, tags=["Bot Users"])
+async def set_bot_user_active_trip(
+    chat_id: int,
+    trip_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Set or clear active trip for driver"""
+    repo = BotUserRepository(db)
+    bot_user = await repo.get_by_chat_id(chat_id)
+
+    if not bot_user or not bot_user.driver_id:
+        raise HTTPException(status_code=404, detail="Bot user not registered as driver")
+
+    bot_user = await repo.set_active_trip(chat_id, trip_id)
+
+    if trip_id:
+        logger.info(f"Bot user {chat_id} started trip {trip_id}")
+    else:
+        logger.info(f"Bot user {chat_id} cleared active trip")
+
+    return bot_user
+
+
 # ========== TASK #41: TRIP REQUESTS ==========
 
 @app.post("/api/v1/trip-requests/send", status_code=status.HTTP_202_ACCEPTED, tags=["Trip Requests"])
@@ -335,7 +570,7 @@ def get_trip_request(trip_id: str):
 @app.get("/drivers/{driver_id}/trips")
 async def get_driver_trips(driver_id: str):
     """
-    Get available trips for driver (pending trips)
+    Get available trips for driver (only pending trips that are not yet assigned)
     Used by Telegram bot "My Orders" button
     """
     # Use storage from app.state (shared with consumers), fallback to globals
@@ -353,7 +588,8 @@ async def get_driver_trips(driver_id: str):
     if driver_id not in drivers_storage:
         raise HTTPException(status_code=404, detail="Driver not found")
 
-    # Get pending trips (available for all drivers) and assigned trips for this driver
+    # Get only PENDING trips (not assigned yet)
+    # Exclude assigned/completed trips to prevent showing them again
     available_trips = []
     for trip_id, trip_data in trip_requests_storage.items():
         status = trip_data.get("status")
@@ -361,13 +597,12 @@ async def get_driver_trips(driver_id: str):
 
         logger.info(f"  Trip {trip_id}: status={status}, assigned_driver={assigned_driver_id}")
 
-        # Include if: pending OR (assigned to this driver)
-        if status == "pending" or (status == "assigned" and assigned_driver_id == driver_id):
+        # Include ONLY pending trips (not yet assigned to anyone)
+        if status == "pending":
             pickup_data = trip_data.get("pickup", {})
             dropoff_data = trip_data.get("dropoff", {})
 
-            trip_status = "PENDING" if status == "pending" else "ACTIVE"
-            logger.info(f"  ✅ Trip {trip_id}: {trip_status}, pickup={pickup_data}, dropoff={dropoff_data}")
+            logger.info(f"  ✅ Trip {trip_id}: PENDING, pickup={pickup_data}, dropoff={dropoff_data}")
 
             available_trips.append({
                 "trip_id": trip_id,
@@ -375,12 +610,12 @@ async def get_driver_trips(driver_id: str):
                 "dropoff": dropoff_data.get("address", "N/A"),
                 "pickup_address": pickup_data.get("address", "N/A"),
                 "dropoff_address": dropoff_data.get("address", "N/A"),
-                "status": trip_status,
+                "status": "PENDING",
                 "comment": None,
                 "created_at": trip_data.get("created_at", "")
             })
         else:
-            logger.info(f"  ❌ Trip {trip_id}: status={status}, assigned_to={assigned_driver_id}, skipping")
+            logger.info(f"  ❌ Trip {trip_id}: status={status}, assigned_to={assigned_driver_id}, skipping (not pending)")
 
     logger.info(f"Driver {driver_id} requested trips: {len(available_trips)} available")
 
@@ -391,7 +626,7 @@ async def get_driver_trips(driver_id: str):
 
 
 @app.post("/drivers/{driver_id}/trips/{trip_id}/accept")
-async def accept_trip(driver_id: str, trip_id: str):
+async def accept_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(get_db)):
     """
     Driver accepts trip request
     Used by Telegram bot "Accept" button
@@ -406,9 +641,27 @@ async def accept_trip(driver_id: str, trip_id: str):
     drivers_storage = app.state.drivers_storage
     trip_requests_storage = app.state.trip_requests_storage
 
-    # Verify driver exists
-    if driver_id not in drivers_storage:
-        raise HTTPException(status_code=404, detail="Driver not found")
+    # Verify driver exists in database and sync to memory if needed
+    from uuid import UUID
+    try:
+        driver_uuid = UUID(driver_id)
+        driver_repo = DriverRepository(db)
+        driver = await driver_repo.get_by_id(driver_uuid)
+        if not driver:
+            raise HTTPException(status_code=404, detail="Driver not found in database")
+
+        # Ensure driver is in memory storage
+        if driver_id not in drivers_storage:
+            logger.warning(f"Driver {driver_id} not in memory storage, adding now")
+            drivers_storage[driver_id] = {
+                "id": driver_id,
+                "name": f"{driver.first_name} {driver.last_name}",
+                "status": "ONLINE" if driver.is_active else "OFFLINE",
+                "latitude": 50.4501,
+                "longitude": 30.5234
+            }
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid driver ID format")
 
     # Verify trip exists
     if trip_id not in trip_requests_storage:
@@ -445,7 +698,7 @@ async def accept_trip(driver_id: str, trip_id: str):
 
 
 @app.post("/drivers/{driver_id}/trips/{trip_id}/reject")
-async def reject_trip(driver_id: str, trip_id: str):
+async def reject_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(get_db)):
     """
     Driver rejects trip request
     Used by Telegram bot "Reject" button
@@ -460,9 +713,27 @@ async def reject_trip(driver_id: str, trip_id: str):
     drivers_storage = app.state.drivers_storage
     trip_requests_storage = app.state.trip_requests_storage
 
-    # Verify driver exists
-    if driver_id not in drivers_storage:
-        raise HTTPException(status_code=404, detail="Driver not found")
+    # Verify driver exists in database and sync to memory if needed
+    from uuid import UUID
+    try:
+        driver_uuid = UUID(driver_id)
+        driver_repo = DriverRepository(db)
+        driver = await driver_repo.get_by_id(driver_uuid)
+        if not driver:
+            raise HTTPException(status_code=404, detail="Driver not found in database")
+
+        # Ensure driver is in memory storage
+        if driver_id not in drivers_storage:
+            logger.warning(f"Driver {driver_id} not in memory storage, adding now")
+            drivers_storage[driver_id] = {
+                "id": driver_id,
+                "name": f"{driver.first_name} {driver.last_name}",
+                "status": "ONLINE" if driver.is_active else "OFFLINE",
+                "latitude": 50.4501,
+                "longitude": 30.5234
+            }
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid driver ID format")
 
     # Verify trip exists
     if trip_id not in trip_requests_storage:
@@ -490,32 +761,47 @@ async def reject_trip(driver_id: str, trip_id: str):
 
 
 @app.post("/drivers/{driver_id}/trips/{trip_id}/complete")
-async def complete_trip(driver_id: str, trip_id: str):
+async def complete_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(get_db)):
     """
     Driver completes trip
     Used by Telegram bot "Finish Trip" button
     """
     from datetime import datetime, timezone
+    from uuid import UUID
 
     # Use storage from app.state
     drivers_storage = app.state.drivers_storage
     trip_requests_storage = app.state.trip_requests_storage
 
-    # Verify driver exists
-    if driver_id not in drivers_storage:
-        raise HTTPException(status_code=404, detail="Driver not found")
+    # Verify driver exists in database
+    try:
+        driver_uuid = UUID(driver_id)
+        driver_repo = DriverRepository(db)
+        driver = await driver_repo.get_by_id(driver_uuid)
+        if not driver:
+            raise HTTPException(status_code=404, detail="Driver not found in database")
 
-    # Verify trip exists
-    if trip_id not in trip_requests_storage:
-        logger.warning(f"Trip {trip_id} not found in storage. Available trips: {list(trip_requests_storage.keys())}")
-        raise HTTPException(status_code=404, detail="Trip request not found")
+        # Ensure driver is in memory storage for RabbitMQ events
+        if driver_id not in drivers_storage:
+            logger.warning(f"Driver {driver_id} not in memory storage, adding now")
+            drivers_storage[driver_id] = {
+                "id": driver_id,
+                "name": f"{driver.first_name} {driver.last_name}",
+                "status": "ONLINE" if driver.is_active else "OFFLINE",
+                "latitude": 50.4501,
+                "longitude": 30.5234
+            }
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid driver ID format")
 
-    # Save previous status for rollback in case of event publishing failure
-    previous_status = trip_requests_storage[trip_id]["status"]
-
-    # Update trip status to completed
-    trip_requests_storage[trip_id]["status"] = "completed"
-    logger.info(f"Trip {trip_id} marked as completed by driver {driver_id} (previous status: {previous_status})")
+    # Update local storage if trip exists there
+    previous_status = None
+    if trip_id in trip_requests_storage:
+        previous_status = trip_requests_storage[trip_id]["status"]
+        trip_requests_storage[trip_id]["status"] = "completed"
+        logger.info(f"Trip {trip_id} marked as completed in local storage by driver {driver_id} (previous status: {previous_status})")
+    else:
+        logger.info(f"Trip {trip_id} not in local storage (likely after restart), will send completion event to trip-service")
 
     # Track event publishing status
     event_published = False
@@ -565,24 +851,31 @@ async def complete_trip(driver_id: str, trip_id: str):
                     await asyncio.sleep(retry_delay)
                     retry_delay *= 2  # Double the delay for next attempt
                 else:
-                    # All retries failed - rollback the status change
-                    logger.error(
-                        f"🔄 Rolling back trip {trip_id} status from 'completed' to '{previous_status}' "
-                        f"due to event publishing failure after {max_retries} attempts"
-                    )
-                    trip_requests_storage[trip_id]["status"] = previous_status
+                    # All retries failed - rollback the status change if trip is in local storage
+                    if trip_id in trip_requests_storage and previous_status:
+                        logger.error(
+                            f"🔄 Rolling back trip {trip_id} status from 'completed' to '{previous_status}' "
+                            f"due to event publishing failure after {max_retries} attempts"
+                        )
+                        trip_requests_storage[trip_id]["status"] = previous_status
+                    else:
+                        logger.error(
+                            f"❌ Failed to publish trip completion event for trip {trip_id} after {max_retries} attempts. "
+                            f"Trip not in local storage, cannot rollback."
+                        )
 
                     event_warning = (
                         f"Trip status could not be synchronized with trip-service due to messaging failure. "
-                        f"Status rolled back to '{previous_status}'. Please try again or contact support."
+                        f"Please try again or contact support."
                     )
 
     # Build response with warning if event publishing failed
+    current_status = trip_requests_storage[trip_id]["status"] if trip_id in trip_requests_storage else "unknown"
     response = {
         "message": "Trip completed successfully" if event_published else "Trip completion failed - status not synchronized",
         "trip_id": trip_id,
         "driver_id": driver_id,
-        "status": trip_requests_storage[trip_id]["status"],
+        "status": current_status,
         "event_published": event_published
     }
 
