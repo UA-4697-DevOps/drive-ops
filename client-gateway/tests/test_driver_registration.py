@@ -598,8 +598,6 @@ async def test_show_driver_orders_unregistered(mock_update, mock_context, mock_a
 @pytest.mark.asyncio
 async def test_show_driver_orders_offline(mock_update, mock_context, mock_api_client):
     """Test that offline drivers get a message to go online first."""
-    chat_id = mock_update.effective_chat.id
-
     # Configure API to return offline driver
     mock_api_client['get_bot_user'].return_value = {
         'success': True,
@@ -636,8 +634,6 @@ async def test_show_driver_orders_offline(mock_update, mock_context, mock_api_cl
 @pytest.mark.asyncio
 async def test_show_driver_orders_no_trips(mock_update, mock_context, mock_api_client):
     """Test showing empty trips list for online driver."""
-    chat_id = mock_update.effective_chat.id
-
     # Configure API to return online driver
     mock_api_client['get_bot_user'].return_value = {
         'success': True,
@@ -678,8 +674,6 @@ async def test_show_driver_orders_no_trips(mock_update, mock_context, mock_api_c
 @pytest.mark.asyncio
 async def test_show_driver_orders_with_trips(mock_update, mock_context, mock_api_client):
     """Test showing pending trips for online driver."""
-    chat_id = mock_update.effective_chat.id
-
     # Configure API to return online driver
     mock_api_client['get_bot_user'].return_value = {
         'success': True,
@@ -735,8 +729,6 @@ async def test_show_driver_orders_with_trips(mock_update, mock_context, mock_api
 @pytest.mark.asyncio
 async def test_show_driver_orders_service_error(mock_update, mock_context, mock_api_client):
     """Test error handling when trip service is unavailable."""
-    chat_id = mock_update.effective_chat.id
-
     # Configure API to return online driver
     mock_api_client['get_bot_user'].return_value = {
         'success': True,
