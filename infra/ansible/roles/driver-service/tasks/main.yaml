@@ -10,12 +10,13 @@
     force: yes
   tags: [ infrastructure, driver ]
 
-- name: Start driver-service container
-  # Use the 'always' build strategy defined in playbook variables to ensure code changes are captured
+- name: Start driver-service and migrations
+  # Orchestrates both the migration container and the main service
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
     services:
+      - "driver-migrations"
       - "driver-service"
     build: "{{ docker_build_strategy | default('always') }}"
   tags: [ infrastructure, driver ]
