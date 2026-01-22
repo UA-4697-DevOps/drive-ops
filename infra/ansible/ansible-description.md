@@ -42,25 +42,28 @@ Mandatory variables:
 
 ### 🏷 Using Tags
 
-* **`infrastructure`** — This is a "group" tag. It runs everything related to the application stack, including the shared infrastructure (DB/MQ) and all microservices (infra, trip-service, and client-gateway).
-* **`infra`** — Deploys the shared infrastructure (PostgreSQL and RabbitMQ) and copies core configuration files.
-* **`docker`** — Installs the Docker Engine and system-level dependencies.
-* **`trip` / `gateway` / `driver`** — Deploy specific microservices (Go Trip Service, Python Gateway, Python Driver Service) individually.
-* **`always`** — Tasks that run every time (e.g., updating the package cache and printing the final status report).
-* **`upgrade`** — Explicitly used to perform a sudo apt upgrade on the host machine.
+* **`app`** — Application Stack Tag. Orchestrates all microservices at once (Trip Service, Driver Service, and Client Gateway). This is the primary tag for day-to-day code updates across the entire project.
+* **`infra`** — Shared Infrastructure Tag. Manages the foundation of the platform: PostgreSQL, RabbitMQ, and centralized configuration files like .env and docker-compose.yml.
+* **`docker`** — System Engine Tag. Installs the Docker Engine, manages GPG keys, and handles dynamic user permissions (adding the current user to the docker group).
+* **`trip` / `gateway` / `driver`** — Service-Specific Tags. Allow for targeted deployment of a single microservice without touching the rest of the stack.
+* **`always`** — Tasks that execute during every run, such as updating the apt cache and printing the final infrastructure status report.
+* **`upgrade`** — An explicit tag used to perform a full sudo apt upgrade and dist-upgrade on the host machine.
+* **`verify`** — A lightweight tag used to quickly confirm the Docker installation and version without re-running the setup tasks.
 
 ### 🏗 Deployment Architecture
 The playbook orchestrates 5 key components within a dedicated Docker network:
 
-* PostgreSQL (db): The primary database for persisting trip and driver data.
+* PostgreSQL (db): The primary database engine hosting isolated schemas for trip_db and driver_db. It utilizes a custom initialization script to ensure multi-service data support on first boot.
 
-* RabbitMQ (mq): The message broker facilitating asynchronous communication between Go and Python microservices.
+* RabbitMQ (mq): The message broker facilitating asynchronous, event-driven communication (e.g., trip.event.created) between the Go and Python microservices.
 
-* Trip Migrations: A standalone container that automatically applies SQL schemas and ENUM types to the database.
+* Database Migrations: Automated standalone containers for both Go (golang-migrate) and Python (Alembic) that apply schema updates before services launch.
 
-* Trip Service (Go): The backend microservice handling core ride-sharing logic.
+* Trip Service (Go): The high-performance backend microservice managing core ride-sharing state and trip lifecycles.
 
-* Client Gateway (Python): The Telegram bot interface and primary entry point for users.
+* Driver Service (Python): A FastAPI-based service dedicated to driver management, availability tracking, and geospatial searching.
+
+* Client Gateway (Python): The Telegram bot interface (BFF) that serves as the primary entry point for users, handling synchronous API calls to backend services.
 ## ✅ Verification
 
 Once the playbook finishes successfully (failed=0), perform the following checks:
