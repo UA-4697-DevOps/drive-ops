@@ -1,32 +1,24 @@
 ---
 # Main tasks for Shared Infrastructure (Database, Message Broker, and Configs)
 
-- name: Setup project directories
-  # Ensures the project root and database initialization paths exist
+- name: Create symlink for project root
+  # Links the entire project from host to /opt/drive-ops for instant sync
   ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    mode: '0755'
-  loop:
-    - "/opt/drive-ops"
-    - "/opt/drive-ops/infra/postgres/init-db"
+    src: "{{ drive_ops_src_root }}"
+    dest: "/opt/drive-ops"
+    state: link
+    force: yes
   tags: infra
 
-- name: Deploy configuration and initialization files
-  # Consolidates the deployment of .env, docker-compose, and init scripts
-  # Sensitive files like .env are kept secure with 0600 permissions
-  ansible.builtin.copy:
-    src: "{{ item.src }}"
-    dest: "{{ item.dest }}"
-    mode: "{{ item.mode | default('0644') }}"
-  loop:
-    - { src: "{{ playbook_dir }}/../../.env", dest: "/opt/drive-ops/.env", mode: "0600" }
-    - { src: "{{ playbook_dir }}/../../docker-compose.yml", dest: "/opt/drive-ops/docker-compose.yml" }
-    - { src: "{{ playbook_dir }}/../postgres/init-db/init.sql", dest: "/opt/drive-ops/infra/postgres/init-db/init.sql" }
+- name: Set permissions for .env file
+  # Set to 644 per colleague's request to ensure container access
+  ansible.builtin.file:
+    path: "/opt/drive-ops/.env"
+    mode: '0644'
   tags: infra
 
 - name: Start shared infrastructure services
-  # Launches core services (db and mq) using service keys from docker-compose
+  # Launches core services using the live docker-compose.yml
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
@@ -34,7 +26,6 @@
   tags: infra
 
 - name: Wait for infrastructure readiness
-  # Prevents race conditions by confirming Postgres (5432) and RabbitMQ (5672) are ready
   ansible.builtin.wait_for:
     host: localhost
     port: "{{ item }}"
