@@ -1157,7 +1157,11 @@ async def start_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_orders.pop(chat_id, None)
 
     # Create or get user from database
-    await APIClient.get_or_create_bot_user(chat_id, current_role='passenger')
+    try:
+        await APIClient.get_or_create_bot_user(chat_id, current_role='passenger')
+    except Exception as e:
+        # Log the error but continue - we don't want failures in driver-service to prevent the welcome message
+        logger.error("Failed to create/get bot user on start: chat_id=%s error=%s", chat_id, str(e))
 
     await update.message.reply_text(
         "\U0001F696 Вітаємо у службі таксі!\n\nОберіть вашу роль:",

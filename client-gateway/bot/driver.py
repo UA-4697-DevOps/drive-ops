@@ -61,6 +61,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     driver_menu_registered = keyboards['driver_menu_registered']
 
     # Helper functions for API calls (some now replaced by APIClient methods)
+    update_driver_status = helpers['update_driver_status']
     fetch_driver_trips = helpers['fetch_driver_trips']
     send_trip_response = helpers['send_trip_response']
     finish_trip = helpers['finish_trip']
@@ -80,7 +81,21 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         bot_user = result['data']
 
         # Update current role to driver
-        await APIClient.change_bot_user_role(chat_id, 'driver')
+        try:
+            role_result = await APIClient.change_bot_user_role(chat_id, 'driver')
+            if not role_result.get('success'):
+                error_msg = role_result.get('error', {}).get('message', 'Невідома помилка') if isinstance(role_result.get('error'), dict) else 'Невідома помилка'
+                logger.error("Failed to change user role to driver: chat_id=%s error=%s", chat_id, error_msg)
+                await update.message.reply_text(
+                    f"\u274C Помилка при зміні ролі: {error_msg}\n\nСпробуйте пізніше."
+                )
+                return
+        except Exception as e:
+            logger.error("Exception while changing user role to driver: chat_id=%s error=%s", chat_id, str(e))
+            await update.message.reply_text(
+                "\u274C Помилка при підключенні до сервера. Спробуйте пізніше."
+            )
+            return
 
         # Check if driver is already registered
         if bot_user.get('driver_id'):
@@ -230,18 +245,54 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         # Show processing message
         await update.message.reply_text("\u23F3 Виходимо на лінію...")
 
-        # Update status via API
+        # Update status via API (BotUser table)
         result = await APIClient.update_bot_user_driver_status(chat_id, is_online=True)
 
         if result['success']:
-            logger.info("Driver went online: chat_id=%s driver_id=%s", chat_id, driver_id)
+            # Also update driver service status for consistency
+            try:
+                driver_status_result = await update_driver_status(driver_id, 'online')
 
-            await update.message.reply_text(
-                "\U0001F7E2 *Ви на лінії!*\n\n"
-                "\U0001F4E2 Тепер ви будете отримувати нові замовлення.",
-                parse_mode='Markdown',
-                reply_markup=driver_menu_registered(is_online=True, active_trip=False)
-            )
+                if driver_status_result['success']:
+                    logger.info("Driver went online: chat_id=%s driver_id=%s", chat_id, driver_id)
+
+                    await update.message.reply_text(
+                        "\U0001F7E2 *Ви на лінії!*\n\n"
+                        "\U0001F4E2 Тепер ви будете отримувати нові замовлення.",
+                        parse_mode='Markdown',
+                        reply_markup=driver_menu_registered(is_online=True, active_trip=False)
+                    )
+                else:
+                    # Driver service update failed - rollback BotUser status to maintain consistency
+                    error_msg = driver_status_result.get('error', {}).get('message', 'Невідома помилка') if isinstance(driver_status_result.get('error'), dict) else 'Невідома помилка'
+                    logger.error("Failed to update driver service status, rolling back BotUser status: chat_id=%s driver_id=%s error=%s", chat_id, driver_id, error_msg)
+
+                    # Rollback: set BotUser back to offline
+                    try:
+                        await APIClient.update_bot_user_driver_status(chat_id, is_online=False)
+                    except Exception as e:
+                        logger.error("Failed to rollback BotUser status after driver service error: chat_id=%s error=%s", chat_id, str(e))
+
+                    await update.message.reply_text(
+                        f"\u274C *Помилка оновлення статусу*\n\n{escape_markdown(str(error_msg or ''))}\n\n"
+                        "Спробуйте ще раз.",
+                        parse_mode='Markdown'
+                    )
+            except Exception as e:
+                # Exception thrown from update_driver_status - rollback BotUser status
+                logger.error("Exception in update_driver_status, rolling back BotUser status: chat_id=%s driver_id=%s error=%s", chat_id, driver_id, str(e))
+
+                # Rollback: set BotUser back to offline
+                try:
+                    await APIClient.update_bot_user_driver_status(chat_id, is_online=False)
+                except Exception as rollback_error:
+                    logger.error("Failed to rollback BotUser status after exception: chat_id=%s error=%s", chat_id, str(rollback_error))
+
+                await update.message.reply_text(
+                    f"\u274C *Помилка оновлення статусу*\n\n{escape_markdown(str(e))}\n\n"
+                    "Спробуйте ще раз.",
+                    parse_mode='Markdown'
+                )
         else:
             if DEBUGGING:
                 logger.info("[DEBUG] Driver went online (mocked): chat_id=%s driver_id=%s", chat_id, driver_id)
@@ -291,18 +342,54 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         # Show processing message
         await update.message.reply_text("\u23F3 Виходимо з лінії...")
 
-        # Update status via API
+        # Update status via API (BotUser table)
         result = await APIClient.update_bot_user_driver_status(chat_id, is_online=False)
 
         if result['success']:
-            logger.info("Driver went offline: chat_id=%s driver_id=%s", chat_id, driver_id)
+            # Also update driver service status for consistency
+            try:
+                driver_status_result = await update_driver_status(driver_id, 'offline')
 
-            await update.message.reply_text(
-                "\U0001F534 *Ви офлайн*\n\n"
-                "\U0001F6AB Ви більше не отримуватимете нові замовлення.",
-                parse_mode='Markdown',
-                reply_markup=driver_menu_registered(is_online=False, active_trip=False)
-            )
+                if driver_status_result['success']:
+                    logger.info("Driver went offline: chat_id=%s driver_id=%s", chat_id, driver_id)
+
+                    await update.message.reply_text(
+                        "\U0001F534 *Ви офлайн*\n\n"
+                        "\U0001F6AB Ви більше не отримуватимете нові замовлення.",
+                        parse_mode='Markdown',
+                        reply_markup=driver_menu_registered(is_online=False, active_trip=False)
+                    )
+                else:
+                    # Driver service update failed - rollback BotUser status to maintain consistency
+                    error_msg = driver_status_result.get('error', {}).get('message', 'Невідома помилка') if isinstance(driver_status_result.get('error'), dict) else 'Невідома помилка'
+                    logger.error("Failed to update driver service status, rolling back BotUser status: chat_id=%s driver_id=%s error=%s", chat_id, driver_id, error_msg)
+
+                    # Rollback: set BotUser back to online
+                    try:
+                        await APIClient.update_bot_user_driver_status(chat_id, is_online=True)
+                    except Exception as e:
+                        logger.error("Failed to rollback BotUser status after driver service error: chat_id=%s error=%s", chat_id, str(e))
+
+                    await update.message.reply_text(
+                        f"\u274C *Помилка оновлення статусу*\n\n{escape_markdown(str(error_msg or ''))}\n\n"
+                        "Спробуйте ще раз.",
+                        parse_mode='Markdown'
+                    )
+            except Exception as e:
+                # Exception thrown from update_driver_status - rollback BotUser status
+                logger.error("Exception in update_driver_status, rolling back BotUser status: chat_id=%s driver_id=%s error=%s", chat_id, driver_id, str(e))
+
+                # Rollback: set BotUser back to online
+                try:
+                    await APIClient.update_bot_user_driver_status(chat_id, is_online=True)
+                except Exception as rollback_error:
+                    logger.error("Failed to rollback BotUser status after exception: chat_id=%s error=%s", chat_id, str(rollback_error))
+
+                await update.message.reply_text(
+                    f"\u274C *Помилка оновлення статусу*\n\n{escape_markdown(str(e))}\n\n"
+                    "Спробуйте ще раз.",
+                    parse_mode='Markdown'
+                )
         else:
             if DEBUGGING:
                 logger.info("[DEBUG] Driver went offline (mocked): chat_id=%s driver_id=%s", chat_id, driver_id)
@@ -398,7 +485,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                 "🏁 Завершіть поточну поїздку, щоб побачити нові замовлення.\n"
                 "Натисніть кнопку *Завершити поїздку* внизу.",
                 parse_mode='Markdown',
-                reply_markup=driver_menu_registered(is_online=False, active_trip=True)
+                reply_markup=driver_menu_registered(is_online=is_online, active_trip=True)
             )
             return
 
@@ -548,49 +635,108 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
 
         if result['success']:
             # Update status to offline and set active trip in database
-            await APIClient.update_bot_user_driver_status(chat_id, is_online=False)
-            await APIClient.set_bot_user_active_trip(chat_id, trip_id)
+            # Both operations must succeed to maintain consistency
+            db_update_success = False
+            status_updated = False
+            trip_updated = False
 
-            logger.info("Trip accepted successfully: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, trip_id)
-            await query.edit_message_text(
-                text=(
-                    f"\u2705 *Замовлення прийнято!*\n\n"
-                    f"\U0001F194 ID: `{escape_markdown(str(trip_id))}`\n\n"
-                    "\U0001F4DE Зв'яжіться з клієнтом для уточнення деталей.\n"
-                    "\U0001F534 Ви перейшли в офлайн."
-                ),
-                parse_mode='Markdown'
-            )
-
-            # Automatically refresh status with updated menu
             try:
-                await query.message.reply_text(
-                    f"\U0001F4CA *Ваш статус*\n\n"
-                    f"\U0001F464 Ім'я: {escape_markdown(str(bot_user.get('driver_name') or ''))}\n"
-                    f"\U0001F697 Авто: {escape_markdown(str(bot_user.get('car_description') or ''))}\n"
-                    f"\U0001F194 ID: {escape_markdown(str(driver_id))}\n"
-                    f"\U0001F534 Статус: *Офлайн (активна поїздка)*",
-                    parse_mode='Markdown',
-                    reply_markup=driver_menu_registered(is_online=False, active_trip=True)
-                )
+                # First update: set driver offline
+                status_result = await APIClient.update_bot_user_driver_status(chat_id, is_online=False)
+                if status_result.get('success'):
+                    status_updated = True
+                    logger.info("Driver status updated to offline: chat_id=%s", chat_id)
+                else:
+                    error_msg = status_result.get('error', {}).get('message', 'Unknown error') if isinstance(status_result.get('error'), dict) else 'Unknown error'
+                    logger.error("Failed to update driver status after trip acceptance: chat_id=%s error=%s", chat_id, error_msg)
+                    raise Exception(f"Status update failed: {error_msg}")
 
-                # Send message about active trip
-                await query.message.reply_text(
-                    f"\U0001F6A8 *Активна поїздка*\n\n"
-                    f"\U0001F194 ID поїздки: `{escape_markdown(str(trip_id))}`\n\n"
-                    f"📍 Відправна точка: {escape_markdown(str(result.get('pickup_address') or 'Не вказано'))}\n"
-                    f"🏁 Точка призначення: {escape_markdown(str(result.get('dropoff_address') or 'Не вказано'))}\n\n"
-                    "🏁 Натисніть кнопку *Завершити поїздку* коли закінчите",
+                # Second update: set active trip
+                trip_result = await APIClient.set_bot_user_active_trip(chat_id, trip_id)
+                if trip_result.get('success'):
+                    trip_updated = True
+                    logger.info("Active trip set: chat_id=%s trip_id=%s", chat_id, trip_id)
+                    db_update_success = True
+                else:
+                    error_msg = trip_result.get('error', {}).get('message', 'Unknown error') if isinstance(trip_result.get('error'), dict) else 'Unknown error'
+                    logger.error("Failed to set active trip after acceptance: chat_id=%s trip_id=%s error=%s", chat_id, trip_id, error_msg)
+                    raise Exception(f"Active trip update failed: {error_msg}")
+
+            except Exception as e:
+                logger.error("Exception while updating driver state after trip acceptance: chat_id=%s error=%s", chat_id, str(e))
+
+                # Rollback: if status was updated but trip update failed, revert status to online
+                if status_updated and not trip_updated:
+                    logger.warning("Rolling back driver status to online: chat_id=%s", chat_id)
+                    try:
+                        rollback_result = await APIClient.update_bot_user_driver_status(chat_id, is_online=True)
+                        if not rollback_result.get('success'):
+                            logger.error("Failed to rollback driver status: chat_id=%s", chat_id)
+                    except Exception as rollback_error:
+                        logger.error("Exception during rollback: chat_id=%s error=%s", chat_id, str(rollback_error))
+
+                # Show error to user
+                await query.edit_message_text(
+                    text=(
+                        f"\u274C *Помилка оновлення статусу*\n\n"
+                        f"Замовлення прийнято в системі, але не вдалося оновити ваш статус.\n\n"
+                        f"Деталі: {escape_markdown(str(e))}\n\n"
+                        "Спробуйте оновити статус вручну або зверніться до підтримки."
+                    ),
                     parse_mode='Markdown'
                 )
-            except Exception as e:
-                logger.warning("Failed to send status refresh after trip acceptance: %s", e)
+                return
+
+            # Only show success if both DB updates succeeded
+            if db_update_success:
+                logger.info("Trip accepted successfully: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, trip_id)
+                await query.edit_message_text(
+                    text=(
+                        f"\u2705 *Замовлення прийнято!*\n\n"
+                        f"\U0001F194 ID: `{escape_markdown(str(trip_id))}`\n\n"
+                        "\U0001F4DE Зв'яжіться з клієнтом для уточнення деталей.\n"
+                        "\U0001F534 Ви перейшли в офлайн."
+                    ),
+                    parse_mode='Markdown'
+                )
+
+                # Automatically refresh status with updated menu
+                try:
+                    await query.message.reply_text(
+                        f"\U0001F4CA *Ваш статус*\n\n"
+                        f"\U0001F464 Ім'я: {escape_markdown(str(bot_user.get('driver_name') or ''))}\n"
+                        f"\U0001F697 Авто: {escape_markdown(str(bot_user.get('car_description') or ''))}\n"
+                        f"\U0001F194 ID: {escape_markdown(str(driver_id))}\n"
+                        f"\U0001F534 Статус: *Офлайн (активна поїздка)*",
+                        parse_mode='Markdown',
+                        reply_markup=driver_menu_registered(is_online=False, active_trip=True)
+                    )
+
+                    # Send message about active trip
+                    await query.message.reply_text(
+                        f"\U0001F6A8 *Активна поїздка*\n\n"
+                        f"\U0001F194 ID поїздки: `{escape_markdown(str(trip_id))}`\n\n"
+                        f"📍 Відправна точка: {escape_markdown(str(result.get('pickup_address') or 'Не вказано'))}\n"
+                        f"🏁 Точка призначення: {escape_markdown(str(result.get('dropoff_address') or 'Не вказано'))}\n\n"
+                        "🏁 Натисніть кнопку *Завершити поїздку* коли закінчите",
+                        parse_mode='Markdown'
+                    )
+                except Exception as e:
+                    logger.warning("Failed to send status refresh after trip acceptance: %s", e)
         else:
             if DEBUGGING:
                 # Set driver offline in debug mode as well
-                await APIClient.update_bot_user_driver_status(chat_id, is_online=False)
-                await APIClient.set_bot_user_active_trip(chat_id, trip_id)
-                
+                try:
+                    status_result = await APIClient.update_bot_user_driver_status(chat_id, is_online=False)
+                    if not status_result.get('success'):
+                        logger.warning("[DEBUG] Failed to update driver status: %s", status_result.get('error'))
+
+                    trip_result = await APIClient.set_bot_user_active_trip(chat_id, trip_id)
+                    if not trip_result.get('success'):
+                        logger.warning("[DEBUG] Failed to set active trip: %s", trip_result.get('error'))
+                except Exception as e:
+                    logger.warning("[DEBUG] Exception while updating driver state: %s", str(e))
+
                 logger.info("[DEBUG] Mocking trip acceptance: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, trip_id)
                 await query.edit_message_text(
                     text=(
@@ -682,11 +828,12 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
 
         bot_user = result['data']
         active_trip_id = bot_user.get('active_trip_id')
+        is_online = bot_user.get('driver_status') == 'online'
 
         if not active_trip_id:
             await update.message.reply_text(
                 "\u274C У вас немає активної поїздки.",
-                reply_markup=driver_menu_registered(is_online=False, active_trip=False)
+                reply_markup=driver_menu_registered(is_online=is_online, active_trip=False)
             )
             return
 
@@ -701,32 +848,73 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         result = await finish_trip(driver_id, active_trip_id)
 
         if result['success']:
-            # Clear active trip in database
-            await APIClient.set_bot_user_active_trip(chat_id, None)
-
-            logger.info("Trip finished successfully: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, active_trip_id)
-
-            await update.message.reply_text(
-                f"\U0001F3C1 *Поїздку завершено!*\n\n"
-                f"\U0001F194 ID: `{escape_markdown(str(active_trip_id))}`\n\n"
-                "\U0001F4B5 Дякуємо за роботу!\n"
-                "\U0001F7E2 Вийдіть на лінію, щоб отримувати нові замовлення.",
-                parse_mode='Markdown',
-                reply_markup=driver_menu_registered(is_online=False, active_trip=False)
-            )
-        else:
-            if DEBUGGING:
-                # Clear active trip in debug mode
-                await APIClient.set_bot_user_active_trip(chat_id, None)
-
-                logger.info("[DEBUG] Mocking trip completion: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, active_trip_id)
-                
+            # Clear active trip in database - this must succeed to show success to user
+            db_update_success = False
+            try:
+                trip_result = await APIClient.set_bot_user_active_trip(chat_id, None)
+                if trip_result.get('success'):
+                    db_update_success = True
+                    logger.info("Active trip cleared: chat_id=%s trip_id=%s", chat_id, active_trip_id)
+                else:
+                    error_msg = trip_result.get('error', {}).get('message', 'Unknown error') if isinstance(trip_result.get('error'), dict) else 'Unknown error'
+                    logger.error("Failed to clear active trip after completion: chat_id=%s trip_id=%s error=%s", chat_id, active_trip_id, error_msg)
+                    raise Exception(f"Failed to update database: {error_msg}")
+            except Exception as e:
+                logger.error("Exception while clearing active trip after completion: chat_id=%s error=%s", chat_id, str(e))
+                # Show error to user
                 await update.message.reply_text(
-                    "\u26A0\uFE0F *Режим налагодження*\n\n"
-                    f"\U0001F3C1 Поїздку {escape_markdown(str(active_trip_id))} завершено",
+                    f"\u274C *Помилка оновлення статусу*\n\n"
+                    f"Поїздка завершена в системі, але не вдалося оновити ваш статус.\n\n"
+                    f"Деталі: {escape_markdown(str(e))}\n\n"
+                    "Спробуйте оновити статус вручну або зверніться до підтримки.",
+                    parse_mode='Markdown',
+                    reply_markup=driver_menu_registered(is_online=is_online, active_trip=True)
+                )
+                return
+
+            # Only show success if DB update succeeded
+            if db_update_success:
+                logger.info("Trip finished successfully: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, active_trip_id)
+
+                await update.message.reply_text(
+                    f"\U0001F3C1 *Поїздку завершено!*\n\n"
+                    f"\U0001F194 ID: `{escape_markdown(str(active_trip_id))}`\n\n"
+                    "\U0001F4B5 Дякуємо за роботу!\n"
+                    "\U0001F7E2 Вийдіть на лінію, щоб отримувати нові замовлення.",
                     parse_mode='Markdown',
                     reply_markup=driver_menu_registered(is_online=False, active_trip=False)
                 )
+        else:
+            if DEBUGGING:
+                # Clear active trip in debug mode
+                db_update_success = False
+                try:
+                    trip_result = await APIClient.set_bot_user_active_trip(chat_id, None)
+                    if trip_result.get('success'):
+                        db_update_success = True
+                    else:
+                        error_msg = trip_result.get('error', {}).get('message', 'Unknown error') if isinstance(trip_result.get('error'), dict) else 'Unknown error'
+                        logger.warning("[DEBUG] Failed to clear active trip: %s", error_msg)
+                        raise Exception(f"Failed to update database: {error_msg}")
+                except Exception as e:
+                    logger.warning("[DEBUG] Exception while clearing active trip: %s", str(e))
+                    await update.message.reply_text(
+                        f"\u274C *[DEBUG] Помилка оновлення статусу*\n\n"
+                        f"Деталі: {escape_markdown(str(e))}",
+                        parse_mode='Markdown',
+                        reply_markup=driver_menu_registered(is_online=is_online, active_trip=True)
+                    )
+                    return
+
+                if db_update_success:
+                    logger.info("[DEBUG] Mocking trip completion: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, active_trip_id)
+
+                    await update.message.reply_text(
+                        "\u26A0\uFE0F *Режим налагодження*\n\n"
+                        f"\U0001F3C1 Поїздку {escape_markdown(str(active_trip_id))} завершено",
+                        parse_mode='Markdown',
+                        reply_markup=driver_menu_registered(is_online=False, active_trip=False)
+                    )
             else:
                 error_obj = result.get('error') if isinstance(result, dict) else None
                 if isinstance(error_obj, dict):
@@ -739,15 +927,15 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     error_msg = 'Невідома помилка'
                     status_code = 500
                 
-                logger.error("Failed to finish trip: chat_id=%s driver_id=%s trip_id=%s error=%s status=%d", 
+                logger.error("Failed to finish trip: chat_id=%s driver_id=%s trip_id=%s error=%s status=%d",
                            chat_id, driver_id, active_trip_id, error_msg, status_code)
-                
+
                 await update.message.reply_text(
                     f"\u274C *Помилка*\n\n"
                     f"{escape_markdown(str(error_msg))}\n\n"
                     "Спробуйте ще раз пізніше.",
                     parse_mode='Markdown',
-                    reply_markup=driver_menu_registered(is_online=False, active_trip=True)
+                    reply_markup=driver_menu_registered(is_online=is_online, active_trip=True)
                 )
     
     async def decline_trip(update: Update, context: ContextTypes.DEFAULT_TYPE):

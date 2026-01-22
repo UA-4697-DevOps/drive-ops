@@ -3,11 +3,13 @@ import logging
 from contextlib import asynccontextmanager
 from uuid import UUID
 from typing import Optional
-from fastapi import FastAPI, HTTPException, status, Depends
+from fastapi import FastAPI, HTTPException, status, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import update
 
 # Імпорти модулів проекту
 from src.database import get_db
+from src.driver_models import Driver, BotUser
 from src.services.driver_repository import DriverRepository
 from src.services.bot_user_repository import BotUserRepository
 from src.schemas.driver_schemas import DriverCreate, DriverResponse
@@ -274,11 +276,16 @@ async def update_driver_status(driver_id: UUID, is_active: bool, db: AsyncSessio
 
 # ========== BOT USERS MANAGEMENT ==========
 
-@app.post("/api/bot-users", response_model=BotUserResponse, status_code=status.HTTP_201_CREATED, tags=["Bot Users"])
-async def create_or_get_bot_user(user_data: BotUserCreate, db: AsyncSession = Depends(get_db)):
+@app.post("/api/bot-users", response_model=BotUserResponse, tags=["Bot Users"])
+async def create_or_get_bot_user(
+    user_data: BotUserCreate,
+    response: Response,
+    db: AsyncSession = Depends(get_db)
+):
     """
     Get or create bot user by telegram_chat_id.
     Used when user first interacts with the bot.
+    Returns HTTP 201 if created, HTTP 200 if retrieved existing.
     """
     repo = BotUserRepository(db)
     bot_user, created = await repo.get_or_create(
@@ -286,9 +293,12 @@ async def create_or_get_bot_user(user_data: BotUserCreate, db: AsyncSession = De
         defaults={'current_role': user_data.current_role}
     )
 
+    # Set appropriate status code based on whether user was created or retrieved
     if created:
+        response.status_code = status.HTTP_201_CREATED
         logger.info(f"Created new bot user: chat_id={bot_user.telegram_chat_id}")
     else:
+        response.status_code = status.HTTP_200_OK
         logger.info(f"Retrieved existing bot user: chat_id={bot_user.telegram_chat_id}")
 
     return bot_user
@@ -330,11 +340,12 @@ async def register_bot_user_as_driver(
     """
     Register bot user as driver.
     Creates Driver record and updates BotUser with driver info.
+    All operations are performed within a single database transaction to ensure atomicity.
     """
     bot_user_repo = BotUserRepository(db)
     driver_repo = DriverRepository(db)
 
-    # Get or create bot user
+    # Get or create bot user (this has its own transaction handling)
     bot_user, created = await bot_user_repo.get_or_create(registration.telegram_chat_id)
 
     # Check if already registered as driver
@@ -347,43 +358,77 @@ async def register_bot_user_as_driver(
     first_name = name_parts[0] if name_parts else "Driver"
     last_name = name_parts[1] if len(name_parts) > 1 else str(registration.telegram_chat_id)
 
-    # Create Driver record
-    phone_number = f"+{registration.telegram_chat_id}"  # Use chat_id as phone for now
+    # Generate safe phone number from telegram_chat_id
+    # Use last 10 digits to avoid exceeding phone number length limits
+    chat_id_str = str(registration.telegram_chat_id)
+    phone_suffix = chat_id_str[-10:] if len(chat_id_str) >= 10 else chat_id_str.zfill(10)
+    phone_number = f"+{phone_suffix}"
 
-    # Check if driver with this phone already exists
+    # Check if driver with this phone already exists (outside transaction)
     existing_driver = await driver_repo.get_by_phone_number(phone_number)
-    if existing_driver:
-        driver = existing_driver
-        logger.info(f"Found existing driver for phone {phone_number}: {driver.id}")
-    else:
-        driver = await driver_repo.create(
-            first_name=first_name,
-            last_name=last_name,
-            phone_number=phone_number,
-            is_active=True
+
+    # Perform driver creation and bot user update in a single transaction
+    # Using manual transaction control to ensure atomicity
+    try:
+        if existing_driver:
+            driver = existing_driver
+            driver_id = driver.id
+            logger.info(f"Found existing driver for phone {phone_number}: {driver_id}")
+        else:
+            # Create Driver record without auto-commit
+            driver = Driver(
+                first_name=first_name,
+                last_name=last_name,
+                phone_number=phone_number,
+                is_active=True
+            )
+            db.add(driver)
+            await db.flush()  # Flush to get driver.id without committing
+            driver_id = driver.id
+            logger.info(f"Created new driver: {driver_id}")
+
+        # Update BotUser directly without using repository method (to avoid auto-commit)
+        stmt = (
+            update(BotUser)
+            .where(BotUser.telegram_chat_id == registration.telegram_chat_id)
+            .values(
+                driver_id=driver_id,
+                driver_name=registration.driver_name,
+                car_description=registration.car_description,
+                current_role='driver'
+            )
+            .returning(BotUser)
         )
-        logger.info(f"Created new driver: {driver.id}")
+        result = await db.execute(stmt)
+        bot_user = result.scalar_one_or_none()
 
-    # Update BotUser with driver info
-    bot_user = await bot_user_repo.update_driver_registration(
-        chat_id=registration.telegram_chat_id,
-        driver_id=driver.id,
-        driver_name=registration.driver_name,
-        car_description=registration.car_description
-    )
+        if not bot_user:
+            raise HTTPException(status_code=404, detail="Failed to update bot user with driver info")
 
-    # Sync with in-memory storage for notification service
-    drivers_storage = app.state.drivers_storage
-    drivers_storage[str(driver.id)] = {
-        "id": str(driver.id),
-        "name": registration.driver_name,
-        "status": "OFFLINE",  # Start as offline
-        "latitude": 50.4501,
-        "longitude": 30.5234
-    }
+        # Commit the transaction (both driver create and bot user update)
+        await db.commit()
+        await db.refresh(bot_user)
 
-    logger.info(f"Bot user {registration.telegram_chat_id} registered as driver {driver.id}")
-    return bot_user
+        # Transaction succeeded, now sync with in-memory storage
+        drivers_storage = app.state.drivers_storage
+        drivers_storage[str(driver_id)] = {
+            "id": str(driver_id),
+            "name": registration.driver_name,
+            "status": "OFFLINE",  # Start as offline
+            "latitude": 50.4501,
+            "longitude": 30.5234
+        }
+
+        logger.info(f"Bot user {registration.telegram_chat_id} registered as driver {driver_id}")
+        return bot_user
+
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Failed to register bot user as driver: chat_id={registration.telegram_chat_id} error={str(e)}")
+        raise HTTPException(status_code=500, detail=f"Driver registration failed: {str(e)}")
 
 
 @app.patch("/api/bot-users/{chat_id}/role", response_model=BotUserResponse, tags=["Bot Users"])

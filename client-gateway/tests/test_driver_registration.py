@@ -132,7 +132,7 @@ async def test_process_driver_car_handler_service_unavailable(mock_update, mock_
 
     await driver.process_driver_car_handler(mock_update, mock_context)
 
-    mock_api_client['register_bot_user_as_driver'].assert_called_once_with(chat_id, 'Test Driver', 'Toyota Camry')
+    mock_api_client['register_bot_user_as_driver'].assert_awaited_once_with(chat_id, 'Test Driver', 'Toyota Camry')
 
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert 'Помилка реєстрації' in last_reply
@@ -180,7 +180,7 @@ async def test_process_driver_car_handler_timeout(mock_update, mock_context, moc
 
     await driver.process_driver_car_handler(mock_update, mock_context)
 
-    mock_api_client['register_bot_user_as_driver'].assert_called_once_with(chat_id, 'Test Driver', 'Toyota Camry')
+    mock_api_client['register_bot_user_as_driver'].assert_awaited_once_with(chat_id, 'Test Driver', 'Toyota Camry')
 
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert 'Помилка реєстрації' in last_reply
@@ -311,7 +311,7 @@ async def test_driver_info_persistence(mock_update, mock_context, mock_api_clien
     await driver.process_driver_car_handler(mock_update, mock_context)
 
     # Verify API was called correctly
-    mock_api_client['register_bot_user_as_driver'].assert_called_once_with(chat_id, 'Test Driver', 'Toyota Camry')
+    mock_api_client['register_bot_user_as_driver'].assert_awaited_once_with(chat_id, 'Test Driver', 'Toyota Camry')
 
 
 @pytest.mark.asyncio
@@ -352,7 +352,7 @@ async def test_driver_status_update(mock_update, mock_context, mock_api_client):
     driver.register_handlers(application, main.user_orders, main.user_roles, main.BUTTONS, main.KEYBOARDS, helpers, DEBUGGING=False)
 
     await driver.go_online_handler(mock_update, mock_context)
-    mock_api_client['update_bot_user_driver_status'].assert_called_with(chat_id, is_online=True)
+    mock_api_client['update_bot_user_driver_status'].assert_awaited_with(chat_id, is_online=True)
 
     # Now test going offline - update mock to return online status first
     mock_api_client['update_bot_user_driver_status'].reset_mock()
@@ -368,7 +368,7 @@ async def test_driver_status_update(mock_update, mock_context, mock_api_client):
     }
 
     await driver.go_offline_handler(mock_update, mock_context)
-    mock_api_client['update_bot_user_driver_status'].assert_called_with(chat_id, is_online=False)
+    mock_api_client['update_bot_user_driver_status'].assert_awaited_with(chat_id, is_online=False)
 
 
 @pytest.mark.asyncio
@@ -413,7 +413,7 @@ async def test_go_online_handler_service_unavailable(mock_update, mock_context, 
     driver.register_handlers(application, main.user_orders, main.user_roles, main.BUTTONS, main.KEYBOARDS, helpers, DEBUGGING=False)
 
     await driver.go_online_handler(mock_update, mock_context)
-    mock_api_client['update_bot_user_driver_status'].assert_called_once_with(chat_id, is_online=True)
+    mock_api_client['update_bot_user_driver_status'].assert_awaited_once_with(chat_id, is_online=True)
 
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert 'Помилка' in last_reply
@@ -458,7 +458,7 @@ async def test_driver_name_validation_too_short(mock_update, mock_context, mock_
     assert result == driver.DRIVER_NAME
     last_reply = mock_update.message.reply_text.call_args[0][0]
     assert "занадто коротке" in last_reply
-    mock_api_client['register_bot_user_as_driver'].assert_not_called()
+    mock_api_client['register_bot_user_as_driver'].assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -485,7 +485,7 @@ async def test_driver_name_validation_accepts_valid_name(mock_update, mock_conte
     assert mock_context.user_data['driver_name'] == "John Doe"
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert "Опишіть ваше авто" in last_reply
-    mock_api_client['register_bot_user_as_driver'].assert_not_called()
+    mock_api_client['register_bot_user_as_driver'].assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -512,7 +512,7 @@ async def test_driver_car_validation_too_short(mock_update, mock_context, mock_a
     assert result == driver.DRIVER_CAR
     last_reply = mock_update.message.reply_text.call_args[0][0]
     assert "Опис авто занадто короткий" in last_reply
-    mock_api_client['register_bot_user_as_driver'].assert_not_called()
+    mock_api_client['register_bot_user_as_driver'].assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -549,7 +549,7 @@ async def test_driver_car_validation_accepts_valid_description(mock_update, mock
     result = await driver.process_driver_car_handler(mock_update, mock_context)
 
     assert result == driver.ConversationHandler.END
-    mock_api_client['register_bot_user_as_driver'].assert_called_once_with(chat_id, "Test Driver", "Toyota Camry")
+    mock_api_client['register_bot_user_as_driver'].assert_awaited_once_with(chat_id, "Test Driver", "Toyota Camry")
     last_reply = mock_update.message.reply_text.call_args_list[-1][0][0]
     assert "Реєстрацію завершено" in last_reply
 

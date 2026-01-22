@@ -4,6 +4,7 @@ from typing import Optional, List
 from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 from src.driver_models import BotUser
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,9 @@ class BotUserRepository:
         """
         Get bot user by chat_id, or create if doesn't exist.
         Returns (bot_user, created) where created is True if new user was created.
+
+        Race-safe: handles concurrent creation attempts by catching IntegrityError
+        and retrieving the existing record.
         """
         bot_user = await self.get_by_chat_id(chat_id)
         if bot_user:
@@ -63,8 +67,22 @@ class BotUserRepository:
         if defaults:
             create_data.update(defaults)
 
-        bot_user = await self.create(**create_data)
-        return bot_user, True
+        try:
+            bot_user = await self.create(**create_data)
+            return bot_user, True
+        except IntegrityError:
+            # Race condition: another process created the user between our check and create
+            # Rollback the failed transaction and retrieve the existing user
+            await self.db.rollback()
+            logger.info(f"Concurrent creation detected for chat_id={chat_id}, retrieving existing user")
+
+            bot_user = await self.get_by_chat_id(chat_id)
+            if bot_user:
+                return bot_user, False
+            else:
+                # This should never happen, but re-raise if it does
+                logger.error(f"Failed to retrieve user after IntegrityError for chat_id={chat_id}")
+                raise
 
     async def list_all(self) -> List[BotUser]:
         """Get all bot users"""
