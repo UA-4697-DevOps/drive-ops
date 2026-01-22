@@ -61,7 +61,6 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     driver_menu_registered = keyboards['driver_menu_registered']
 
     # Helper functions for API calls (some now replaced by APIClient methods)
-    update_driver_status = helpers['update_driver_status']
     fetch_driver_trips = helpers['fetch_driver_trips']
     send_trip_response = helpers['send_trip_response']
     finish_trip = helpers['finish_trip']
@@ -237,9 +236,6 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         if result['success']:
             logger.info("Driver went online: chat_id=%s driver_id=%s", chat_id, driver_id)
 
-            # Also update driver service status
-            await update_driver_status(driver_id, 'online')
-
             await update.message.reply_text(
                 "\U0001F7E2 *Ви на лінії!*\n\n"
                 "\U0001F4E2 Тепер ви будете отримувати нові замовлення.",
@@ -300,9 +296,6 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
 
         if result['success']:
             logger.info("Driver went offline: chat_id=%s driver_id=%s", chat_id, driver_id)
-
-            # Also update driver service status
-            await update_driver_status(driver_id, 'offline')
 
             await update.message.reply_text(
                 "\U0001F534 *Ви офлайн*\n\n"

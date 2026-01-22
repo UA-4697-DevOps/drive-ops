@@ -108,6 +108,7 @@ async def test_process_driver_car_handler_service_unavailable(mock_update, mock_
 
     helpers = {
         'safe_send': main.safe_send,
+        'update_driver_status': AsyncMock(return_value={'success': True, 'error': None}),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
         'finish_trip': AsyncMock(return_value={'success': True}),
@@ -155,6 +156,7 @@ async def test_process_driver_car_handler_timeout(mock_update, mock_context, moc
 
     helpers = {
         'safe_send': main.safe_send,
+        'update_driver_status': AsyncMock(return_value={'success': True, 'error': None}),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
         'finish_trip': AsyncMock(return_value={'success': True}),
@@ -286,6 +288,7 @@ async def test_driver_info_persistence(mock_update, mock_context, mock_api_clien
     # Build helpers passed into register_handlers
     helpers = {
         'safe_send': main.safe_send,
+        'update_driver_status': AsyncMock(return_value={'success': True, 'error': None}),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
         'finish_trip': AsyncMock(return_value={'success': True}),
@@ -333,6 +336,7 @@ async def test_driver_status_update(mock_update, mock_context, mock_api_client):
 
     helpers = {
         'safe_send': main.safe_send,
+        'update_driver_status': AsyncMock(return_value={'success': True, 'error': None}),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
         'finish_trip': AsyncMock(return_value={'success': True}),
@@ -350,8 +354,18 @@ async def test_driver_status_update(mock_update, mock_context, mock_api_client):
     await driver.go_online_handler(mock_update, mock_context)
     mock_api_client['update_bot_user_driver_status'].assert_called_with(chat_id, is_online=True)
 
-    # Now test going offline
+    # Now test going offline - update mock to return online status first
     mock_api_client['update_bot_user_driver_status'].reset_mock()
+    mock_api_client['get_bot_user'].return_value = {
+        'success': True,
+        'data': {
+            'current_role': 'driver',
+            'driver_id': 'drv_123',
+            'driver_name': 'Test Driver',
+            'car_description': 'Toyota Camry',
+            'driver_status': 'online'  # Changed to online
+        }
+    }
 
     await driver.go_offline_handler(mock_update, mock_context)
     mock_api_client['update_bot_user_driver_status'].assert_called_with(chat_id, is_online=False)
@@ -385,6 +399,7 @@ async def test_go_online_handler_service_unavailable(mock_update, mock_context, 
 
     helpers = {
         'safe_send': main.safe_send,
+        'update_driver_status': AsyncMock(return_value={'success': True, 'error': None}),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
         'finish_trip': AsyncMock(return_value={'success': True}),
@@ -413,6 +428,7 @@ async def test_go_online_handler_service_unavailable(mock_update, mock_context, 
 def _build_driver_helpers():
     return {
         'safe_send': main.safe_send,
+        'update_driver_status': AsyncMock(return_value={'success': True, 'error': None}),
         'fetch_driver_trips': AsyncMock(return_value={'success': True, 'trips': [], 'error': None}),
         'send_trip_response': AsyncMock(return_value={'success': True, 'error': None}),
         'finish_trip': AsyncMock(return_value={'success': True}),
