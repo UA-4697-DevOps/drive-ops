@@ -1,60 +1,31 @@
 ---
-# Main tasks for Shared Infrastructure (DB, MQ, and Common Configs)
+# Main tasks for Shared Infrastructure (Database, Message Broker, and Configs)
 
-- name: Create project root directory
+- name: Create symlink for project root
+  # Links the entire project from host to /opt/drive-ops for instant sync
   ansible.builtin.file:
-    path: "/opt/drive-ops"
-    state: directory
-    mode: '0755'
-  tags: [ infrastructure, infra ]
+    src: "{{ drive_ops_src_root }}"
+    dest: "/opt/drive-ops"
+    state: link
+    force: yes
+  tags: infra
 
-- name: Copy central .env file
-  # Single source of truth for microservices secrets
-  # Secure permissions (0600) ensure only the owner can access sensitive data
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../.env"
-    dest: "/opt/drive-ops/.env"
-    mode: '0600'
-  tags: [ infrastructure, infra ]
-
-- name: Copy central docker-compose.yml
-  # Global orchestration file for the drive-ops stack
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../docker-compose.yml"
-    dest: "/opt/drive-ops/docker-compose.yml"
-    mode: '0644'
-  tags: [ infrastructure, infra ]
-
-- name: Ensure postgres init directory exists
-  # Matches the volume mount path: ./infra/postgres/init-db
+- name: Set permissions for .env file
+  # Set to 644 per colleague's request to ensure container access
   ansible.builtin.file:
-    path: "/opt/drive-ops/infra/postgres/init-db"
-    state: directory
-    mode: '0755'
-  tags: [ infrastructure, infra ]
-
-- name: Copy postgres init scripts
-  # FIXED: Relative path adjusted to locate init.sql based on project structure
-  # This script initializes driver_db upon first container startup
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../postgres/init-db/init.sql"
-    dest: "/opt/drive-ops/infra/postgres/init-db/init.sql"
+    path: "/opt/drive-ops/.env"
     mode: '0644'
-  tags: [ infrastructure, infra ]
+  tags: infra
 
-- name: Start database and message broker only
-  # FIXED: Using YAML service keys ('db', 'mq') instead of container names
+- name: Start shared infrastructure services
+  # Launches core services using the live docker-compose.yml
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
-    services: 
-      - "db"
-      - "mq"
-  tags: [ infrastructure, infra ]
+    services: ["db", "mq"]
+  tags: infra
 
 - name: Wait for infrastructure readiness
-  # Health checks to prevent dependent services from crashing on startup
-  # Waits for PostgreSQL (5432) and RabbitMQ (5672) to accept connections
   ansible.builtin.wait_for:
     host: localhost
     port: "{{ item }}"
@@ -62,4 +33,4 @@
     delay: 5
     timeout: 60
   loop: [ 5432, 5672 ]
-  tags: [ infrastructure, infra ]
+  tags: infra

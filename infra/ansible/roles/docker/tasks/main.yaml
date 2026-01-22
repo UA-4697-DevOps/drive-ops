@@ -9,32 +9,30 @@
       - gnupg
       - lsb-release
     state: present
-  tags: prerequisites
-
-- name: Create directory for Docker GPG key
-  ansible.builtin.file:
-    path: /etc/apt/keyrings
-    state: directory
-    mode: '0755'
   tags: docker
 
-- name: Download Docker GPG key (ASCII armored)
-  # FIXED: Downloading the raw ASCII key to a temporary location first
-  ansible.builtin.get_url:
-    url: "https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}/gpg"
-    dest: /tmp/docker.gpg.asc
-    mode: '0644'
+- name: Setup Docker GPG Key
+  block:
+    - name: Create directory for Docker GPG key
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download Docker GPG key (ASCII armored)
+      ansible.builtin.get_url:
+        url: "https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}/gpg"
+        dest: /tmp/docker.gpg.asc
+        mode: '0644'
+
+    - name: Dearmor Docker GPG key to binary format
+      ansible.builtin.command:
+        cmd: gpg --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg.asc
+        creates: /etc/apt/keyrings/docker.gpg
   tags: docker
 
-- name: Dearmor Docker GPG key to binary format
-  # FIXED: Best practice - converting ASCII armored key to binary for apt compatibility
-  ansible.builtin.command:
-    cmd: gpg --dearmor -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg.asc
-    creates: /etc/apt/keyrings/docker.gpg
-  tags: docker
-
-- name: Add Docker repository using native module
-  # FIXED: Mapping 'aarch64' to 'arm64' for full ARM system support (Apple Silicon/RPi)
+- name: Configure Docker Repository
+  # Mapping 'aarch64' to 'arm64' ensures support for Apple Silicon and Raspberry Pi
   ansible.builtin.apt_repository:
     repo: >
       deb [arch={{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else 'arm64' if ansible_facts['architecture'] == 'aarch64' else ansible_facts['architecture'] }} 
@@ -43,14 +41,10 @@
       {{ ansible_facts['distribution_release'] }} stable
     filename: docker
     state: present
-  tags: docker
-
-- name: Update apt cache after adding Docker repo
-  ansible.builtin.apt:
     update_cache: yes
   tags: docker
 
-- name: Install Docker packages
+- name: Install Docker Engine and Plugins
   ansible.builtin.apt:
     name:
       - docker-ce
@@ -58,35 +52,32 @@
       - containerd.io
       - docker-buildx-plugin
       - docker-compose-plugin
+      - python3-docker # Necessary for Ansible community.docker modules
     state: present
   tags: docker
 
-- name: Add users to docker group
-  ansible.builtin.user:
-    name: "{{ item }}"
-    groups: docker
-    append: yes
-  loop: "{{ docker_users }}"
+- name: Manage User Permissions and Service
+  block:
+    - name: Add users to docker group
+      # Uses the dynamic list defined in playbook.yaml
+      ansible.builtin.user:
+        name: "{{ item }}"
+        groups: docker
+        append: yes
+      loop: "{{ docker_users }}"
+
+    - name: Start and enable Docker service
+      # Skip on WSL where Docker Desktop manages the daemon
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: yes
+      when: ansible_facts['service_mgr'] == 'systemd'
   tags: docker
 
-- name: Start and enable Docker service (Skip on WSL)
-  ansible.builtin.systemd:
-    name: docker
-    state: started
-    enabled: yes
-  # Using ansible_facts for modern syntax consistency
-  when: ansible_facts['service_mgr'] == 'systemd'
-  tags: docker
-
-- name: Install Python Docker SDK
-  # Necessary for Ansible community.docker modules to function
-  ansible.builtin.apt:
-    name: python3-docker
-    state: present
-  tags: docker
-
-- name: Verify Docker installation
+- name: Verify Installation
   ansible.builtin.command: docker --version
   register: docker_version
   changed_when: false
-  tags: verify
+  # Keeps 'verify' tag for quick checks without re-running installation
+  tags: [ docker, verify ]

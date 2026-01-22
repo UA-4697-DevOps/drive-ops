@@ -1,19 +1,8 @@
 ---
 # Tasks for Trip Service (Go-based microservice)
 
-- name: Link trip-service source code (Flexible Environment)
-  # Uses symlinks to allow instant code updates from host to VM/Container
-  # Replaces hardcoded paths with 'drive_ops_src_root' for CI/CD and WSL portability
-  ansible.builtin.file:
-    src: "{{ drive_ops_src_root }}/trip-service"
-    dest: "/opt/drive-ops/trip-service"
-    state: link
-    force: yes
-  tags: [ infrastructure, trip ]
-
 - name: Start trip-service and migrations
-  # Orchestrates both the migration container and the main service
-  # 'docker_build_strategy' variable controls whether to rebuild images on every run
+  # Orchestrates migration and main service
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
@@ -21,4 +10,4 @@
       - "trip-migrations"
       - "trip-service"
     build: "{{ docker_build_strategy | default('policy') }}"
-  tags: [ infrastructure, trip ]
+  tags: [ app, trip ]

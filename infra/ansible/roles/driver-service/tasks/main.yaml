@@ -1,21 +1,13 @@
 ---
 # Tasks for Driver Service (Python/FastAPI)
 
-- name: Link driver-service source code
-  # Create a symbolic link for instant synchronization of changes from the host machine (Windows/WSL)
-  ansible.builtin.file:
-    src: "{{ drive_ops_src_root }}/driver-service"
-    dest: "/opt/drive-ops/driver-service"
-    state: link
-    force: yes
-  tags: [ infrastructure, driver ]
-
-- name: Start driver-service container
-  # Use the 'always' build strategy defined in playbook variables to ensure code changes are captured
+- name: Start driver-service and migrations
+  # Orchestrates migration and main service
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
     services:
+      - "driver-migrations"
       - "driver-service"
     build: "{{ docker_build_strategy | default('always') }}"
-  tags: [ infrastructure, driver ]
+  tags: [ app, driver ]
