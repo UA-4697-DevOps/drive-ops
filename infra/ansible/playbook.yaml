@@ -14,11 +14,22 @@
     # FIXED: Deduplicating user list using Jinja2 'unique' filter to avoid redundant entries
     # This handles cases where 'ansible_user_id' is already 'vagrant'
     docker_users: "{{ (['vagrant', ansible_user_id]) | unique }}"
+
+    # System packages to be installed
+    system_packages:
+      - python3-pip
+      - build-essential
+      - dkms
+      - curl
+      - git
+      - vim
+      - htop
+      - net-tools
   
   pre_tasks:
     - name: Update apt cache
       ansible.builtin.apt:
-        update_cache: yes
+        update_cache: true
         cache_valid_time: 3600
       tags: always
     
@@ -26,15 +37,7 @@
       # FIXED: Moved general tools (git, vim, htop, etc.) here from the Docker role
       # This follows the 'Separation of Concerns' principle for cleaner roles
       ansible.builtin.apt:
-        name:
-          - python3-pip
-          - build-essential
-          - dkms
-          - curl
-          - git
-          - vim
-          - htop
-          - net-tools
+        name: "{{ system_packages }}"
         state: present
       tags: always
 
@@ -49,7 +52,7 @@
     - name: Upgrade all packages
       ansible.builtin.apt:
         upgrade: dist
-        autoremove: yes
+        autoremove: true
       tags: upgrade
 
   roles:
