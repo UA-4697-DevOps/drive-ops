@@ -54,3 +54,55 @@ class APIClient:
     async def finish_trip(cls, driver_id, trip_id):
         """Завершення поїздки"""
         return await cls._request("POST", f"{DRIVER_SERVICE_URL}/drivers/{driver_id}/trips/{trip_id}/complete")
+
+    # ========== BOT USER MANAGEMENT ==========
+
+    @classmethod
+    async def get_or_create_bot_user(cls, chat_id, current_role='passenger'):
+        """Отримати або створити користувача бота"""
+        payload = {'telegram_chat_id': chat_id, 'current_role': current_role}
+        return await cls._request("POST", f"{DRIVER_SERVICE_URL}/api/bot-users", json=payload)
+
+    @classmethod
+    async def get_bot_user(cls, chat_id):
+        """Отримати профіль користувача бота"""
+        return await cls._request("GET", f"{DRIVER_SERVICE_URL}/api/bot-users/{chat_id}")
+
+    @classmethod
+    async def update_bot_user(cls, chat_id, updates):
+        """Оновити дані користувача бота"""
+        return await cls._request("PATCH", f"{DRIVER_SERVICE_URL}/api/bot-users/{chat_id}", json=updates)
+
+    @classmethod
+    async def register_bot_user_as_driver(cls, chat_id, driver_name, car_description):
+        """Зареєструвати користувача як водія"""
+        payload = {
+            'telegram_chat_id': chat_id,
+            'driver_name': driver_name,
+            'car_description': car_description
+        }
+        return await cls._request("POST", f"{DRIVER_SERVICE_URL}/api/bot-users/register-driver", json=payload)
+
+    @classmethod
+    async def change_bot_user_role(cls, chat_id, role):
+        """Змінити роль користувача"""
+        return await cls._request("PATCH", f"{DRIVER_SERVICE_URL}/api/bot-users/{chat_id}/role", params={'role': role})
+
+    @classmethod
+    async def update_bot_user_driver_status(cls, chat_id, is_online):
+        """Оновити статус водія (online/offline)"""
+        return await cls._request(
+            "PATCH",
+            f"{DRIVER_SERVICE_URL}/api/bot-users/{chat_id}/driver-status",
+            params={'is_online': is_online}
+        )
+
+    @classmethod
+    async def set_bot_user_active_trip(cls, chat_id, trip_id=None):
+        """Встановити активну поїздку для водія"""
+        params = {'trip_id': trip_id} if trip_id else {}
+        return await cls._request(
+            "PATCH",
+            f"{DRIVER_SERVICE_URL}/api/bot-users/{chat_id}/active-trip",
+            params=params
+        )

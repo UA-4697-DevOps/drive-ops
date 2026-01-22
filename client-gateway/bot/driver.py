@@ -4,6 +4,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKe
 from telegram.ext import MessageHandler, CallbackQueryHandler, ConversationHandler, ContextTypes, filters
 from telegram.helpers import escape_markdown
 from .logger_utils import create_trip_request_logger
+from .api_client import APIClient
 
 logger = create_trip_request_logger()
 
@@ -67,23 +68,36 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     
     async def select_driver_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
-        
+
+        # Get or create user from database
+        result = await APIClient.get_or_create_bot_user(chat_id, current_role='driver')
+
+        if not result['success']:
+            await update.message.reply_text(
+                "\u274C Помилка при підключенні до сервера. Спробуйте пізніше."
+            )
+            return
+
+        bot_user = result['data']
+
+        # Update current role to driver
+        await APIClient.change_bot_user_role(chat_id, 'driver')
+
         # Check if driver is already registered
-        if chat_id in user_roles and isinstance(user_roles[chat_id], dict) and user_roles[chat_id].get('role') == 'driver':
-            driver_info = user_roles[chat_id]
-            is_online = driver_info.get('status') == 'online'
-            has_active_trip = driver_info.get('active_trip_id') is not None
+        if bot_user.get('driver_id'):
+            # Driver already registered
+            is_online = bot_user.get('driver_status') == 'online'
+            has_active_trip = bot_user.get('active_trip_id') is not None
             await update.message.reply_text(
                 f"\u2705 Ви вже зареєстровані як водій\n\n"
-                f"\U0001F464 Ім'я: {driver_info.get('name')}\n"
-                f"\U0001F697 Авто: {driver_info.get('car_description')}\n"
+                f"\U0001F464 Ім'я: {bot_user.get('driver_name', 'Не вказано')}\n"
+                f"\U0001F697 Авто: {bot_user.get('car_description', 'Не вказано')}\n"
                 f"\U0001F7E2 Статус: {'На лінії' if is_online else 'Офлайн'}\n\n"
                 "Оберіть опцію:",
                 reply_markup=driver_menu_registered(is_online, has_active_trip)
             )
         else:
             # New driver - needs registration
-            user_roles[chat_id] = {'role': 'driver', 'registered': False}
             await update.message.reply_text(
                 "\u2705 Ви обрали роль: Таксист\n\n"
                 "\U0001F4DD Для початку роботи потрібно зареєструватися.\n"
@@ -118,43 +132,34 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     async def process_driver_car(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
         car_description = update.message.text
-        
+
         if len(car_description) < 5:
             await update.message.reply_text("\u274C Опис авто занадто короткий. Спробуйте ще раз:")
             return DRIVER_CAR
-        
+
         name = context.user_data.get('driver_name')
-        
+
         # Show processing message
         await update.message.reply_text(
             "\u23F3 Реєструємо вас у системі...",
             parse_mode='Markdown'
         )
-        
-        # Call Driver Service API
-        result = await register_driver_in_service(chat_id, name, car_description)
-        
+
+        # Register driver via API
+        result = await APIClient.register_bot_user_as_driver(chat_id, name, car_description)
+
         if result['success']:
-            driver_id = result['driver_id']
-            
-            # Store driver info in user_roles
-            user_roles[chat_id] = {
-                'role': 'driver',
-                'registered': True,
-                'driver_id': driver_id,
-                'name': name,
-                'car_description': car_description,
-                'status': 'offline'
-            }
-            
+            bot_user = result['data']
+            driver_id = bot_user['driver_id']
+
             # Sanitize PII for logs: use short hash instead of raw name
             try:
                 sanitized_name = hashlib.sha256(name.encode()).hexdigest()[:8] if name else 'none'
             except Exception:
                 sanitized_name = 'err'
-            
+
             logger.info("Driver registered successfully: chat_id=%s driver_id=%s name_hash=%s", chat_id, driver_id, sanitized_name)
-            
+
             await update.message.reply_text(
                 "\u2705 *Реєстрацію завершено!*\n\n"
                 f"\U0001F464 Ім'я: {escape_markdown(name)}\n"
@@ -166,16 +171,8 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             )
         else:
             if DEBUGGING:
-
+                # In debug mode, still use API to store test data
                 driver_id = f"drv_{chat_id}"
-                user_roles[chat_id] = {
-                    'role': 'driver',
-                    'registered': True,
-                    'driver_id': driver_id,
-                    'name': name,
-                    'car_description': car_description,
-                    'status': 'offline'
-                }
                 await update.message.reply_text(
                     "\u26A0\uFE0F *Режим налагодження*: Реєстрація змодельована успішно.\n\n"
                     f"\U0001F194 ID водія: {escape_markdown(driver_id)}\n\n"
@@ -201,9 +198,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     parse_mode='Markdown',
                     reply_markup=driver_menu_unregistered()
                 )
-            
 
-        
         return ConversationHandler.END
 
     async def cancel_registration(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -215,37 +210,36 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
 
     async def go_online(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
-        
-        if chat_id not in user_roles or not isinstance(user_roles[chat_id], dict):
+
+        # Get user from database
+        result = await APIClient.get_bot_user(chat_id)
+        if not result['success'] or not result['data'].get('driver_id'):
             await update.message.reply_text("\u274C Спочатку зареєструйтесь як водій.")
             return
-        
-        driver_info = user_roles[chat_id]
-        
-        if not driver_info.get('registered'):
-            await update.message.reply_text("\u274C Спочатку зареєструйтесь як водій.")
-            return
-        
-        if driver_info.get('status') == 'online':
+
+        bot_user = result['data']
+
+        if bot_user.get('driver_status') == 'online':
             await update.message.reply_text(
                 "\U0001F7E2 Ви вже на лінії!",
                 reply_markup=driver_menu_registered(is_online=True)
             )
             return
-        
-        driver_id = driver_info['driver_id']
-        
+
+        driver_id = bot_user['driver_id']
+
         # Show processing message
         await update.message.reply_text("\u23F3 Виходимо на лінію...")
-        
-        # Call Driver Service API
-        result = await update_driver_status(driver_id, 'online')
-        
+
+        # Update status via API
+        result = await APIClient.update_bot_user_driver_status(chat_id, is_online=True)
+
         if result['success']:
-            user_roles[chat_id]['status'] = 'online'
-            
             logger.info("Driver went online: chat_id=%s driver_id=%s", chat_id, driver_id)
-            
+
+            # Also update driver service status
+            await update_driver_status(driver_id, 'online')
+
             await update.message.reply_text(
                 "\U0001F7E2 *Ви на лінії!*\n\n"
                 "\U0001F4E2 Тепер ви будете отримувати нові замовлення.",
@@ -254,9 +248,8 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             )
         else:
             if DEBUGGING:
-                user_roles[chat_id]['status'] = 'online'
                 logger.info("[DEBUG] Driver went online (mocked): chat_id=%s driver_id=%s", chat_id, driver_id)
-                
+
                 await update.message.reply_text(
                     "\u26A0\uFE0F *Режим налагодження*: Статус оновлено\n\n"
                     "\U0001F7E2 Ви на лінії!",
@@ -264,7 +257,6 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     reply_markup=driver_menu_registered(is_online=True, active_trip=False)
                 )
             else:
-                # Safely extract error message
                 error_obj = result.get('error') if isinstance(result, dict) else None
                 if isinstance(error_obj, dict):
                     error_msg = error_obj.get('message') or 'Невідома помилка'
@@ -274,7 +266,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     error_msg = 'Невідома помилка'
 
                 logger.error("Failed to set driver online: chat_id=%s error=%s", chat_id, error_msg)
-                
+
                 await update.message.reply_text(
                     f"\u274C *Помилка*\n\n{escape_markdown(str(error_msg or ''))}",
                     parse_mode='Markdown'
@@ -282,37 +274,36 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
 
     async def go_offline(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
-        
-        if chat_id not in user_roles or not isinstance(user_roles[chat_id], dict):
+
+        # Get user from database
+        result = await APIClient.get_bot_user(chat_id)
+        if not result['success'] or not result['data'].get('driver_id'):
             await update.message.reply_text("\u274C Спочатку зареєструйтесь як водій.")
             return
-        
-        driver_info = user_roles[chat_id]
-        
-        if not driver_info.get('registered'):
-            await update.message.reply_text("\u274C Спочатку зареєструйтесь як водій.")
-            return
-        
-        if driver_info.get('status') == 'offline':
+
+        bot_user = result['data']
+
+        if bot_user.get('driver_status') == 'offline':
             await update.message.reply_text(
                 "\U0001F534 Ви вже офлайн!",
                 reply_markup=driver_menu_registered(is_online=False)
             )
             return
-        
-        driver_id = driver_info['driver_id']
-        
+
+        driver_id = bot_user['driver_id']
+
         # Show processing message
         await update.message.reply_text("\u23F3 Виходимо з лінії...")
-        
-        # Call Driver Service API
-        result = await update_driver_status(driver_id, 'offline')
-        
+
+        # Update status via API
+        result = await APIClient.update_bot_user_driver_status(chat_id, is_online=False)
+
         if result['success']:
-            user_roles[chat_id]['status'] = 'offline'
-            
             logger.info("Driver went offline: chat_id=%s driver_id=%s", chat_id, driver_id)
-            
+
+            # Also update driver service status
+            await update_driver_status(driver_id, 'offline')
+
             await update.message.reply_text(
                 "\U0001F534 *Ви офлайн*\n\n"
                 "\U0001F6AB Ви більше не отримуватимете нові замовлення.",
@@ -321,9 +312,8 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
             )
         else:
             if DEBUGGING:
-                user_roles[chat_id]['status'] = 'offline'
                 logger.info("[DEBUG] Driver went offline (mocked): chat_id=%s driver_id=%s", chat_id, driver_id)
-                
+
                 await update.message.reply_text(
                     "\u26A0\uFE0F *Режим налагодження*: Статус оновлено\n\n"
                     "\U0001F534 Ви офлайн",
@@ -331,7 +321,6 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     reply_markup=driver_menu_registered(is_online=False, active_trip=False)
                 )
             else:
-                # Safely extract error message
                 error_obj = result.get('error') if isinstance(result, dict) else None
                 if isinstance(error_obj, dict):
                     error_msg = error_obj.get('message') or 'Невідома помилка'
@@ -341,7 +330,7 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                     error_msg = 'Невідома помилка'
 
                 logger.error("Failed to set driver offline: chat_id=%s error=%s", chat_id, error_msg)
-                
+
                 await update.message.reply_text(
                     f"\u274C *Помилка*\n\n{escape_markdown(str(error_msg or ''))}",
                     parse_mode='Markdown'
@@ -349,29 +338,32 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
 
     async def show_driver_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
-        
-        if chat_id not in user_roles or not isinstance(user_roles[chat_id], dict):
+
+        # Get user from database
+        result = await APIClient.get_bot_user(chat_id)
+        if not result['success']:
             await update.message.reply_text("\u274C Спочатку зареєструйтесь як водій.")
             return
-        
-        driver_info = user_roles[chat_id]
-        
-        if not driver_info.get('registered'):
+
+        bot_user = result['data']
+
+        # Check if registered as driver
+        if not bot_user.get('driver_id'):
             await update.message.reply_text(
                 "\u274C Ви ще не зареєстровані як водій.",
                 reply_markup=driver_menu_unregistered()
             )
             return
-        
-        is_online = driver_info.get('status') == 'online'
-        has_active_trip = driver_info.get('active_trip_id') is not None
+
+        is_online = bot_user.get('driver_status') == 'online'
+        has_active_trip = bot_user.get('active_trip_id') is not None
         status_emoji = "\U0001F7E2" if is_online else "\U0001F534"
         status_text = "На лінії" if is_online else "Офлайн"
 
         # Coerce values to safe strings before escaping to avoid TypeError
-        safe_name = str(driver_info.get('name') or '')
-        safe_car = str(driver_info.get('car_description') or '')
-        safe_driver_id = str(driver_info.get('driver_id') or '')
+        safe_name = str(bot_user.get('driver_name') or '')
+        safe_car = str(bot_user.get('car_description') or '')
+        safe_driver_id = str(bot_user.get('driver_id') or '')
 
         await update.message.reply_text(
             f"\U0001F4CA *Ваш статус*\n\n"
@@ -385,22 +377,25 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
 
     async def show_driver_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
-        
-        if chat_id not in user_roles or not isinstance(user_roles[chat_id], dict):
+
+        # Get user from database
+        result = await APIClient.get_bot_user(chat_id)
+        if not result['success']:
             await update.message.reply_text("\u274C Спочатку зареєструйтесь як водій.")
             return
-        
-        driver_info = user_roles[chat_id]
-        
-        if not driver_info.get('registered'):
+
+        bot_user = result['data']
+
+        # Check if registered as driver
+        if not bot_user.get('driver_id'):
             await update.message.reply_text(
                 "\u274C Спочатку зареєструйтесь як водій.",
                 reply_markup=driver_menu_unregistered()
             )
             return
-        
-        is_online = driver_info.get('status') == 'online'
-        
+
+        is_online = bot_user.get('driver_status') == 'online'
+
         if not is_online:
             await update.message.reply_text(
                 "\U0001F534 Ви офлайн\n\n"
@@ -408,8 +403,8 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                 reply_markup=driver_menu_registered(is_online=False, active_trip=False)
             )
             return
-        
-        driver_id = driver_info.get('driver_id')
+
+        driver_id = bot_user.get('driver_id')
         
         # Show loading message
         await update.message.reply_text("\u23F3 Завантаження замовлень...")
@@ -504,38 +499,39 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     async def accept_trip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
-        
+
         trip_id = query.data.replace('accept_trip_', '')
         chat_id = query.message.chat.id
-        
-        # Get driver info
-        driver_info = user_roles.get(chat_id)
-        if not driver_info or not isinstance(driver_info, dict) or not driver_info.get('registered'):
+
+        # Get driver info from database
+        result = await APIClient.get_bot_user(chat_id)
+        if not result['success'] or not result['data'].get('driver_id'):
             logger.warning("Accept trip attempted by unregistered driver: chat_id=%s trip_id=%s", chat_id, trip_id)
             await query.edit_message_text(
                 text="\u274C Ви не зареєстровані як водій.",
                 parse_mode='Markdown'
             )
             return
-        
-        driver_id = driver_info.get('driver_id')
-        
+
+        bot_user = result['data']
+        driver_id = bot_user.get('driver_id')
+
         logger.info("Driver accepting trip: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, trip_id)
-        
+
         # Show processing state
         await query.edit_message_text(
             text=f"\u23F3 Приймаємо замовлення {escape_markdown(str(trip_id))}...",
             parse_mode='Markdown'
         )
-        
+
         # Call Driver Service
         result = await send_trip_response(driver_id, trip_id, 'accept')
-        
+
         if result['success']:
-            # Set driver offline after accepting trip and store active trip
-            user_roles[chat_id]['status'] = 'offline'
-            user_roles[chat_id]['active_trip_id'] = trip_id
-            
+            # Update status to offline and set active trip in database
+            await APIClient.update_bot_user_driver_status(chat_id, is_online=False)
+            await APIClient.set_bot_user_active_trip(chat_id, trip_id)
+
             logger.info("Trip accepted successfully: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, trip_id)
             await query.edit_message_text(
                 text=(
@@ -546,19 +542,19 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
                 ),
                 parse_mode='Markdown'
             )
-            
+
             # Automatically refresh status with updated menu
             try:
                 await query.message.reply_text(
                     f"\U0001F4CA *Ваш статус*\n\n"
-                    f"\U0001F464 Ім'я: {escape_markdown(str(user_roles[chat_id].get('name') or ''))}\n"
-                    f"\U0001F697 Авто: {escape_markdown(str(user_roles[chat_id].get('car_description') or ''))}\n"
+                    f"\U0001F464 Ім'я: {escape_markdown(str(bot_user.get('driver_name') or ''))}\n"
+                    f"\U0001F697 Авто: {escape_markdown(str(bot_user.get('car_description') or ''))}\n"
                     f"\U0001F194 ID: {escape_markdown(str(driver_id))}\n"
                     f"\U0001F534 Статус: *Офлайн (активна поїздка)*",
                     parse_mode='Markdown',
                     reply_markup=driver_menu_registered(is_online=False, active_trip=True)
                 )
-                
+
                 # Send message about active trip
                 await query.message.reply_text(
                     f"\U0001F6A8 *Активна поїздка*\n\n"
@@ -573,8 +569,8 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         else:
             if DEBUGGING:
                 # Set driver offline in debug mode as well
-                user_roles[chat_id]['status'] = 'offline'
-                user_roles[chat_id]['active_trip_id'] = trip_id
+                await APIClient.update_bot_user_driver_status(chat_id, is_online=False)
+                await APIClient.set_bot_user_active_trip(chat_id, trip_id)
                 
                 logger.info("[DEBUG] Mocking trip acceptance: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, trip_id)
                 await query.edit_message_text(
@@ -655,40 +651,42 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     
     async def finish_trip_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
-        
-        # Get driver info
-        driver_info = user_roles.get(chat_id)
-        if not driver_info or not isinstance(driver_info, dict) or not driver_info.get('registered'):
+
+        # Get driver info from database
+        result = await APIClient.get_bot_user(chat_id)
+        if not result['success'] or not result['data'].get('driver_id'):
             await update.message.reply_text(
                 "\u274C Ви не зареєстровані як водій.",
                 reply_markup=driver_menu_unregistered()
             )
             return
-        
-        active_trip_id = driver_info.get('active_trip_id')
+
+        bot_user = result['data']
+        active_trip_id = bot_user.get('active_trip_id')
+
         if not active_trip_id:
             await update.message.reply_text(
                 "\u274C У вас немає активної поїздки.",
                 reply_markup=driver_menu_registered(is_online=False, active_trip=False)
             )
             return
-        
-        driver_id = driver_info.get('driver_id')
-        
+
+        driver_id = bot_user.get('driver_id')
+
         logger.info("Driver finishing trip: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, active_trip_id)
-        
+
         # Show processing message
         await update.message.reply_text(f"\u23F3 Завершуємо поїздку {escape_markdown(str(active_trip_id))}...", parse_mode='Markdown')
-        
+
         # Call finish_trip helper
         result = await finish_trip(driver_id, active_trip_id)
-        
+
         if result['success']:
-            # Clear active trip and keep driver offline
-            user_roles[chat_id]['active_trip_id'] = None
-            
+            # Clear active trip in database
+            await APIClient.set_bot_user_active_trip(chat_id, None)
+
             logger.info("Trip finished successfully: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, active_trip_id)
-            
+
             await update.message.reply_text(
                 f"\U0001F3C1 *Поїздку завершено!*\n\n"
                 f"\U0001F194 ID: `{escape_markdown(str(active_trip_id))}`\n\n"
@@ -700,8 +698,8 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
         else:
             if DEBUGGING:
                 # Clear active trip in debug mode
-                user_roles[chat_id]['active_trip_id'] = None
-                
+                await APIClient.set_bot_user_active_trip(chat_id, None)
+
                 logger.info("[DEBUG] Mocking trip completion: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, active_trip_id)
                 
                 await update.message.reply_text(
@@ -736,21 +734,22 @@ def register_handlers(application, user_orders, user_roles, buttons, keyboards, 
     async def decline_trip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
-        
+
         trip_id = query.data.replace('decline_trip_', '')
         chat_id = query.message.chat.id
-        
-        # Get driver info
-        driver_info = user_roles.get(chat_id)
-        if not driver_info or not isinstance(driver_info, dict) or not driver_info.get('registered'):
+
+        # Get driver info from database
+        result = await APIClient.get_bot_user(chat_id)
+        if not result['success'] or not result['data'].get('driver_id'):
             logger.warning("Decline trip attempted by unregistered driver: chat_id=%s trip_id=%s", chat_id, trip_id)
             await query.edit_message_text(
                 text="\u274C Ви не зареєстровані як водій.",
                 parse_mode='Markdown'
             )
             return
-        
-        driver_id = driver_info.get('driver_id')
+
+        bot_user = result['data']
+        driver_id = bot_user.get('driver_id')
         
         logger.info("Driver declining trip: chat_id=%s driver_id=%s trip_id=%s", chat_id, driver_id, trip_id)
         

@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from . import passenger
 from . import driver
 from .logger_utils import create_trip_request_logger, generate_correlation_id
+from .api_client import APIClient
 
 logger = create_trip_request_logger()
 
@@ -31,7 +32,10 @@ def ensure_bot_token():
         logger.error("BOT_TOKEN is not set in the environment or .env file.")
         sys.exit("ERROR: BOT_TOKEN is not configured.")
 
+# Keep user_orders in memory for now (temporary state)
 user_orders = {}
+# user_roles kept as empty dict for backward compatibility with passenger/driver modules
+# Actual role data is now stored in database via API
 user_roles = {}
 
 BTN_PASSENGER = "\U0001F64B Я замовник таксі"
@@ -108,8 +112,14 @@ def skip_menu():
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
 def get_user_menu(chat_id):
-    role = user_roles.get(chat_id, 'passenger')
-    return driver_menu() if role == 'driver' else passenger_menu()
+    """
+    Get user menu based on current role.
+    Note: This is a fallback function, actual role is managed via API in async handlers.
+    Returns passenger menu by default.
+    """
+    # This function is kept synchronous for backward compatibility with KEYBOARDS dict
+    # Actual role switching is handled in async handler functions via API
+    return passenger_menu()  # Default to passenger menu
 
 KEYBOARDS = {
     'role_selection_menu': role_selection_menu,
@@ -1143,8 +1153,12 @@ HELPERS = {
 
 async def start_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    user_roles.pop(chat_id, None)
+    # Clear temporary orders
     user_orders.pop(chat_id, None)
+
+    # Create or get user from database
+    await APIClient.get_or_create_bot_user(chat_id, current_role='passenger')
+
     await update.message.reply_text(
         "\U0001F696 Вітаємо у службі таксі!\n\nОберіть вашу роль:",
         reply_markup=role_selection_menu()
@@ -1152,8 +1166,10 @@ async def start_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def change_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-    user_roles.pop(chat_id, None)
+    # Clear temporary orders
     user_orders.pop(chat_id, None)
+
+    # Note: We don't delete user data from DB, just show role selection
     await update.message.reply_text(
         "\U0001F504 Оберіть нову роль:",
         reply_markup=role_selection_menu()

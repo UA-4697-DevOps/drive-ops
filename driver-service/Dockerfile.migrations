@@ -6,7 +6,7 @@ WORKDIR /app
 # Versions matched with driver-service/requirements.txt where applicable
 RUN pip install --no-cache-dir \
     alembic==1.13.1 \
-    psycopg2-binary==2.9.9 \
+    psycopg2-binary==2.9.10 \
     sqlalchemy==2.0.35 \
     python-dotenv==1.0.1
 
