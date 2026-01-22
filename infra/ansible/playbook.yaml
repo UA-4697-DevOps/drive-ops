@@ -60,12 +60,12 @@
     - { role: docker, tags: [ docker ] }
 
     # 2. Shared Infrastructure (DB, MQ, and Centralized Configs)
-    - { role: infra, tags: [ infrastructure, infra ] }
+    - { role: infra, tags: [ infra ] }
 
     # 3. Independent Services (Microservices stack)
-    - { role: trip-service, tags: [ infrastructure, trip ] }
-    - { role: client-gateway, tags: [ infrastructure, gateway ] }
-    - { role: driver-service, tags: [ infrastructure, driver ] }
+    - { role: trip-service, tags: [ app, trip ] }
+    - { role: client-gateway, tags: [ app, gateway ] }
+    - { role: driver-service, tags: [ app, driver ] }
 
   post_tasks:
     - name: Print completion message
