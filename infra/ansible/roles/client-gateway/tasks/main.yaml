@@ -9,7 +9,7 @@
     dest: "/opt/drive-ops/client-gateway"
     state: link
     force: yes
-  tags: [ infrastructure, gateway ]
+  tags: [ app, gateway ]
 
 - name: Start Client Gateway service
   # Deploys the Telegram bot container via Docker Compose
@@ -20,4 +20,4 @@
     services:
       - "client-gateway"
     build: "{{ docker_build_strategy | default('policy') }}"
-  tags: [ infrastructure, gateway ]
+  tags: [ app, gateway ]
