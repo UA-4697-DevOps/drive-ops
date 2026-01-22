@@ -9,7 +9,7 @@
     dest: "/opt/drive-ops/trip-service"
     state: link
     force: yes
-  tags: [ infrastructure, trip ]
+  tags: [ app, trip ]
 
 - name: Start trip-service and migrations
   # Orchestrates both the migration container and the main service
@@ -21,4 +21,4 @@
       - "trip-migrations"
       - "trip-service"
     build: "{{ docker_build_strategy | default('policy') }}"
-  tags: [ infrastructure, trip ]
+  tags: [ app, trip ]
