@@ -8,23 +8,9 @@ This directory contains the IaC (Infrastructure as Code) baseline for the **driv
 - Terraform >= 1.0
 - Terragrunt >= 0.45.0
 
-## First-Time Setup
-
-### Step 1: Bootstrap the State Backend (ONE TIME ONLY)
-
-Before using Terragrunt, you must create the S3 bucket and DynamoDB table for remote state:
-
-```bash
-cd infra/terraform/bootstrap
-terraform init
-terraform apply
-```
-
-This creates:
+Our remote state:
 - S3 bucket: `drive-ops-dev-terraform-state`
 - DynamoDB table: `drive-ops-dev-terraform-locks`
-
-**Important**: Commit the `terraform.tfstate` file in the bootstrap directory to git!
 
 ---
 
