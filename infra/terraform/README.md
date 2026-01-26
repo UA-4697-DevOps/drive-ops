@@ -18,6 +18,14 @@ Our remote state:
 
 Once the state backend is bootstrapped, all operations are performed via **Terragrunt**:
 
+### 0. Bootstrap
+Terraform needs an S3 bucket to store its state. Run this manually first:
+```bash
+cd infra/terraform/bootstrap
+terraform init
+terraform apply
+```
+
 ### 1. Initialization
 ```bash
 cd infra/terragrunt/envs/dev
