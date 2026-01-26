@@ -2,35 +2,53 @@
 
 This directory contains the IaC (Infrastructure as Code) baseline for the **drive-ops** project. It follows the best practices of separating resource definitions (Terraform modules) from environment configurations (Terragrunt).
 
-## Quick Start for DEV Environment
+## Prerequisites
 
-All operations must be performed via **Terragrunt** from the specific environment directory to ensure proper state management and variable injection.
+- AWS CLI configured with valid credentials (`aws configure` or `aws sso login`)
+- Terraform >= 1.0
+- Terragrunt >= 0.45.0
 
+## First-Time Setup
 
+### Step 1: Bootstrap the State Backend (ONE TIME ONLY)
+
+Before using Terragrunt, you must create the S3 bucket and DynamoDB table for remote state:
+
+```bash
+cd infra/terraform/bootstrap
+terraform init
+terraform apply
+```
+
+This creates:
+- S3 bucket: `drive-ops-dev-terraform-state`
+- DynamoDB table: `drive-ops-dev-terraform-locks`
+
+**Important**: Commit the `terraform.tfstate` file in the bootstrap directory to git!
 
 ---
 
+## Quick Start for DEV Environment
+
+Once the state backend is bootstrapped, all operations are performed via **Terragrunt**:
+
 ### 1. Initialization
-Initializes the remote backend and downloads the required provider plugins:
 ```bash
 cd infra/terragrunt/envs/dev
 terragrunt run-all init
 ```
 
-### 2. Planning (Plan)
-Always verify the execution plan to see exactly what resources will be created, modified, or destroyed:
+### 2. Planning
 ```bash
 terragrunt run-all plan
 ```
 
-### 3. Applying Changes (Apply)
-Deploy the infrastructure to AWS:
+### 3. Applying Changes
 ```bash
 terragrunt run-all apply
 ```
 
-### 4. Destroying Resources (Destroy)
-Use this command to tear down the infrastructure and avoid unnecessary AWS costs when the environment is no longer needed:
+### 4. Destroying Resources
 ```bash
 terragrunt run-all destroy
 ```
@@ -55,39 +73,32 @@ terragrunt hclfmt
 
 ### Validate Terraform configuration
 ```bash
-cd infra/terragrunt/envs/dev/state-backend
-terragrunt validate
+cd infra/terraform/bootstrap
+terraform validate
 ```
 
 ---
 
 ## Directory Structure
 
-* **terraform/modules/**: Contains reusable Terraform modules (e.g., state-backend for S3/DynamoDB).
-
-* **terragrunt/envs/**: Contains environment-specific configurations (dev, staging, etc.) and global variables.
-
-* **terragrunt/envs/common_vars.yaml**: Global variables shared across all environments (project name, region, common tags).
-
-* **terragrunt/envs/dev/env_vars.yaml**: Development environment-specific variables (env name, enable_ha flag, env-specific tags).
-
----
-
-## First-Time Setup
-
-When setting up a new environment for the first time, you must create the state backend infrastructure first:
-
-### 1. Deploy the State Backend
-```bash
-cd infra/terragrunt/envs/dev/state-backend
-terragrunt init
-terragrunt apply
+```
+infra/
+├── terraform/
+│   ├── bootstrap/           # One-time setup for S3 + DynamoDB state backend
+│   └── modules/
+│       └── state-backend/   # Reusable state backend module
+├── terragrunt/
+│   ├── root.hcl            # Root Terragrunt configuration
+│   └── envs/
+│       ├── common_vars.yaml    # Global variables (project name, region, tags)
+│       └── dev/
+│           └── env_vars.yaml   # Dev-specific variables (env, enable_ha, etc.)
 ```
 
-### 2. Deploy Other Infrastructure
-Once the state backend is created, you can deploy other modules:
-```bash
-cd infra/terragrunt/envs/dev
-terragrunt run-all init
-terragrunt run-all apply
-```
+### Key Files
+
+* **terraform/bootstrap/**: One-time Terraform setup to create S3 bucket and DynamoDB table for remote state
+* **terraform/modules/**: Reusable Terraform modules
+* **terragrunt/root.hcl**: Root configuration with remote state and provider setup
+* **terragrunt/envs/common_vars.yaml**: Global variables shared across all environments
+* **terragrunt/envs/dev/env_vars.yaml**: Development environment-specific variables
