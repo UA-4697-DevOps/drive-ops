@@ -35,7 +35,59 @@ Use this command to tear down the infrastructure and avoid unnecessary AWS costs
 terragrunt run-all destroy
 ```
 
-## Quick Start for DEV Environment
-* terraform/modules/: Contains reusable "blueprints" (e.g., state-backend for S3/DynamoDB).
+---
 
-* terragrunt/envs/: Contains environment-specific configurations (dev, staging, etc.) and global variables.
+## Formatting and Validation
+
+Before committing changes, ensure your code is properly formatted and validated:
+
+### Format Terraform files
+```bash
+cd infra/terraform/modules/state-backend
+terraform fmt -recursive
+```
+
+### Format Terragrunt files
+```bash
+cd infra/terragrunt
+terragrunt hclfmt
+```
+
+### Validate Terraform configuration
+```bash
+cd infra/terragrunt/envs/dev/state-backend
+terragrunt validate
+```
+
+---
+
+## Directory Structure
+
+* **terraform/modules/**: Contains reusable Terraform modules (e.g., state-backend for S3/DynamoDB).
+
+* **terragrunt/envs/**: Contains environment-specific configurations (dev, staging, etc.) and global variables.
+
+* **terragrunt/envs/common_vars.yaml**: Global variables shared across all environments (project name, region, common tags).
+
+* **terragrunt/envs/dev/env_vars.yaml**: Development environment-specific variables (env name, enable_ha flag, env-specific tags).
+
+---
+
+## First-Time Setup
+
+When setting up a new environment for the first time, you must create the state backend infrastructure first:
+
+### 1. Deploy the State Backend
+```bash
+cd infra/terragrunt/envs/dev/state-backend
+terragrunt init
+terragrunt apply
+```
+
+### 2. Deploy Other Infrastructure
+Once the state backend is created, you can deploy other modules:
+```bash
+cd infra/terragrunt/envs/dev
+terragrunt run-all init
+terragrunt run-all apply
+```
