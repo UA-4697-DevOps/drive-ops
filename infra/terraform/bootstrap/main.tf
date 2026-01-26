@@ -1,0 +1,34 @@
+terraform {
+  required_version = ">= 1.0"
+
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+      version = "6.28.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+
+  default_tags {
+    tags = {
+      Project     = var.project_name
+      Environment = var.env
+      ManagedBy   = "Terraform"
+      CostCenter  = var.cost_center
+    }
+  }
+}
+
+module "state_backend" {
+  source = "../modules/state-backend"
+
+  state_bucket_name = "${var.project_name}-${var.env}-terraform-state"
+  lock_table_name   = "${var.project_name}-${var.env}-terraform-locks"
+
+  tags = {
+    Component = "state-backend"
+  }
+}
