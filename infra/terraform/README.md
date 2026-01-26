@@ -43,7 +43,17 @@ terragrunt run-all destroy
 
 ## Formatting and Validation
 
-Before committing changes, ensure your code is properly formatted and validated:
+We use automated checks to ensure code quality before every commit.
+
+### Automated Checks
+The project is equipped with a Git pre-commit hook located in scripts/hooks/. It automatically runs all necessary checks before allowing a commit.
+
+You can also trigger all checks manually using the global script from the infra/ directory:
+```bash
+./check-infra.sh
+```
+### Manual Commands
+If you need to run specific checks individually:
 
 ### Format Terraform files
 ```bash
@@ -79,6 +89,9 @@ infra/
 │       ├── common_vars.yaml    # Global variables (project name, region, tags)
 │       └── dev/
 │           └── env_vars.yaml   # Dev-specific variables (env, enable_ha, etc.)
+│           └── state-backend/
+│               └── terragrunt.hcl
+└── check-infra.sh  # Global validation script
 ```
 
 ### Key Files
