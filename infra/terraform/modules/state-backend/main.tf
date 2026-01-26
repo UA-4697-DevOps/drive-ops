@@ -1,12 +1,18 @@
-# Create S3 bucket
+# Create S3 bucket for Terraform state
 resource "aws_s3_bucket" "terraform_state" {
   bucket        = var.state_bucket_name
   force_destroy = false # Protect against accidental state deletion
 
-  tags = var.tags
+  # Merge local tags with global project variables
+  tags = merge(var.tags, {
+    Project     = var.project_name
+    Environment = var.env
+    CostCenter  = var.cost_center
+    ManagedBy   = "Terraform-Bootstrap"
+  })
 }
 
-# Block all public access to prevent accidental exposure
+# Block all public access
 resource "aws_s3_bucket_public_access_block" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
 
@@ -16,13 +22,13 @@ resource "aws_s3_bucket_public_access_block" "terraform_state" {
   restrict_public_buckets = true
 }
 
-# Enable versioning
+# Enable versioning for state recovery
 resource "aws_s3_bucket_versioning" "enabled" {
   bucket = aws_s3_bucket.terraform_state.id
   versioning_configuration { status = "Enabled" }
 }
 
-# Configure AES256 server-side encryption
+# Configure server-side encryption
 resource "aws_s3_bucket_server_side_encryption_configuration" "default" {
   bucket = aws_s3_bucket.terraform_state.id
   rule {
@@ -30,7 +36,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "default" {
   }
 }
 
-# Create DynamoDB table for state locking (LockID is a required key)
+# Create DynamoDB table for state locking
 resource "aws_dynamodb_table" "terraform_locks" {
   name         = var.lock_table_name
   billing_mode = "PAY_PER_REQUEST"
@@ -41,5 +47,11 @@ resource "aws_dynamodb_table" "terraform_locks" {
     type = "S"
   }
 
-  tags = var.tags
+  # Ensure consistent tagging across all infrastructure
+  tags = merge(var.tags, {
+    Project     = var.project_name
+    Environment = var.env
+    CostCenter  = var.cost_center
+    ManagedBy   = "Terraform-Bootstrap"
+  })
 }
