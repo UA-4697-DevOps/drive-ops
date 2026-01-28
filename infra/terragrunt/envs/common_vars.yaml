@@ -1,0 +1,13 @@
+# Common variables shared across all environments
+project_name: "drive-ops"
+cost_center: "engineering"
+owner: "devops-team"
+
+# AWS region (can be overridden per environment)
+aws_region: "us-east-2"
+
+# Common tags applied to all resources
+common_tags:
+  Project: "drive-ops"
+  ManagedBy: "Terragrunt"
+  CostCenter: "engineering"

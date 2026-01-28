@@ -1,0 +1,13 @@
+# Development environment-specific variables
+env: "dev"
+
+# Override AWS region for dev if needed (inherits from common_vars.yaml by default)
+# aws_region: "us-east-1"
+
+# Enable high availability in dev (set to false to save costs)
+enable_ha: false
+
+# Environment-specific tags
+env_tags:
+  Environment: "dev"
+  AutoShutdown: "true"
