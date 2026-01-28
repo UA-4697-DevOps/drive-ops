@@ -1,23 +1,24 @@
 #!/bin/bash
-# Stop execution on the first error
-set -e 
+set -e # Stop execution on the first error
 
-echo "🔍 Running Infrastructure Checks for drive-ops..."
+echo "Running Infrastructure Checks for drive-ops..."
 
-# 1. Formatting
-echo "🎨 Formatting all HCL and Terraform code..."
-# Recursively formats all files in the infra directory
-terraform fmt -recursive infra/
+# 1. Terraform Formatting (recursive across all modules)
+echo "Formatting Terraform code..."
+terraform -chdir=terraform fmt -recursive
 
-# 2. Bootstrap Validation
-echo "✅ Validating Terraform bootstrap..."
-# Initialize modules locally without connecting to an AWS backend
-terraform -chdir=infra/terraform/bootstrap init -backend=false
-terraform -chdir=infra/terraform/bootstrap validate
+# 2. Terragrunt Formatting
+echo "Formatting Terragrunt HCL files..."
+terraform -chdir=terraform/bootstrap init -backend=false
+terragrunt hclfmt --terragrunt-working-dir terragrunt
 
-# 3. Dev Environment Validation via Terragrunt
-echo "✅ Validating Terragrunt dev environment..."
-# Terragrunt handles initialization automatically, so no extra init command is needed
-(cd infra/terragrunt/envs/dev/state-backend && terragrunt run -- validate)
+# 3. Bootstrap Validation (local)
+echo "Validating Terraform bootstrap..."
+terraform -chdir=terraform/bootstrap validate
 
-echo "🚀 Infrastructure is clean and valid!"
+# 4. Dev Environment Validation via Terragrunt
+# Note: AWS credentials are required for full validation
+echo "Validating Terragrunt dev environment..."
+cd terragrunt/envs/dev && terragrunt run-all validate
+
+echo "Infrastructure is clean and valid!"

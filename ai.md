@@ -13,9 +13,9 @@
   * `Client Gateway` -> `Trip Service` (Create Order / Poll Status)
   * `Client Gateway` -> `Driver Service` (Accept Order)
   * `Driver Service` -> `Client Gateway` (Webhook: Notify Driver)
-* **Asynchronous (RabbitMQ):**
-  * `Trip Service` -> `Driver Service` (Topic: `trip.event.created`)
-  * `Driver Service` -> `Trip Service` (Topic: `trip.event.driver_assigned`)
+* **Asynchronous (AWS SQS):**
+  * `Trip Service` -> `Driver Service` (Queue: `trip.created`)
+  * `Driver Service` -> `Trip Service` (Queue: `driver.assigned`)
 
 ## 2. Infrastructure & DevOps Principles
 **Environment:**
@@ -42,7 +42,7 @@ sequenceDiagram
     participant D as Driver (TG User)
     participant CG as Client Gateway (TG Bot)
     participant TS as Trip Service
-    participant MB as RabbitMQ
+    participant SQS as AWS SQS
     participant DS as Driver Service
 
     Note over P, TS: Phase 1: Order Creation
@@ -53,8 +53,8 @@ sequenceDiagram
     CG-->>P: 201 Created (TripID)
 
     Note over TS, DS: Phase 2: Driver Discovery (Bridge)
-    TS->>MB: Publish: trip.event.created
-    MB-->>DS: Consume: trip.event.created
+    TS->>SQS: Send message to trip.created queue
+    SQS-->>DS: Receive message from trip.created queue
     DS->>DS: Search drivers in driver_db
     DS->>CG: POST /notify-driver (Webhook)
     CG->>D: New Trip Request available!
@@ -65,8 +65,8 @@ sequenceDiagram
     DS-->>CG: 200 OK
     CG-->>D: 200 OK
     
-    DS->>MB: Publish: trip.event.driver_assigned
-    MB-->>TS: Consume: trip.event.driver_assigned
+    DS->>SQS: Send message to driver.assigned queue
+    SQS-->>TS: Receive message from driver.assigned queue
     TS->>TS: Update trip_db (Status: ACTIVE, DriverID)
 
     Note over P, TS: Phase 4: Status Polling (User Initiated)
@@ -75,12 +75,17 @@ sequenceDiagram
     TS-->>CG: Trip DTO (Status: ACTIVE, Driver Info)
     CG-->>P: Trip description
 ```
-### Phase 1: Order Creation (Steps 1-5)
-* Step 1-2: Client Gateway (TG Bot) receives the /order command and forwards a synchronous POST request to /internal/trips in the Trip Service.
+### Phase 1: Order Creation
 
-* Step 3: Trip Service persists the trip record in trip_db with an initial status: PENDING.
+1. **Passenger Command:** The Passenger sends a /order command to the Telegram Bot (Client Gateway), including their origin and destination coordinates.
 
-* Step 4-5: Trip Service returns a 201 Created response with the TripID. The Gateway then confirms the order to the Passenger via Telegram.
+2. **Internal Request:** The Client Gateway parses the message and makes a synchronous POST /internal/trips request to the Trip Service.
+
+3. **Persist Pending Trip:** The Trip Service saves the trip details into its database (trip_db) with an initial status of PENDING.
+
+4. **Service Confirmation:** The Trip Service returns a 201 Created response containing the unique TripID to the Gateway.
+
+5. **User Acknowledgment:** The Client Gateway sends a Telegram message back to the Passenger confirming that the order has been received.
 
 ### Phase 2: Driver Discovery (Steps 6-10)
 * Step 6-7: Trip Service triggers matching by publishing a trip.event.created message to RabbitMQ. Driver Service consumes this event.
@@ -89,19 +94,30 @@ sequenceDiagram
 
 * Step 9-10: Driver Service sends a POST request to the Gateway's Webhook (/notify-driver). The Client Gateway then pushes a Telegram message with an Inline "Accept" Button to the matched drivers.
 
-### Phase 3: Driver Acceptance (Steps 11-17)
-* Step 11-12: The Driver clicks [Accept], and the Client Gateway forwards a POST request to /internal/accept-trip in the Driver Service.
+### Phase 3: Driver Acceptance
 
-* Step 13-14: Driver Service validates the request and returns 200 OK. The Gateway notifies the Driver that they are successfully assigned.
+11. **Driver Action:** The Driver clicks the [Accept] button in their Telegram chat.
+
+12. **Acceptance Request:** The Client Gateway captures the click and sends a POST /internal/accept-trip request to the Driver Service.
+
+13. **Internal Confirmation:** The Driver Service validates the request and returns a 200 OK to the Gateway.
+
+14. **Driver Feedback:** The Client Gateway notifies the Driver via Telegram that they have successfully accepted the trip.
 
 * Step 15-16: Driver Service publishes a trip.event.driver_assigned message to RabbitMQ. Trip Service consumes this event to sync the state.
 
-* Step 17: Trip Service updates the trip record in trip_db: changes status to ACTIVE and maps the DriverID to the TripID.
+17. **Activate Trip:** The Trip Service updates the trip record in trip_db, changing the status to ACTIVE and linking the specific DriverID.
 
-### Phase 4: Status Polling (Steps 18-21)
-* Step 18-19: The Passenger triggers a status check (/status or button). The Client Gateway performs a synchronous GET request to /internal/trips/{id} in the Trip Service.
+### Phase 4: Status Polling (User Initiated)
 
-* Step 20-21: Trip Service returns a Trip DTO containing the current status and driver details. The Client Gateway parses this DTO and sends a formatted "Trip description" message to the Passenger.
+18. **Status Request:** The Passenger, wanting an update, clicks a [Check Status] button or sends a /status command.
+
+19. **Fetch Data:** The Client Gateway makes a synchronous GET /internal/trips/{id} call to the Trip Service.
+
+20. **Data Transfer:** The Trip Service retrieves the active trip data (including driver info) and returns a Trip DTO (Data Transfer Object) to the Gateway.
+
+21. **Final Update:** The Client Gateway formats the data into a human-readable "Trip description" (e.g., "Driver found! Your car is a Toyota Prius") and sends it to the Passenger.
+
 
 ## 4. Directory Structure
 * `client-gateway/` - Telegram Bot Gateway (Python). BFF for handling user interactions via Telegram API.
@@ -111,8 +127,8 @@ sequenceDiagram
 * `scripts/hooks/`: Contains `pre-commit` script to enforce linting/formatting before commits.
 * `documentation/` - Project documentation and architecture diagrams.
 * `.github/` - CI/CD workflows (GitHub Actions).
-* `docker-compose.yml` - Local development environment orchestration (RabbitMQ, DBs, Services).
-* `.env.example` - Configuration template. Contains keys for Database credentials, RabbitMQ URLs, and Service Ports. Must be copied to `.env`.
+* `docker-compose.yml` - Local development environment orchestration (SQS LocalStack, DBs, Services).
+* `.env.example` - Configuration template. Contains keys for Database credentials, AWS/SQS configuration, and Service Ports. Must be copied to `.env`.
 
 ### `client-gateway/`
 **Role:** Telegram Bot Interface (BFF).
@@ -140,9 +156,9 @@ sequenceDiagram
 * `src/`: Core application source code.
   * `clients/`: Outbound communication.
     * `gateway_client.py`: HTTP client for calling Client Gateway webhooks.
-    * `rabbitmq_publisher.py`: Publishes events (`trip.event.driver_assigned`).
-  * `consumers/`: Inbound RabbitMQ handlers.
-    * `trip_events_consumer.py`: Listens for `trip.event.created` (New ride requests).
+    * `sqs_publisher.py`: Publishes events to SQS queues (`driver.assigned`).
+  * `consumers/`: Inbound SQS handlers.
+    * `trip_events_consumer.py`: Polls and processes messages from `trip.created` queue (New ride requests).
     * `driver_response_consumer.py`: Handles asynchronous driver responses or status updates.
   * `services/`: Core Business Logic.
     * `driver_notification_service.py`: Logic to find and notify drivers.
@@ -159,7 +175,7 @@ sequenceDiagram
   * `database.py`: **DB Connection**. Handles SQLAlchemy engine and session creation.
   * `driver_models.py`: **ORM Models**. Defines `Driver` table schema (SQLAlchemy).
   * `seed_demo.py`: Script to seed initial dummy data for development.
-* `requirements.txt`: Python dependencies (pinned `fastapi`, `sqlalchemy`, `asyncpg`, `pika`).
+* `requirements.txt`: Python dependencies (pinned `fastapi`, `sqlalchemy`, `asyncpg`, `boto3`).
 * `Dockerfile`: **Main Service**. Container configuration for the FastAPI application.
 * `Dockerfile.migrations`: **Migration Runner**. Dedicated container to install Alembic dependencies and execute `upgrade head` on startup.
 * `tests/`: Unit tests for driver logic.
@@ -173,11 +189,11 @@ sequenceDiagram
 * `internal/`: Private code (Library pattern).
   * `api/http/`: REST API handlers.
     * `handler.go`: REST API handlers (e.g., `POST /internal/trips`).
-  * `broker/`: RabbitMQ Publisher/Consumer implementation.
-    * `consumer.go`: RabbitMQ consumer logic (handling `driver_assigned`, `completed`).
+  * `broker/`: SQS Publisher/Consumer implementation.
+    * `consumer.go`: SQS consumer logic (polling and handling messages from `driver.assigned` queue).
     * `consumer_test.go`: Unit tests for consumer handlers.
     * `events.go`: Event builders and payload structures.
-    * `publisher.go`: Message publisher interface and implementation.
+    * `publisher.go`: Message publisher interface and SQS implementation.
   * `domain/`: Struct definitions and Domain Errors.
     * `trip.go`: Core entities and errors (`ErrInvalidTripStatus`, etc.).
     * `events.go`: Event structs (`TripCreatedEvent`, etc.).
@@ -205,7 +221,7 @@ sequenceDiagram
     * `client-gateway/`: **Python Bot Deployment**. Symlinks source code to `/opt/drive-ops` to enable hot-reloading. Deploys container via Docker Compose.
     * `docker/`: **Engine Setup**. Installs Docker Engine, Buildx plugin, and `python3-docker` SDK. Handles GPG keys and architecture mapping (AMD64/ARM64).
     * `driver-service/`: **Driver Backend Deployment**. Symlinks source code. Orchestrates both `driver-service` and `driver-migrations` containers.
-    * `infra/`: **Core Environment Setup**. Creates `/opt/drive-ops` root. Securely copies `.env` and `docker-compose.yml`. Starts shared services (`db`, `mq`) and waits for health checks (ports 5432/5672).
+    * `infra/`: **Core Environment Setup**. Creates `/opt/drive-ops` root. Securely copies `.env` and `docker-compose.yml`. Starts shared services (`db`, `localstack` for SQS) and waits for health checks (ports 5432/4566).
     * `trip-service/`: **Go Backend Deployment**. Symlinks source code. Orchestrates both `trip-service` and `trip-migrations` containers.
   * `playbook.yaml`: Main entry point orchestrating all roles.
 * `postgres/init-db/`:
