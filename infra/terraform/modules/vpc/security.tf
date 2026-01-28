@@ -1,6 +1,8 @@
 # ------------------------------------------------------------------------------
-# APP SECURITY GROUP (Compute Layer)
+# APPLICATION LAYER SECURITY
 # ------------------------------------------------------------------------------
+
+# Security group for compute resources (Go and Python services)
 resource "aws_security_group" "app" {
   name        = "${var.project_name}-${var.env}-sg-app"
   description = "Security group for application servers (Go/Python)"
@@ -11,31 +13,8 @@ resource "aws_security_group" "app" {
   }
 }
 
-# Rule: Allow HTTPS (443) - Primary Secure Traffic
-resource "aws_security_group_rule" "app_ingress_https" {
-  type              = "ingress"
-  from_port         = 443
-  to_port           = 443
-  protocol          = "tcp"
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = aws_security_group.app.id
-  description       = "Allow secure HTTPS traffic from the internet (Telegram Webhooks/API)"
-}
-
-# Rule: Allow HTTP (80) - Redirection Only
-# Note: We allow port 80 solely for Nginx to redirect traffic to 443.
-# We do not use an ALB to maintain Free Tier cost efficiency.
-resource "aws_security_group_rule" "app_ingress_http_redirect" {
-  type              = "ingress"
-  from_port         = 80
-  to_port           = 80
-  protocol          = "tcp"
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = aws_security_group.app.id
-  description       = "Allow HTTP traffic ONLY for redirection to HTTPS"
-}
-
-# Rule: Egress (Outbound) - Allow All
+# Outbound rule to allow all traffic. 
+# Essential for Long Polling (Telegram API) and system package updates.
 resource "aws_security_group_rule" "app_egress_all" {
   type              = "egress"
   from_port         = 0
@@ -43,12 +22,14 @@ resource "aws_security_group_rule" "app_egress_all" {
   protocol          = "-1"
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.app.id
-  description       = "Allow all outbound traffic for system updates and AWS service calls"
+  description       = "Allow all outbound traffic for Long Polling and system updates"
 }
 
 # ------------------------------------------------------------------------------
-# DB SECURITY GROUP (Data Layer)
+# DATABASE LAYER SECURITY
 # ------------------------------------------------------------------------------
+
+# Security group for persistent data stores (RDS PostgreSQL)
 resource "aws_security_group" "db" {
   name        = "${var.project_name}-${var.env}-sg-db"
   description = "Security group for RDS PostgreSQL"
@@ -59,7 +40,8 @@ resource "aws_security_group" "db" {
   }
 }
 
-# Rule: Allow PostgreSQL (5432) - Internal Only
+# Inbound rule to allow PostgreSQL traffic.
+# Implements the principle of least privilege: only the app layer can connect.
 resource "aws_security_group_rule" "db_ingress_postgres" {
   type                     = "ingress"
   from_port                = 5432
@@ -67,5 +49,5 @@ resource "aws_security_group_rule" "db_ingress_postgres" {
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.app.id
   security_group_id        = aws_security_group.db.id
-  description              = "Only allow PostgreSQL traffic from the application security group"
+  description              = "Only allow PostgreSQL traffic from the app layer security group"
 }
