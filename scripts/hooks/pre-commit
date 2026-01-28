@@ -40,7 +40,7 @@ if echo "$STAGED_FILES" | grep -q "^infra/"; then
     echo "🏗️ Infrastructure changes detected. Running validation..."
     
     # Execute the dedicated infrastructure check script
-    bash ./infra/check-infra.sh
+    (cd infra && bash ./check-infra.sh)
     
     # Capture the exit code of the check script
     IF_EXIT=$?
