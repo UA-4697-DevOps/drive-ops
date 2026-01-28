@@ -3,7 +3,7 @@ terraform {
 
   required_providers {
     aws = {
-      source = "hashicorp/aws"
+      source  = "hashicorp/aws"
       version = "6.28.0"
     }
   }
@@ -24,6 +24,10 @@ provider "aws" {
 
 module "state_backend" {
   source = "../modules/state-backend"
+
+  project_name = var.project_name
+  env          = var.env
+  cost_center  = var.cost_center
 
   state_bucket_name = "${var.project_name}-${var.env}-terraform-state"
   lock_table_name   = "${var.project_name}-${var.env}-terraform-locks"

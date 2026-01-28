@@ -47,6 +47,8 @@ if echo "$STAGED_FILES" | grep -q "^infra/"; then
     if [ $IF_EXIT -ne 0 ]; then
         echo "❌ Infrastructure validation failed. Please fix the errors above."
         EXIT_CODE=$IF_EXIT
+    else
+        git add infra/ # Re-stage any infra files that might have been auto-formatted
     fi
 fi
 
