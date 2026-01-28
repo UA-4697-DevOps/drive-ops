@@ -20,4 +20,8 @@ echo "✅ Validating Terragrunt dev environment..."
 # Terragrunt handles initialization automatically, so no extra init command is needed
 (cd infra/terragrunt/envs/dev/state-backend && terragrunt run -- validate)
 
+# 4. Networking Validation via Terragrunt
+echo "✅ Validating Terragrunt networking..."
+(cd infra/terragrunt/envs/dev/vpc && terragrunt run -- validate)
+
 echo "🚀 Infrastructure is clean and valid!"
