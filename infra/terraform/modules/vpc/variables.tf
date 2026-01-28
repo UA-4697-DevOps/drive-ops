@@ -18,4 +18,9 @@ variable "availability_zones" {
   type        = list(string)
   default     = ["us-east-2a", "us-east-2b"]
   description = "Fixed list of AZs to prevent infrastructure shuffling"
+
+  validation {
+    condition     = length(var.availability_zones) == 2
+    error_message = "The availability_zones variable must contain exactly 2 AZs to match the subnet configuration."
+  }
 }
