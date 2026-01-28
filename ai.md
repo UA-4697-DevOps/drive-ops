@@ -75,33 +75,56 @@ sequenceDiagram
     TS-->>CG: Trip DTO (Status: ACTIVE, Driver Info)
     CG-->>P: Trip description
 ```
-### Phase 1: Order Creation (Steps 1-5)
-* Step 1-2: Client Gateway (TG Bot) receives the /order command and forwards a synchronous POST request to /internal/trips in the Trip Service.
+### Phase 1: Order Creation
 
-* Step 3: Trip Service persists the trip record in trip_db with an initial status: PENDING.
+1. **Passenger Command:** The Passenger sends a /order command to the Telegram Bot (Client Gateway), including their origin and destination coordinates.
 
-* Step 4-5: Trip Service returns a 201 Created response with the TripID. The Gateway then confirms the order to the Passenger via Telegram.
+2. **Internal Request:** The Client Gateway parses the message and makes a synchronous POST /internal/trips request to the Trip Service.
 
-### Phase 2: Driver Discovery (Steps 6-10)
-* Step 6-7: Trip Service triggers matching by publishing a trip.event.created message to RabbitMQ. Driver Service consumes this event.
+3. **Persist Pending Trip:** The Trip Service saves the trip details into its database (trip_db) with an initial status of PENDING.
 
-* Step 8: Driver Service executes search logic in driver_db (using PostGIS or radius search) to find available drivers.
+4. **Service Confirmation:** The Trip Service returns a 201 Created response containing the unique TripID to the Gateway.
 
-* Step 9-10: Driver Service sends a POST request to the Gateway's Webhook (/notify-driver). The Client Gateway then pushes a Telegram message with an Inline "Accept" Button to the matched drivers.
+5. **User Acknowledgment:** The Client Gateway sends a Telegram message back to the Passenger confirming that the order has been received.
 
-### Phase 3: Driver Acceptance (Steps 11-17)
-* Step 11-12: The Driver clicks [Accept], and the Client Gateway forwards a POST request to /internal/accept-trip in the Driver Service.
+### Phase 2: Driver Discovery
 
-* Step 13-14: Driver Service validates the request and returns 200 OK. The Gateway notifies the Driver that they are successfully assigned.
+6. **Emit Creation Event:** The Trip Service publishes a trip.event.created message to RabbitMQ to initiate the driver matching process.
 
-* Step 15-16: Driver Service publishes a trip.event.driver_assigned message to RabbitMQ. Trip Service consumes this event to sync the state.
+7. **Consume Creation Event:** The Driver Service consumes the trip.event.created message from the broker.
 
-* Step 17: Trip Service updates the trip record in trip_db: changes status to ACTIVE and maps the DriverID to the TripID.
+8. **Driver Match Logic:** The Driver Service queries its database (driver_db) to identify available drivers within a specific radius of the passenger's origin.
 
-### Phase 4: Status Polling (Steps 18-21)
-* Step 18-19: The Passenger triggers a status check (/status or button). The Client Gateway performs a synchronous GET request to /internal/trips/{id} in the Trip Service.
+9. **Trigger Notification:** The Driver Service makes an internal POST /notify-driver Webhook call to the Client Gateway for each matched driver.
 
-* Step 20-21: Trip Service returns a Trip DTO containing the current status and driver details. The Client Gateway parses this DTO and sends a formatted "Trip description" message to the Passenger.
+10. **Driver Push:** The Client Gateway sends a Telegram message with an "Accept" button to the matched Driver(s).
+
+### Phase 3: Driver Acceptance
+
+11. **Driver Action:** The Driver clicks the [Accept] button in their Telegram chat.
+
+12. **Acceptance Request:** The Client Gateway captures the click and sends a POST /internal/accept-trip request to the Driver Service.
+
+13. **Internal Confirmation:** The Driver Service validates the request and returns a 200 OK to the Gateway.
+
+14. **Driver Feedback:** The Client Gateway notifies the Driver via Telegram that they have successfully accepted the trip.
+
+15. **Emit Assignment Event:** The Driver Service publishes a trip.event.driver_assigned message to RabbitMQ, containing the DriverID and TripID.
+
+16. **Consume Assignment Event:** The Trip Service consumes the trip.event.driver_assigned message.
+
+17. **Activate Trip:** The Trip Service updates the trip record in trip_db, changing the status to ACTIVE and linking the specific DriverID.
+
+### Phase 4: Status Polling (User Initiated)
+
+18. **Status Request:** The Passenger, wanting an update, clicks a [Check Status] button or sends a /status command.
+
+19. **Fetch Data:** The Client Gateway makes a synchronous GET /internal/trips/{id} call to the Trip Service.
+
+20. **Data Transfer:** The Trip Service retrieves the active trip data (including driver info) and returns a Trip DTO (Data Transfer Object) to the Gateway.
+
+21. **Final Update:** The Client Gateway formats the data into a human-readable "Trip description" (e.g., "Driver found! Your car is a Toyota Prius") and sends it to the Passenger.
+
 
 ## 4. Directory Structure
 * `client-gateway/` - Telegram Bot Gateway (Python). BFF for handling user interactions via Telegram API.
