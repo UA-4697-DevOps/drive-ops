@@ -1,24 +1,34 @@
 #!/bin/bash
 set -e # Stop execution on the first error
 
-echo "Running Infrastructure Checks for drive-ops..."
+# Navigate to the project root
+cd "$(dirname "$0")/.."
 
-# 1. Terraform Formatting (recursive across all modules)
-echo "Formatting Terraform code..."
-terraform -chdir=terraform fmt -recursive
+echo "🔍 Running Infrastructure Checks for drive-ops..."
 
-# 2. Terragrunt Formatting
-echo "Formatting Terragrunt HCL files..."
-terraform -chdir=terraform/bootstrap init -backend=false
-terragrunt hclfmt --terragrunt-working-dir terragrunt
+# 1. Formatting
+echo "🎨 Formatting Terraform code..."
+terraform fmt -recursive infra/
 
-# 3. Bootstrap Validation (local)
-echo "Validating Terraform bootstrap..."
-terraform -chdir=terraform/bootstrap validate
+# 2. Bootstrap Validation
+echo "✅ Validating Terraform bootstrap..."
+terraform -chdir=infra/terraform/bootstrap init -backend=false
+terraform -chdir=infra/terraform/bootstrap validate
 
-# 4. Dev Environment Validation via Terragrunt
-# Note: AWS credentials are required for full validation
-echo "Validating Terragrunt dev environment..."
-cd terragrunt/envs/dev && terragrunt run-all validate
+# 3. Dev Environment Validation (Loop Method)
+# This iterates through every folder in 'dev' (vpc, state-backend, etc.)
+# and runs validation individually. This is more stable than 'run-all'.
+echo "✅ Validating Terragrunt modules in Dev..."
 
-echo "Infrastructure is clean and valid!"
+for dir in infra/terragrunt/envs/dev/*/; do
+    # Check if the folder contains a terragrunt configuration
+    if [ -f "$dir/terragrunt.hcl" ]; then
+        module_name=$(basename "$dir")
+        echo "   👉 Validating module: $module_name..."
+        
+        # Enter directory and run validation (suppress unnecessary logs)
+        (cd "$dir" && terragrunt validate > /dev/null)
+    fi
+done
+
+echo "🚀 Infrastructure is clean and valid!"
