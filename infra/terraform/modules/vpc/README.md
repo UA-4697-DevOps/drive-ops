@@ -22,7 +22,8 @@ Access control is enforced via Security Groups to implement the principle of lea
 
 | Source | Destination | Protocol | Port | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| **Internet** (`0.0.0.0/0`) | `sg-app` | TCP | 80 | Inbound HTTP traffic for Telegram Webhooks and Client API. |
+| **Internet** (`0.0.0.0/0`) | `sg-app` | TCP | 443 | **Secure** inbound HTTPS traffic for Telegram Webhooks and Client API. |
+| **Internet** (`0.0.0.0/0`) | `sg-app` | TCP | 80 | Plaintext HTTP traffic (intended for **redirect to HTTPS** only). |
 | `sg-app` | `sg-db` | TCP | 5432 | Internal connection from Application services to the PostgreSQL database. |
 | `sg-app` | **Internet** | ALL | ALL | Outbound traffic for system updates and AWS Service access (SQS, SSM). |
 
