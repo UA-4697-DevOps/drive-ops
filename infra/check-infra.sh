@@ -9,6 +9,7 @@ terraform -chdir=terraform fmt -recursive
 
 # 2. Terragrunt Formatting
 echo "Formatting Terragrunt HCL files..."
+terraform -chdir=terraform/bootstrap init -backend=false
 terragrunt hclfmt --terragrunt-working-dir terragrunt
 
 # 3. Bootstrap Validation (local)

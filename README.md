@@ -33,7 +33,7 @@ Contribution Flow: [CONTRIBUTING.md](./CONTRIBUTING.md)
   ```
   <cmd>
   ```
-- Test:         
+- Test:
   ```
   <cmd>
   ```
