@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -18,14 +19,23 @@ class Settings(BaseSettings):
     DB_USER: str = "postgres"
     DB_PASSWORD: str = "postgres"
     DRIVER_DB_NAME: str = "driver_db"
+    # Added explicit DATABASE_URL to support the override in docker-compose
+    DATABASE_URL: Optional[str] = None
 
-    # --- RabbitMQ Settings ---
+    # --- AWS / SQS Settings (NEW) ---
+    AWS_REGION: str = "us-east-1"
+    AWS_ACCESS_KEY_ID: str = "test"
+    AWS_SECRET_ACCESS_KEY: str = "test"
+    SQS_ENDPOINT_URL: str = "http://localstack:4566"
+    SQS_DRIVER_ASSIGNED_URL: str = "http://localstack:4566/000000000000/driver-assigned"
+
+    # --- RabbitMQ Settings (Deprecated but kept for safety) ---
     ENABLE_RABBITMQ: bool = True
     RABBITMQ_HOST: str = "mq"
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str = "guest"
     RABBITMQ_PASSWORD: str = "guest"
-    # Alias for compatibility with main.py
+    
     @property
     def RABBITMQ_PASS(self) -> str:
         return self.RABBITMQ_PASSWORD
@@ -34,9 +44,7 @@ class Settings(BaseSettings):
     DRIVER_RESPONSES_QUEUE: str = "driver_service_responses"
     TRIP_EVENTS_EXCHANGE: str = "trip_events"
     
-    # --- Client Gateway (Telegram Bot) ---
-    # ВИПРАВЛЕНО: Змінено ім'я з GATEWAY_URL на CLIENT_GATEWAY_URL
-    # Також переконайся, що хост правильний (зазвичай це назва сервісу в docker-compose, тобто client-gateway)
+    # --- Client Gateway ---
     CLIENT_GATEWAY_URL: str = "http://client-gateway:8080" 
     GATEWAY_TIMEOUT: int = 10
     

@@ -6,11 +6,11 @@ import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from schemas.driver_response import (
-    DriverResponseEvent,
-    DriverAssignedPayload
-)
-from clients.rabbitmq_publisher import RabbitMQPublisher
+from schemas.driver_response import DriverResponseEvent
+# We keep DriverResponseEvent for the input, but we don't need DriverAssignedPayload 
+# because the SQS Publisher now handles the outgoing data structure.
+
+from clients.sqs_publisher import SQSPublisher
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class DriverResponseService:
     
     def __init__(
         self,
-        publisher: RabbitMQPublisher,
+        publisher: SQSPublisher,
         drivers_storage: Dict[str, Dict[str, Any]],
         trip_requests_storage: Dict[str, Dict[str, Any]]
     ):
@@ -52,9 +52,6 @@ class DriverResponseService:
     ) -> tuple[bool, Optional[str]]:
         """
         Validate driver response (only checks existence, not idempotency)
-        
-        Returns:
-            (is_valid, error_message)
         """
         # Check if driver exists
         if driver_id not in self.drivers:
@@ -64,7 +61,6 @@ class DriverResponseService:
         if trip_id not in self.trip_requests:
             return False, f"Trip request {trip_id} not found"
         
-        # FIXED: Don't check duplicates here - handle as success in handlers
         return True, None
     
     async def handle_driver_accept(
@@ -75,9 +71,6 @@ class DriverResponseService:
     ) -> bool:
         """
         Handle driver accepting trip request
-        
-        Returns:
-            True if processed successfully (including idempotent cases), False otherwise
         """
         logger.info(
             f"Processing driver accept - Driver: {driver_id}, Trip: {trip_id}"
@@ -92,7 +85,7 @@ class DriverResponseService:
             )
             return False  # Genuine error - will retry
         
-        # FIXED: Handle idempotent cases as success (no retry)
+        # Handle idempotent cases as success (no retry)
         if self._is_duplicate_response(trip_id, driver_id):
             logger.info(
                 f"Duplicate accept ignored (idempotent) - Driver: {driver_id}, Trip: {trip_id}"
@@ -105,19 +98,24 @@ class DriverResponseService:
             )
             return True  # ACK without processing
         
+        # --- Prepare Data for SQS ---
+        driver_data = self.drivers.get(driver_id, {})
+        
+        vehicle_info = {
+            "make": driver_data.get("vehicle_make", "Unknown"),
+            "model": driver_data.get("vehicle_model", "Unknown"),
+            "licensePlate": driver_data.get("license_plate", "UNKNOWN")
+        }
+        driver_name = driver_data.get("name", "Unknown Driver")
+        
         # Publish event FIRST before updating state
-        payload = DriverAssignedPayload(
+        # We pass raw data to SQSPublisher, which handles the formatting (DriverAssignedPayload equivalent)
+        success = await asyncio.to_thread(
+            self.publisher.publish_driver_assigned,
             trip_id=trip_id,
             driver_id=driver_id,
-            assigned_at=timestamp
-        )
-        
-        # Use asyncio.to_thread to avoid blocking event loop
-        success = await asyncio.to_thread(
-            self.publisher.publish_event,
-            event_type="trip.event.driver_assigned",
-            payload=payload.model_dump(mode='json'),
-            routing_key="trip.event.driver_assigned"
+            driver_name=driver_name,
+            vehicle_info=vehicle_info
         )
         
         if not success:
@@ -139,9 +137,8 @@ class DriverResponseService:
         trip_data["responses"][driver_id] = "accept"
         
         # Update driver status
-        driver = self.drivers.get(driver_id)
-        if driver:
-            driver["status"] = "ON_TRIP"
+        if driver_data:
+            driver_data["status"] = "ON_TRIP"
         
         logger.info(
             f"Successfully processed driver accept and published assignment - "
@@ -158,9 +155,6 @@ class DriverResponseService:
     ) -> bool:
         """
         Handle driver rejecting trip request
-        
-        Returns:
-            True if processed successfully (including idempotent cases), False otherwise
         """
         logger.info(
             f"Processing driver reject - Driver: {driver_id}, Trip: {trip_id}"
@@ -175,7 +169,7 @@ class DriverResponseService:
             )
             return False  # Genuine error - will retry
         
-        # FIXED: Handle idempotent cases as success (no retry)
+        # FIXED: Restored full logging and logic from original file
         if self._is_duplicate_response(trip_id, driver_id):
             logger.info(
                 f"Duplicate reject ignored (idempotent) - Driver: {driver_id}, Trip: {trip_id}"

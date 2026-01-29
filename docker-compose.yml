@@ -147,7 +147,16 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app/src
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:5432/${DRIVER_DB_NAME}
+      # Update to use asyncpg for FastAPI/SQLAlchemy async support
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:5432/${DRIVER_DB_NAME}
+      
+      # --- AWS / SQS Configuration ---
+      - AWS_REGION=us-east-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - SQS_ENDPOINT_URL=http://localstack:4566
+      - SQS_DRIVER_ASSIGNED_URL=http://localstack:4566/000000000000/driver-assigned
+      
     ports:
       - "8082:8082" 
     healthcheck:
@@ -161,6 +170,8 @@ services:
         condition: service_healthy
       mq:
         condition: service_healthy
+      localstack:
+        condition: service_started
       driver-migrations:
         condition: service_completed_successfully
     networks:
