@@ -58,10 +58,9 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private.id
 }
 
-# --- Default Resources Management (Naming) ---
+# --- Default Resources Management (Naming & Security) ---
 
 # Manage the default (Main) Route Table to name it properly
-# This table is automatically created with VPC, we just adopt it to add tags
 resource "aws_default_route_table" "main" {
   default_route_table_id = aws_vpc.main.default_route_table_id
 
@@ -97,5 +96,14 @@ resource "aws_default_network_acl" "default" {
 
   tags = {
     Name = "${var.project_name}-${var.env}-default-nacl"
+  }
+}
+
+# Manage the default Security Group to lock it down completely.
+resource "aws_default_security_group" "default" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "${var.project_name}-${var.env}-default-sg"
   }
 }
