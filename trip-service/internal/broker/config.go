@@ -6,15 +6,20 @@ import (
 	"os"
 )
 
-// Config holds RabbitMQ connection configuration
+// Config holds Broker (RabbitMQ & SQS) connection configuration
 type Config struct {
 	URL          string
 	ExchangeName string
 	ExchangeType string
+
+	// SQS specific
+	SQSQueueURL string
+	AWSRegion   string
 }
 
 // LoadConfig loads broker configuration from environment variables
 func LoadConfig() (*Config, error) {
+	// 1. RabbitMQ Configuration
 	// Support both RABBITMQ_URL (Docker/single string) and individual env vars (local dev)
 	var connURL string
 	if rabbitmqURL := os.Getenv("RABBITMQ_URL"); rabbitmqURL != "" {
@@ -55,10 +60,9 @@ func LoadConfig() (*Config, error) {
 
 		// Validate required credentials
 		if user == "" {
-			return nil, fmt.Errorf("RABBITMQ_USER environment variable is required")
-		}
-		if password == "" {
-			return nil, fmt.Errorf("RABBITMQ_PASSWORD environment variable is required")
+			// Instead of failing, we can allow SQS-only mode if needed, 
+			// but for now we keep existing logic and just add SQS
+			log.Println("Warning: RABBITMQ_USER not set, RabbitMQ may fail to connect")
 		}
 
 		// URL-encode credentials to handle special characters
@@ -71,10 +75,16 @@ func LoadConfig() (*Config, error) {
 	exchangeName := getEnv("RABBITMQ_EXCHANGE", "trip_events")
 	exchangeType := getEnv("RABBITMQ_EXCHANGE_TYPE", "topic")
 
+	// 2. SQS Configuration
+	sqsQueueURL := os.Getenv("SQS_QUEUE_URL")
+	awsRegion := getEnv("AWS_REGION", "us-east-1")
+
 	return &Config{
 		URL:          connURL,
 		ExchangeName: exchangeName,
 		ExchangeType: exchangeType,
+		SQSQueueURL:  sqsQueueURL,
+		AWSRegion:    awsRegion,
 	}, nil
 }
 

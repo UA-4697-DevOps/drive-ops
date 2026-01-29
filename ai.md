@@ -88,7 +88,7 @@ sequenceDiagram
 5. **User Acknowledgment:** The Client Gateway sends a Telegram message back to the Passenger confirming that the order has been received.
 
 ### Phase 2: Driver Discovery (Steps 6-10)
-* Step 6-7: Trip Service triggers matching by publishing a trip.event.created message to RabbitMQ. Driver Service consumes this event.
+* Step 6-7: Trip Service triggers matching by publishing a trip.event.created message to SQS. Driver Service consumes this event.
 
 * Step 8: Driver Service executes search logic in driver_db (using PostGIS or radius search) to find available drivers.
 
@@ -104,7 +104,7 @@ sequenceDiagram
 
 14. **Driver Feedback:** The Client Gateway notifies the Driver via Telegram that they have successfully accepted the trip.
 
-* Step 15-16: Driver Service publishes a trip.event.driver_assigned message to RabbitMQ. Trip Service consumes this event to sync the state.
+* Step 15-16: Driver Service publishes a trip.event.driver_assigned message to SQS. Trip Service consumes this event to sync the state.
 
 17. **Activate Trip:** The Trip Service updates the trip record in trip_db, changing the status to ACTIVE and linking the specific DriverID.
 
