@@ -17,12 +17,20 @@
     mode: '0644'
   tags: infra
 
+- name: Ensure LocalStack init script is executable
+  # [NEW] Critical: The script must be executable for LocalStack to run it on boot
+  ansible.builtin.file:
+    path: "/opt/drive-ops/infra/localstack/init-sqs.sh"
+    mode: '0755'
+  tags: infra
+
 - name: Start shared infrastructure services
   # Launches core services using the live docker-compose.yml
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
-    services: ["db", "mq"]
+    # [CHANGED] Added localstack to the list
+    services: ["db", "mq", "localstack"]
   tags: infra
 
 - name: Wait for infrastructure readiness
@@ -32,5 +40,6 @@
     state: started
     delay: 5
     timeout: 60
-  loop: [ 5432, 5672 ]
+  # [CHANGED] Added 4566 (SQS) to the wait list
+  loop: [ 5432, 5672, 4566 ]
   tags: infra
