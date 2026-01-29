@@ -12,11 +12,6 @@ output "db_instance_arn" {
   value       = aws_db_instance.main.arn
 }
 
-output "db_instance_status" {
-  description = "The current status of the RDS instance (e.g., available, backing-up, creating, maintenance)."
-  value       = aws_db_instance.main.status
-}
-
 # ============================================================================
 # Connection Information
 # ============================================================================
@@ -65,82 +60,6 @@ output "db_username" {
 #   description = "The unique version identifier of the current secret value. Changes when credentials are rotated."
 #   value       = aws_secretsmanager_secret_version.db_credentials.version_id
 #}
-
-# ============================================================================
-# Network Configuration Outputs
-# ============================================================================
-
-output "db_subnet_group_name" {
-  description = "The name of the DB subnet group. Shows which subnets the RDS instance is deployed in."
-  value       = aws_db_subnet_group.main.name
-}
-
-output "db_subnet_group_arn" {
-  description = "The ARN of the DB subnet group. Used for resource tracking and IAM policies."
-  value       = aws_db_subnet_group.main.arn
-}
-
-output "db_security_group_ids" {
-  description = "List of security group IDs attached to the RDS instance. Should only contain sg-db for restricted access."
-  value       = aws_db_instance.main.vpc_security_group_ids
-}
-
-# ============================================================================
-# Backup and Maintenance Outputs
-# ============================================================================
-
-output "db_backup_retention_period" {
-  description = "The number of days automated backups are retained. Critical for disaster recovery planning."
-  value       = aws_db_instance.main.backup_retention_period
-}
-
-output "db_backup_window" {
-  description = "The daily time range during which automated backups are created (UTC). Plan maintenance windows around this."
-  value       = aws_db_instance.main.backup_window
-}
-
-output "db_maintenance_window" {
-  description = "The weekly time range during which system maintenance can occur (UTC). Expect brief downtime during this window."
-  value       = aws_db_instance.main.maintenance_window
-}
-
-output "db_latest_restorable_time" {
-  description = "The latest time to which a database can be restored with point-in-time restore (PITR). Used for disaster recovery."
-  value       = aws_db_instance.main.latest_restorable_time
-}
-
-# ============================================================================
-# High Availability and Performance Outputs
-# ============================================================================
-
-output "db_multi_az" {
-  description = "Indicates if the RDS instance is deployed across multiple availability zones for high availability."
-  value       = aws_db_instance.main.multi_az
-}
-
-output "db_availability_zone" {
-  description = "The availability zone where the primary RDS instance is deployed. For Multi-AZ, standby is in a different AZ."
-  value       = aws_db_instance.main.availability_zone
-}
-
-output "db_storage_encrypted" {
-  description = "Indicates whether the RDS instance storage is encrypted at rest. Should always be true for security compliance."
-  value       = aws_db_instance.main.storage_encrypted
-}
-
-output "db_performance_insights_enabled" {
-  description = "Indicates if Performance Insights is enabled for advanced monitoring and troubleshooting."
-  value       = aws_db_instance.main.performance_insights_enabled
-}
-
-# ============================================================================
-# Resource Tags
-# ============================================================================
-
-output "db_tags" {
-  description = "The tags assigned to the RDS instance. Used for cost allocation, automation, and compliance tracking."
-  value       = aws_db_instance.main.tags_all
-}
 
 # ============================================================================
 # Convenience Outputs for Applications
