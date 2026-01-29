@@ -145,3 +145,13 @@ variable "performance_insights_retention_period" {
     error_message = "Performance Insights retention period must be either 7 or 731 days."
   }
 }
+
+# ============================================================================
+# Security and Debugging Options
+# ============================================================================
+
+variable "expose_master_password" {
+  type        = bool
+  description = "SECURITY WARNING: If true, exposes the master password as a Terraform output. This can leak credentials through CI logs, state files, and console output. Should ONLY be enabled for local debugging and NEVER in production. Applications should always retrieve passwords from AWS Secrets Manager instead. Default: false (disabled for security)."
+  default     = false
+}
