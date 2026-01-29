@@ -51,20 +51,20 @@ output "db_username" {
 # Secrets Manager Outputs
 # ============================================================================
 
-output "db_secret_arn" {
-  description = "The ARN of the AWS Secrets Manager secret containing database credentials. Applications should use this to retrieve connection details securely."
-  value       = aws_secretsmanager_secret.db_credentials.arn
-}
+# output "db_secret_arn" {
+#   description = "The ARN of the AWS Secrets Manager secret containing database credentials. Applications should use this to retrieve connection details securely."
+#   value       = aws_secretsmanager_secret.db_credentials.arn
+# }
 
-output "db_secret_name" {
-  description = "The name/ID of the Secrets Manager secret (e.g., 'drive-ops/dev/rds/credentials'). Use this with AWS SDK to retrieve credentials."
-  value       = aws_secretsmanager_secret.db_credentials.name
-}
+# output "db_secret_name" {
+#   description = "The name/ID of the Secrets Manager secret (e.g., 'drive-ops/dev/rds/credentials'). Use this with AWS SDK to retrieve credentials."
+#   value       = aws_secretsmanager_secret.db_credentials.name
+# }
 
-output "db_secret_version_id" {
-  description = "The unique version identifier of the current secret value. Changes when credentials are rotated."
-  value       = aws_secretsmanager_secret_version.db_credentials.version_id
-}
+# output "db_secret_version_id" {
+#   description = "The unique version identifier of the current secret value. Changes when credentials are rotated."
+#   value       = aws_secretsmanager_secret_version.db_credentials.version_id
+#}
 
 # ============================================================================
 # Network Configuration Outputs
@@ -155,16 +155,16 @@ output "connection_string" {
 output "db_connection_info" {
   description = "Consolidated connection information object for easy reference. Password must be retrieved separately from Secrets Manager."
   value = {
-    host                = aws_db_instance.main.address
-    port                = aws_db_instance.main.port
-    database            = aws_db_instance.main.db_name
-    username            = aws_db_instance.main.username
-    secret_arn          = aws_secretsmanager_secret.db_credentials.arn
-    secret_name         = aws_secretsmanager_secret.db_credentials.name
-    endpoint            = aws_db_instance.main.endpoint
-    availability_zone   = aws_db_instance.main.availability_zone
-    multi_az            = aws_db_instance.main.multi_az
-    storage_encrypted   = aws_db_instance.main.storage_encrypted
+    host              = aws_db_instance.main.address
+    port              = aws_db_instance.main.port
+    database          = aws_db_instance.main.db_name
+    username          = aws_db_instance.main.username
+    # secret_arn          = aws_secretsmanager_secret.db_credentials.arn
+    # secret_name         = aws_secretsmanager_secret.db_credentials.name
+    endpoint          = aws_db_instance.main.endpoint
+    availability_zone = aws_db_instance.main.availability_zone
+    multi_az          = aws_db_instance.main.multi_az
+    storage_encrypted = aws_db_instance.main.storage_encrypted
   }
 }
 
