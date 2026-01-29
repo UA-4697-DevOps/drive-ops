@@ -15,26 +15,23 @@ type Config struct {
 	// SQS specific
 	SQSQueueURL string
 	AWSRegion   string
+	SQSEndpoint string // [NEW] Needed for LocalStack overrides
 }
 
 // LoadConfig loads broker configuration from environment variables
 func LoadConfig() (*Config, error) {
 	// 1. RabbitMQ Configuration
-	// Support both RABBITMQ_URL (Docker/single string) and individual env vars (local dev)
 	var connURL string
 	if rabbitmqURL := os.Getenv("RABBITMQ_URL"); rabbitmqURL != "" {
-		// Validate RABBITMQ_URL
 		parsedURL, err := url.Parse(rabbitmqURL)
 		if err != nil {
 			return nil, fmt.Errorf("invalid RABBITMQ_URL: failed to parse: %w", err)
 		}
 
-		// Check scheme
 		if parsedURL.Scheme != "amqp" && parsedURL.Scheme != "amqps" {
 			return nil, fmt.Errorf("invalid RABBITMQ_URL: scheme must be 'amqp' or 'amqps', got '%s'", parsedURL.Scheme)
 		}
 
-		// Check credentials are present
 		if parsedURL.User == nil {
 			return nil, fmt.Errorf("invalid RABBITMQ_URL: credentials are required")
 		}
@@ -42,7 +39,6 @@ func LoadConfig() (*Config, error) {
 		username := parsedURL.User.Username()
 		password, _ := parsedURL.User.Password()
 
-		// Validate credentials are not empty
 		if username == "" {
 			return nil, fmt.Errorf("invalid RABBITMQ_URL: username cannot be empty")
 		}
@@ -52,23 +48,18 @@ func LoadConfig() (*Config, error) {
 
 		connURL = rabbitmqURL
 	} else {
-		// Build URL from individual components
 		host := getEnv("RABBITMQ_HOST", "localhost")
 		port := getEnv("RABBITMQ_PORT", "5672")
 		user := os.Getenv("RABBITMQ_USER")
 		password := os.Getenv("RABBITMQ_PASSWORD")
 
-		// Validate required credentials
+		// Warning only (allows running SQS-only mode)
 		if user == "" {
-			// Instead of failing, we can allow SQS-only mode if needed, 
-			// but for now we keep existing logic and just add SQS
-			log.Println("Warning: RABBITMQ_USER not set, RabbitMQ may fail to connect")
+			// log.Println("Warning: RABBITMQ_USER not set") 
 		}
 
-		// URL-encode credentials to handle special characters
 		encodedUser := url.QueryEscape(user)
 		encodedPassword := url.QueryEscape(password)
-
 		connURL = fmt.Sprintf("amqp://%s:%s@%s:%s/", encodedUser, encodedPassword, host, port)
 	}
 
@@ -77,7 +68,9 @@ func LoadConfig() (*Config, error) {
 
 	// 2. SQS Configuration
 	sqsQueueURL := os.Getenv("SQS_QUEUE_URL")
-	awsRegion := getEnv("AWS_REGION", "us-east-1")
+	// Updated default to us-east-2 based on your infrastructure README
+	awsRegion := getEnv("AWS_REGION", "us-east-2") 
+	sqsEndpoint := os.Getenv("SQS_ENDPOINT") // Read custom endpoint for LocalStack
 
 	return &Config{
 		URL:          connURL,
@@ -85,6 +78,7 @@ func LoadConfig() (*Config, error) {
 		ExchangeType: exchangeType,
 		SQSQueueURL:  sqsQueueURL,
 		AWSRegion:    awsRegion,
+		SQSEndpoint:  sqsEndpoint,
 	}, nil
 }
 
