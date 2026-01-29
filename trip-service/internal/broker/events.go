@@ -9,16 +9,10 @@ import (
 
 // simpleGeocode provides basic geocoding for Kyiv addresses (MVP/demo)
 func simpleGeocode(address string) (lat, lng float64) {
-	// Default to Khreshchatyk center if no match
 	defaultLat, defaultLng := 50.4501, 30.5234
-
-	// Simple pattern matching for demo purposes
-	// In production, use a proper geocoding service
 	if len(address) > 0 {
-		// All addresses in Kyiv center area (Khreshchatyk)
 		return defaultLat, defaultLng
 	}
-
 	return defaultLat, defaultLng
 }
 
@@ -26,20 +20,16 @@ func simpleGeocode(address string) (lat, lng float64) {
 func BuildTripCreatedEvent(trip *domain.Trip, correlationID string) *domain.TripCreatedEvent {
 	event := &domain.TripCreatedEvent{}
 
-	// Set base event metadata
 	event.EventID = uuid.New().String()
 	event.EventType = "trip.event.created"
 	event.EventVersion = "1.0"
 	event.CorrelationID = correlationID
 	event.Timestamp = time.Now()
 
-	// Set payload
 	event.Payload.TripID = trip.ID.String()
 	event.Payload.PassengerID = trip.PassengerID.String()
 	event.Payload.CreatedAt = trip.CreatedAt
 
-	// MVP: Use simple geocoding for demo (Kyiv coordinates)
-	// TODO: Integrate proper geocoding service (Google Maps, etc.)
 	pickupLat, pickupLng := simpleGeocode(trip.Pickup)
 	dropoffLat, dropoffLng := simpleGeocode(trip.Dropoff)
 
@@ -56,4 +46,26 @@ func BuildTripCreatedEvent(trip *domain.Trip, correlationID string) *domain.Trip
 	}
 
 	return event
+}
+
+// DriverAssignedEvent strictly matches the "driver.assigned" payload 
+// defined in architecture/sqs-design-decisions.md
+type DriverAssignedEvent struct {
+	Version       string    `json:"version"`
+	MessageID     string    `json:"messageId"`
+	Timestamp     time.Time `json:"timestamp"`
+	CorrelationID string    `json:"correlationId"`
+	EventType     string    `json:"eventType"` // "driver.assigned"
+	Source        string    `json:"source"`    // "driver-service"
+	Payload       struct {
+		TripID      string `json:"tripId"`
+		DriverID    string `json:"driverId"`
+		DriverName  string `json:"driverName"`
+		VehicleInfo struct {
+			Make         string `json:"make"`
+			Model        string `json:"model"`
+			LicensePlate string `json:"licensePlate"`
+		} `json:"vehicleInfo"`
+		AssignedAt time.Time `json:"assignedAt"`
+	} `json:"payload"`
 }

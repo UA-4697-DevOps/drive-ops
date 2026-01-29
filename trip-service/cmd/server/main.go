@@ -10,6 +10,10 @@ import (
 	"syscall"
 	"time"
 
+	// [NEW] AWS SDK Imports
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+
 	"trip-service/internal/broker"
 	"trip-service/internal/repository"
 	"trip-service/internal/service"
@@ -43,7 +47,7 @@ func main() {
 				return nil
 			}
 			log.Printf("Failed to connect to %s (attempt %d/10): %v", desc, i+1, err)
-			time.Sleep(time.Duration(i+1) * time.Second) // Exponential backoff: 1s, 2s, 3s... (actually linear here but sufficient)
+			time.Sleep(time.Duration(i+1) * time.Second)
 		}
 		return fmt.Errorf("failed to connect to %s after retries: %w", desc, err)
 	}
@@ -72,12 +76,35 @@ func main() {
 		log.Fatalf("Fatal: %v", err)
 	}
 
-	// 2. Initialize RabbitMQ publisher
+	// 2. Load Broker Config
 	brokerConfig, err := broker.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load broker config: %v", err)
 	}
 
+	// [NEW] Initialize AWS Config (LocalStack Aware)
+	// This custom resolver checks if SQS_ENDPOINT is set (e.g. http://localstack:4566)
+	// and forces the SDK to use it.
+	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion(brokerConfig.AWSRegion),
+		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
+			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+				if brokerConfig.SQSEndpoint != "" {
+					return aws.Endpoint{
+						URL:           brokerConfig.SQSEndpoint,
+						SigningRegion: region,
+					}, nil
+				}
+				// Fallback to standard AWS endpoint
+				return aws.Endpoint{}, &aws.EndpointNotFoundError{}
+			},
+		)),
+	)
+	if err != nil {
+		log.Fatalf("Failed to load AWS Config: %v", err)
+	}
+
+	// 3. Initialize RabbitMQ publisher (Keeping this for OUTBOUND events as per current scope)
 	var publisher *broker.RabbitMQPublisher
 	err = connectWithRetry("RabbitMQ Publisher", func() error {
 		var err error
@@ -88,31 +115,26 @@ func main() {
 		log.Fatalf("Fatal: %v", err)
 	}
 
-	// 3. Dependency Injection: Repository -> Service -> Handler
+	// 4. Dependency Injection: Repository -> Service -> Handler
 	repo := repository.NewTripRepository(db)
 	svc := service.NewTripService(repo, publisher)
 	handler := api.NewTripHandler(svc)
 
-	// Initialize RabbitMQ Consumer
-	var consumer *broker.RabbitMQConsumer
-	err = connectWithRetry("RabbitMQ Consumer", func() error {
-		var err error
-		consumer, err = broker.NewRabbitMQConsumer(brokerConfig, svc)
-		return err
-	})
-	if err != nil {
-		log.Fatalf("Fatal: %v", err)
-	}
+	// [CHANGED] Initialize SQS Consumer (Replaces RabbitMQ Consumer)
+	sqsConsumer := broker.NewSQSConsumer(awsCfg, brokerConfig.SQSQueueURL, svc)
 
-	// Create a cancellable context for consumer
+	// Create a cancellable context for consumer shutdown
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
 
-	// Start consumer in background
-	if err := consumer.Start(consumerCtx); err != nil {
-		log.Fatalf("Failed to start consumer: %v", err)
-	}
+	// Start consumer in background goroutine
+	go func() {
+		// Start() is a blocking call, so we wrap it
+		if err := sqsConsumer.Start(consumerCtx); err != nil {
+			log.Printf("SQS Consumer stopped with error: %v", err)
+		}
+	}()
 
-	// 4. Router setup
+	// 5. Router setup
 	r := chi.NewRouter()
 
 	r.Get("/health", handler.HealthCheck)
@@ -120,23 +142,19 @@ func main() {
 	r.Route("/trips", func(r chi.Router) {
 		r.Post("/", handler.CreateTrip)
 		r.Get("/{id}", handler.GetTrip)
-
-		// New endpoint for driver assignment (integrated from feature branch)
 		r.Patch("/{id}/assign-driver", handler.AssignDriver)
 	})
 
-	// 5. Setup HTTP server with graceful shutdown (Preferred production way)
+	// 6. Setup HTTP server with graceful shutdown
 	serverPort := getEnv("TRIP_SERVICE_PORT", ":8081")
 	srv := &http.Server{
 		Addr:    serverPort,
 		Handler: r,
 	}
 
-	// Channel to listen for interrupt signals
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	// Start server in a goroutine
 	go func() {
 		log.Printf("Trip Service is running on %s...", serverPort)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -148,34 +166,22 @@ func main() {
 	<-stop
 	log.Println("Shutting down server...")
 
-	// 6. Graceful shutdown logic
+	// 7. Graceful shutdown logic
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Stop HTTP Server
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("Server shutdown error: %v", err)
 	}
 
-	// Cancel consumer context to signal shutdown
+	// [CHANGED] Stop SQS Consumer
+	log.Println("Stopping SQS Consumer...")
 	consumerCancel()
+	// Optional: Add a small delay or WaitGroup if you need to ensure the poll loop exits strictly
+	time.Sleep(500 * time.Millisecond)
 
-	// Give consumer time to finish in-flight messages
-	consumerShutdownDone := make(chan struct{})
-	go func() {
-		if err := consumer.Close(); err != nil {
-			log.Printf("Error closing consumer: %v", err)
-		}
-		close(consumerShutdownDone)
-	}()
-
-	select {
-	case <-consumerShutdownDone:
-		log.Println("Consumer closed gracefully")
-	case <-time.After(10 * time.Second):
-		log.Println("Consumer close timed out")
-	}
-
-	// Close publisher last - both HTTP handlers and consumer may use it
+	// Close publisher
 	if err := publisher.Close(); err != nil {
 		log.Printf("Error closing publisher: %v", err)
 	}
