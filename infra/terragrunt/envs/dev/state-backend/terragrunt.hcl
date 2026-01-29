@@ -9,7 +9,7 @@ terraform {
 inputs = {
   state_bucket_name = "drive-ops-dev-terraform-state"
   lock_table_name   = "drive-ops-dev-terraform-locks"
-  
+
   tags = {
     Component = "state-backend"
   }
