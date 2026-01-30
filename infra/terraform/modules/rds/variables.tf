@@ -39,6 +39,10 @@ variable "vpc_id" {
 variable "private_subnet_ids" {
   type        = list(string)
   description = "List of private subnet IDs spanning at least 2 availability zones for the DB subnet group. Required for Multi-AZ and high availability."
+  validation {
+    condition     = length(var.private_subnet_ids) >= 2
+    error_message = "private_subnet_ids must include at least two subnets in different AZs."
+  }
 }
 
 variable "db_security_group_id" {
