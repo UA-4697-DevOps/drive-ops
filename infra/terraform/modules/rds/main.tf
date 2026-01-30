@@ -31,9 +31,7 @@ resource "aws_db_instance" "main" {
   deletion_protection     = var.deletion_protection
   skip_final_snapshot     = var.skip_final_snapshot
 
-  tags = {
-    Name = "${var.project_name}-${var.env}-postgres"
-  }
+  tags = var.tags
 }
 
 resource "random_password" "master_password" {
