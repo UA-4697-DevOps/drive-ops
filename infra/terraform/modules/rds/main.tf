@@ -31,5 +31,18 @@ resource "aws_db_instance" "main" {
   deletion_protection     = var.deletion_protection
   skip_final_snapshot     = var.skip_final_snapshot
 
+  # Performance Insights (CKV_AWS_354 compliance)
+  performance_insights_enabled          = var.enable_performance_insights
+  performance_insights_retention_period = var.enable_performance_insights ? var.performance_insights_retention_period : null
+  performance_insights_kms_key_id       = var.enable_performance_insights ? var.performance_insights_kms_key_id : null
+
   tags = var.tags
+
+  # Validation: Performance Insights requires customer-managed KMS key
+  lifecycle {
+    precondition {
+      condition     = !var.enable_performance_insights || var.performance_insights_kms_key_id != null
+      error_message = "SECURITY REQUIREMENT (CKV_AWS_354): When enable_performance_insights is true, performance_insights_kms_key_id must be provided with a customer-managed KMS key ARN. Performance Insights data must be encrypted with a CMK for compliance."
+    }
+  }
 }

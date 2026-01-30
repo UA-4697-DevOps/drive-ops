@@ -146,7 +146,7 @@ variable "deletion_protection" {
 
 variable "enable_performance_insights" {
   type        = bool
-  description = "Enable Performance Insights for advanced database performance monitoring and analysis. Adds additional cost (~$0.18/vCPU/month). Recommended for prod troubleshooting."
+  description = "Enable Performance Insights for advanced database performance monitoring and analysis. Adds additional cost (~$0.18/vCPU/month). SECURITY: If enabled, you MUST provide performance_insights_kms_key_id (customer-managed KMS key) for CKV_AWS_354 compliance. Recommended for prod troubleshooting."
   default     = false
 }
 
@@ -158,6 +158,20 @@ variable "performance_insights_retention_period" {
   validation {
     condition     = contains([7, 731], var.performance_insights_retention_period)
     error_message = "Performance Insights retention period must be either 7 or 731 days."
+  }
+}
+
+variable "performance_insights_kms_key_id" {
+  type        = string
+  description = "The ARN of the KMS key to encrypt Performance Insights data. Required if enable_performance_insights is true (CKV_AWS_354 compliance). Use a customer-managed key (CMK), not AWS managed key. Set to null if Performance Insights is disabled."
+  default     = null
+
+  validation {
+    condition = (
+      var.performance_insights_kms_key_id == null ||
+      can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-f0-9-]+$", var.performance_insights_kms_key_id))
+    )
+    error_message = "performance_insights_kms_key_id must be a valid KMS key ARN (arn:aws:kms:region:account:key/key-id) or null."
   }
 }
 

@@ -120,8 +120,10 @@ module "rds" {
   deletion_protection = true
   skip_final_snapshot = false
 
-  # Enable monitoring
-  enable_performance_insights = true
+  # Enable Performance Insights with customer-managed KMS key (required for CKV_AWS_354)
+  enable_performance_insights           = true
+  performance_insights_kms_key_id       = module.kms.rds_pi_kms_key_arn  # From KMS module
+  performance_insights_retention_period = 731  # Long-term retention for prod
 }
 ```
 
@@ -144,7 +146,8 @@ module "rds" {
 | deletion_protection | Enable deletion protection | bool | false | no |
 | skip_final_snapshot | Skip final snapshot | bool | true | no |
 | enable_performance_insights | Enable Performance Insights | bool | false | no |
-| expose_master_password | ⚠️ Expose password in output (debugging only!) | bool | false | no |
+| performance_insights_kms_key_id | KMS key ARN for PI encryption (required if PI enabled) | string | null | no |
+| performance_insights_retention_period | PI data retention (7 or 731 days) | number | 7 | no |
 
 ## Outputs
 
@@ -155,9 +158,13 @@ module "rds" {
 | db_port | Port number (5432) |
 | db_name | Database name |
 | db_instance_id | RDS instance identifier |
+| db_instance_arn | RDS instance ARN |
 | db_subnet_group_name | DB subnet group name |
 | db_connection_info | Object with all connection details |
-| db_master_password | Password (null unless expose_master_password=true) |
+| connection_string | PostgreSQL connection string (without password) |
+| performance_insights_enabled | Whether Performance Insights is enabled |
+| performance_insights_kms_key_id | KMS key ARN for PI (null if disabled) |
+| performance_insights_retention_period | PI retention period (null if disabled) |
 
 ## Cost Optimization
 
@@ -208,10 +215,85 @@ aws rds restore-db-instance-from-db-snapshot \
 This is intentional for security. See "Password Management" section above.
 
 ### Database is too slow
-1. Enable Performance Insights: `enable_performance_insights = true`
+1. Enable Performance Insights (see section below)
 2. Check CloudWatch metrics
 3. Consider upgrading instance class
 4. Review query performance
+
+## Performance Insights Setup
+
+### Security Requirement (CKV_AWS_354)
+
+Performance Insights **MUST** use a customer-managed KMS key (CMK) for encryption. AWS-managed keys are not compliant.
+
+### Step 1: Create KMS Key for Performance Insights
+
+Create a separate KMS key module or add to your secrets module:
+
+```hcl
+# terraform/modules/kms/main.tf (or add to secrets module)
+resource "aws_kms_key" "rds_performance_insights" {
+  description             = "KMS key for RDS Performance Insights encryption"
+  deletion_window_in_days = 10
+  enable_key_rotation     = true
+
+  tags = {
+    Name = "${var.project_name}-${var.env}-rds-pi-kms"
+  }
+}
+
+resource "aws_kms_alias" "rds_performance_insights" {
+  name          = "alias/${var.project_name}-${var.env}-rds-pi"
+  target_key_id = aws_kms_key.rds_performance_insights.key_id
+}
+
+output "rds_pi_kms_key_arn" {
+  description = "ARN of KMS key for RDS Performance Insights"
+  value       = aws_kms_key.rds_performance_insights.arn
+}
+```
+
+### Step 2: Use in RDS Module
+
+```hcl
+# terragrunt/envs/prod/rds/terragrunt.hcl
+dependency "kms" {
+  config_path = "../kms"  # or "../secrets" if KMS is there
+}
+
+inputs = {
+  # ... other inputs ...
+
+  # Enable Performance Insights with CMK
+  enable_performance_insights        = true
+  performance_insights_kms_key_id    = dependency.kms.outputs.rds_pi_kms_key_arn
+  performance_insights_retention_period = 7  # or 731 for long-term retention
+}
+```
+
+### What Happens Without CMK?
+
+If you try to enable Performance Insights without providing a KMS key:
+
+```
+Error: SECURITY REQUIREMENT (CKV_AWS_354): When enable_performance_insights is true,
+performance_insights_kms_key_id must be provided with a customer-managed KMS key ARN.
+Performance Insights data must be encrypted with a CMK for compliance.
+```
+
+### Cost Considerations
+
+- **Performance Insights**: ~$0.18/vCPU/month
+- **KMS Key**: $1/month + $0.03 per 10,000 requests
+- **7-day retention**: Free tier
+- **731-day retention**: Additional cost
+
+### Best Practices
+
+1. **Create separate KMS key** for Performance Insights (not shared with storage encryption)
+2. **Enable key rotation** for the KMS key
+3. **Use 7-day retention** for dev, 731-day for production troubleshooting
+4. **Monitor KMS costs** if PI generates many encryption requests
 
 ## References
 

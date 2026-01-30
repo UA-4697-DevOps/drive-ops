@@ -65,3 +65,22 @@ output "db_connection_info" {
     storage_encrypted = aws_db_instance.main.storage_encrypted
   }
 }
+
+# ============================================================================
+# Performance Insights Outputs
+# ============================================================================
+
+output "performance_insights_enabled" {
+  description = "Indicates if Performance Insights is enabled for this RDS instance."
+  value       = aws_db_instance.main.performance_insights_enabled
+}
+
+output "performance_insights_kms_key_id" {
+  description = "The ARN of the KMS key used to encrypt Performance Insights data. Null if Performance Insights is disabled."
+  value       = aws_db_instance.main.performance_insights_kms_key_id
+}
+
+output "performance_insights_retention_period" {
+  description = "The number of days Performance Insights data is retained. Null if Performance Insights is disabled."
+  value       = aws_db_instance.main.performance_insights_retention_period
+}
