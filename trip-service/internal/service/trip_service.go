@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors" // [ДОДАНО] Пакет для роботи з помилками (errors.Is)
 	"fmt"
 	"log"
 
@@ -83,30 +84,23 @@ func (s *TripService) AssignDriver(ctx context.Context, tripID uuid.UUID, driver
 }
 
 // CompleteTrip handles the business logic for completing a trip.
-// It includes an idempotency check to handle duplicate SQS messages.
+// It uses an atomic database update to handle idempotency and prevent race conditions.
 func (s *TripService) CompleteTrip(ctx context.Context, tripID uuid.UUID) error {
 	if tripID == uuid.Nil {
 		return domain.ErrInvalidID
 	}
 
-	// 1. Fetch the trip to check its current status
-	trip, err := s.repo.GetByID(ctx, tripID)
-	if err != nil {
-		return err
-	}
-
-	// 2. Idempotency Check: If the trip is already completed, skip the update
-	if trip.Status == domain.TripStatusCompleted {
-		log.Printf("INFO: Trip %s is already marked as COMPLETED. Skipping update.", tripID)
-		return nil
-	}
-
-	// 3. Update status to COMPLETED
-	trip.Status = domain.TripStatusCompleted
-
-	// 4. Save the updated trip to the database
-	if err := s.repo.Update(ctx, trip); err != nil {
-		log.Printf("ERROR: Failed to update status to COMPLETED for trip %s: %v", tripID, err)
+	// [FIXED] Використовуємо атомарний метод репозиторію для запобігання race conditions (TOCTOU).
+	if err := s.repo.CompleteTrip(ctx, tripID); err != nil {
+		// Якщо репозиторій повертає ErrInvalidTripStatus, це означає, що поїздка 
+		// вже COMPLETED. Ми обробляємо це як успішну ідемпотентну дію.
+		if errors.Is(err, domain.ErrInvalidTripStatus) {
+			log.Printf("INFO: Trip %s skip completion (already completed or wrong state).", tripID)
+			return nil
+		}
+		
+		// Обробка справжніх помилок репозиторію (наприклад, проблеми зі з'єднанням)
+		log.Printf("ERROR: Failed to complete trip %s: %v", tripID, err)
 		return err
 	}
 

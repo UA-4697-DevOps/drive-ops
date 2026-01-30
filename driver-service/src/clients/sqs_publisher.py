@@ -84,9 +84,12 @@ class SQSPublisher:
         """
         Publishes the trip.completed event to SQS matching the design document schema.
         """
-        # If no timestamp provided, generate current UTC time
+        # 1. Handle timestamp and timezone-naive input
         if timestamp is None:
             timestamp = datetime.now(timezone.utc)
+        elif timestamp.tzinfo is None:
+            # Treat naive datetime as UTC
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
             
         now_iso = timestamp.isoformat().replace('+00:00', 'Z')
         correlation_id = f"trip-{trip_id}"

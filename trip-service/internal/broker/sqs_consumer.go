@@ -181,12 +181,18 @@ func (c *SQSConsumer) handleTripCompleted(ctx context.Context, payload json.RawM
 		return nil
 	}
 
+	// Call the service to complete the trip
 	err = c.svc.CompleteTrip(ctx, tripID)
 	if err != nil {
-		if errors.Is(err, domain.ErrTripNotFound) {
-			log.Printf("INFO: Trip %s not found for completion %s. Deleting.", tripID, msgID)
+		// [UPDATED] Handle both "Not Found" and "Invalid Status" as idempotent cases.
+		// If the trip is already COMPLETED, the service returns ErrInvalidTripStatus.
+		// We log this as INFO and return nil so the message is deleted from SQS.
+		if errors.Is(err, domain.ErrTripNotFound) || errors.Is(err, domain.ErrInvalidTripStatus) {
+			log.Printf("INFO: Trip %s skip completion (not found or invalid status) in message %s. Deleting.", tripID, msgID)
 			return nil
 		}
+		
+		// Return genuine errors (like DB connection issues) to trigger SQS visibility timeout/retry
 		return err
 	}
 
