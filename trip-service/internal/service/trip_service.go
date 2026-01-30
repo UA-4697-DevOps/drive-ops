@@ -26,7 +26,7 @@ type TripService struct {
 	publisher broker.Publisher
 }
 
-// NewTripService creates a new instance of TripService with RabbitMQ publisher.
+// NewTripService creates a new instance of TripService.
 func NewTripService(repo *repository.TripRepository, publisher broker.Publisher) *TripService {
 	if repo == nil {
 		panic("repository cannot be nil")
@@ -53,12 +53,12 @@ func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
 		return err
 	}
 
-	// Phase 2: Notify other services about new trip
+	// Phase 2: Notify Driver Service via SQS about new trip
 	event := broker.BuildTripCreatedEvent(trip, trip.ID.String())
 	if err := s.publisher.PublishTripCreated(ctx, event); err != nil {
 		log.Printf("ERROR: Failed to publish trip.event.created for trip_id=%s: %v", trip.ID, err)
 	} else {
-		log.Printf("Successfully published trip.event.created for trip_id=%s", trip.ID)
+		log.Printf("INFO: Successfully published trip.event.created for trip_id=%s", trip.ID)
 	}
 
 	return nil
@@ -82,32 +82,39 @@ func (s *TripService) AssignDriver(ctx context.Context, tripID uuid.UUID, driver
 	return s.repo.AssignDriver(ctx, tripID, driverID)
 }
 
-// CompleteTrip handles the business logic for completing a trip
+// CompleteTrip handles the business logic for completing a trip.
+// It includes an idempotency check to handle duplicate SQS messages.
 func (s *TripService) CompleteTrip(ctx context.Context, tripID uuid.UUID) error {
 	if tripID == uuid.Nil {
 		return domain.ErrInvalidID
 	}
 
-	// Get the trip to update its status
+	// 1. Fetch the trip to check its current status
 	trip, err := s.repo.GetByID(ctx, tripID)
 	if err != nil {
 		return err
 	}
 
-	// Update status to COMPLETED
+	// 2. Idempotency Check: If the trip is already completed, skip the update
+	if trip.Status == domain.TripStatusCompleted {
+		log.Printf("INFO: Trip %s is already marked as COMPLETED. Skipping update.", tripID)
+		return nil
+	}
+
+	// 3. Update status to COMPLETED
 	trip.Status = domain.TripStatusCompleted
 
-	// Save the updated trip
+	// 4. Save the updated trip to the database
 	if err := s.repo.Update(ctx, trip); err != nil {
+		log.Printf("ERROR: Failed to update status to COMPLETED for trip %s: %v", tripID, err)
 		return err
 	}
 
-	log.Printf("Trip %s marked as COMPLETED", tripID)
+	log.Printf("SUCCESS: Trip %s successfully marked as COMPLETED", tripID)
 	return nil
 }
 
 // CheckHealth verifies the database connection status.
-// FIX: Now uses the encapsulated Ping() method from the repository.
 func (s *TripService) CheckHealth(ctx context.Context) error {
 	if err := s.repo.Ping(ctx); err != nil {
 		return fmt.Errorf("database health check failed: %w", err)

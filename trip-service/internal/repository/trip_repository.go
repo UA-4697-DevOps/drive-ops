@@ -35,7 +35,8 @@ func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Tri
 	return &trip, nil
 }
 
-// Update performs a generic update of the trip record
+// Update performs a generic update of the trip record.
+// Used for general metadata updates.
 func (r *TripRepository) Update(ctx context.Context, trip *domain.Trip) error {
 	return r.db.WithContext(ctx).Save(trip).Error
 }
@@ -58,25 +59,51 @@ func (r *TripRepository) AssignDriver(ctx context.Context, tripID uuid.UUID, dri
 
 	// If no rows were affected, differentiate between 404 (Not Found) and 409 (Conflict)
 	if result.RowsAffected == 0 {
-		var count int64
-		err := r.db.WithContext(ctx).
-			Model(&domain.Trip{}).
-			Where("id = ?", tripID).
-			Count(&count).
-			Error
-
-		if err != nil {
-			return err
-		}
-
-		if count == 0 {
-			return domain.ErrTripNotFound
-		}
-
-		return domain.ErrInvalidTripStatus
+		return r.checkUpdateFailure(ctx, tripID)
 	}
 
 	return nil
+}
+
+// CompleteTrip atomically marks a trip as COMPLETED.
+// It ensures that only ACTIVE trips can be completed.
+func (r *TripRepository) CompleteTrip(ctx context.Context, tripID uuid.UUID) error {
+	// Atomic update with guard: only update if trip is currently ACTIVE
+	result := r.db.WithContext(ctx).
+		Model(&domain.Trip{}).
+		Where("id = ? AND status = ?", tripID, domain.TripStatusActive).
+		Update("status", domain.TripStatusCompleted)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	// Handle idempotency: if no rows were affected, check why
+	if result.RowsAffected == 0 {
+		return r.checkUpdateFailure(ctx, tripID)
+	}
+
+	return nil
+}
+
+// checkUpdateFailure is a helper to distinguish between a missing trip and an invalid state
+func (r *TripRepository) checkUpdateFailure(ctx context.Context, id uuid.UUID) error {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&domain.Trip{}).
+		Where("id = ?", id).
+		Count(&count).
+		Error
+
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return domain.ErrTripNotFound
+	}
+
+	return domain.ErrInvalidTripStatus
 }
 
 // Delete removes a trip record by its id
@@ -85,7 +112,6 @@ func (r *TripRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 // Ping verifies the database connection status.
-// This replaces the old DB() method to maintain encapsulation.
 func (r *TripRepository) Ping(ctx context.Context) error {
 	sqlDB, err := r.db.DB()
 	if err != nil {

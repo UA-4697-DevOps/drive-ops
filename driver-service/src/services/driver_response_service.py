@@ -208,6 +208,48 @@ class DriverResponseService:
         
         return True
     
+    async def handle_trip_completion(
+        self,
+        driver_id: str,
+        trip_id: str,
+        timestamp: datetime
+    ) -> bool:
+        """
+        Processes trip completion and publishes event to SQS.
+        """
+        logger.info(f"Processing trip completion - Driver: {driver_id}, Trip: {trip_id}")
+
+        # 1. Validate existence
+        is_valid, error_msg = self._validate_response(driver_id, trip_id)
+        if not is_valid:
+            logger.error(f"Invalid completion - Error: {error_msg}")
+            return False
+
+        # 2. Prepare payload and publish
+        # Using SQSPublisher method we added earlier
+        success = await asyncio.to_thread(
+            self.publisher.publish_trip_completed,
+            trip_id=trip_id,
+            driver_id=driver_id,
+            timestamp=timestamp
+        )
+
+        if not success:
+            logger.error(f"Failed to publish trip_completed event for trip {trip_id}")
+            return False
+
+        # 3. Update local state
+        if trip_id in self.trip_requests:
+            self.trip_requests[trip_id]["status"] = "completed"
+            self.trip_requests[trip_id]["completed_at"] = timestamp
+        
+        # 4. Set driver back to ONLINE (Available)
+        if driver_id in self.drivers:
+            self.drivers[driver_id]["status"] = "ONLINE"
+            logger.info(f"Driver {driver_id} status updated to ONLINE locally after completion")
+
+        return True
+
     async def process_driver_response(self, event: DriverResponseEvent) -> bool:
         """
         Process driver response event (accept or reject)

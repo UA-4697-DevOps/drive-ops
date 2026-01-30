@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt" // [NEW] Added for Errorf
+	"fmt"
 	"log"
 	"time"
 
@@ -15,20 +15,35 @@ import (
 	"trip-service/internal/domain"
 )
 
-// DriverAssigner interface decouples the broker from the service implementation
-type DriverAssigner interface {
+// TripEventManager handles business logic triggered by SQS events.
+// This interface decouples the broker from the service implementation.
+type TripEventManager interface {
 	AssignDriver(ctx context.Context, tripID uuid.UUID, driverID uuid.UUID) error
+	CompleteTrip(ctx context.Context, tripID uuid.UUID) error
 }
 
-// SQSConsumer manages polling from AWS SQS
+// SQSMessageEnvelope represents the standard message structure used across services.
+type SQSMessageEnvelope struct {
+	EventType     string          `json:"eventType"`
+	CorrelationID string          `json:"correlationId"`
+	Payload       json.RawMessage `json:"payload"`
+}
+
+// TripCompletedPayload matches the "trip.completed" schema from documentation.
+type TripCompletedPayload struct {
+	TripID string `json:"tripId"`
+	Status string `json:"status"`
+}
+
+// SQSConsumer manages polling from AWS SQS for trip-related events.
 type SQSConsumer struct {
 	client   *sqs.Client
 	queueURL string
-	svc      DriverAssigner
+	svc      TripEventManager
 }
 
-// NewSQSConsumer creates a new consumer instance with modern endpoint resolution
-func NewSQSConsumer(cfg aws.Config, queueURL string, svc DriverAssigner, brokerCfg *Config) *SQSConsumer {
+// NewSQSConsumer creates a new consumer instance with modern endpoint resolution.
+func NewSQSConsumer(cfg aws.Config, queueURL string, svc TripEventManager, brokerCfg *Config) *SQSConsumer {
 	client := sqs.NewFromConfig(cfg, func(o *sqs.Options) {
 		if brokerCfg.SQSEndpoint != "" {
 			o.BaseEndpoint = aws.String(brokerCfg.SQSEndpoint)
@@ -42,12 +57,10 @@ func NewSQSConsumer(cfg aws.Config, queueURL string, svc DriverAssigner, brokerC
 	}
 }
 
-// Start begins the polling loop
+// Start begins the polling loop.
 func (c *SQSConsumer) Start(ctx context.Context) error {
-	// [FIXED] Fail Fast: Validate the queue URL before entering the loop.
-	// This prevents the service from repeatedly polling an empty URL.
 	if c.queueURL == "" {
-		return fmt.Errorf("fatal error: SQS_DRIVER_ASSIGNED_URL is not set; consumer cannot start")
+		return fmt.Errorf("fatal error: SQS Queue URL is not set; consumer cannot start")
 	}
 
 	log.Printf("INFO: Starting SQS Consumer on queue: %s", c.queueURL)
@@ -91,6 +104,7 @@ func (c *SQSConsumer) poll(ctx context.Context) {
 	}
 }
 
+// processMessage unmarshals the envelope and routes to specific handlers based on EventType.
 func (c *SQSConsumer) processMessage(ctx context.Context, msg types.Message) error {
 	body := aws.ToString(msg.Body)
 	msgID := aws.ToString(msg.MessageId)
@@ -100,44 +114,88 @@ func (c *SQSConsumer) processMessage(ctx context.Context, msg types.Message) err
 		return nil
 	}
 
-	var event DriverAssignedEvent
-	if err := json.Unmarshal([]byte(body), &event); err != nil {
-		log.Printf("ERROR: Malformed JSON in message %s: %v", msgID, err)
+	var envelope SQSMessageEnvelope
+	if err := json.Unmarshal([]byte(body), &envelope); err != nil {
+		log.Printf("ERROR: Malformed JSON envelope in message %s: %v", msgID, err)
 		return nil
 	}
 
-	log.Printf("INFO: Received driver.assigned event: TripID=%s DriverID=%s", 
-		event.Payload.TripID, event.Payload.DriverID)
-
-	tripID, err := uuid.Parse(event.Payload.TripID)
-	if err != nil {
-		log.Printf("ERROR: Invalid Trip UUID in message %s: %v", msgID, err)
+	// Route logic based on EventType
+	switch envelope.EventType {
+	case "driver.assigned":
+		return c.handleDriverAssigned(ctx, envelope.Payload, msgID)
+	case "trip.completed":
+		return c.handleTripCompleted(ctx, envelope.Payload, msgID)
+	default:
+		log.Printf("INFO: Skipping message %s with unknown EventType: %s", msgID, envelope.EventType)
 		return nil
 	}
-	driverID, err := uuid.Parse(event.Payload.DriverID)
+}
+
+func (c *SQSConsumer) handleDriverAssigned(ctx context.Context, payload json.RawMessage, msgID string) error {
+	var data struct {
+		TripID   string `json:"tripId"`
+		DriverID string `json:"driverId"`
+	}
+
+	if err := json.Unmarshal(payload, &data); err != nil {
+		log.Printf("ERROR: Malformed driver.assigned payload in %s: %v", msgID, err)
+		return nil
+	}
+
+	tripID, err := uuid.Parse(data.TripID)
 	if err != nil {
-		log.Printf("ERROR: Invalid Driver UUID in message %s: %v", msgID, err)
+		log.Printf("ERROR: Invalid Trip UUID in %s: %v", msgID, err)
+		return nil
+	}
+
+	driverID, err := uuid.Parse(data.DriverID)
+	if err != nil {
+		log.Printf("ERROR: Invalid Driver UUID in %s: %v", msgID, err)
 		return nil
 	}
 
 	err = c.svc.AssignDriver(ctx, tripID, driverID)
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidTripStatus) || errors.Is(err, domain.ErrTripNotFound) {
-			log.Printf("INFO: Idempotency check for message %s: %v. Deleting.", msgID, err)
+			log.Printf("INFO: Idempotency check for assignment %s: %v. Deleting.", msgID, err)
 			return nil
 		}
-		return err 
+		return err
 	}
 
 	log.Printf("SUCCESS: Trip %s updated to ACTIVE with Driver %s", tripID, driverID)
 	return nil
 }
 
-func (c *SQSConsumer) deleteMessage(ctx context.Context, msg types.Message) {
-	msgID := aws.ToString(msg.MessageId)
+func (c *SQSConsumer) handleTripCompleted(ctx context.Context, payload json.RawMessage, msgID string) error {
+	var data TripCompletedPayload
+	if err := json.Unmarshal(payload, &data); err != nil {
+		log.Printf("ERROR: Malformed trip.completed payload in %s: %v", msgID, err)
+		return nil
+	}
 
+	tripID, err := uuid.Parse(data.TripID)
+	if err != nil {
+		log.Printf("ERROR: Invalid Trip UUID in completion event %s: %v", msgID, err)
+		return nil
+	}
+
+	err = c.svc.CompleteTrip(ctx, tripID)
+	if err != nil {
+		if errors.Is(err, domain.ErrTripNotFound) {
+			log.Printf("INFO: Trip %s not found for completion %s. Deleting.", tripID, msgID)
+			return nil
+		}
+		return err
+	}
+
+	log.Printf("SUCCESS: Trip %s marked as COMPLETED via SQS", tripID)
+	return nil
+}
+
+func (c *SQSConsumer) deleteMessage(ctx context.Context, msg types.Message) {
 	if msg.ReceiptHandle == nil {
-		log.Printf("ERROR: Cannot delete message %s: ReceiptHandle is nil", msgID)
 		return
 	}
 
@@ -147,8 +205,6 @@ func (c *SQSConsumer) deleteMessage(ctx context.Context, msg types.Message) {
 	})
 
 	if err != nil {
-		log.Printf("ERROR: Failed to delete message %s: %v", msgID, err)
-	} else {
-		log.Printf("DEBUG: SQS Message %s successfully deleted", msgID)
+		log.Printf("ERROR: Failed to delete message %s: %v", aws.ToString(msg.MessageId), err)
 	}
 }

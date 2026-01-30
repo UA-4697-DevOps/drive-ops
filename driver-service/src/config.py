@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
     SQS_ENDPOINT: Optional[str] = None
     SQS_DRIVER_ASSIGNED_URL: Optional[str] = None
+    SQS_TRIP_COMPLETED_URL: Optional[str] = None
 
     # --- RabbitMQ Settings (Deprecated but kept for safety) ---
     ENABLE_RABBITMQ: bool = True

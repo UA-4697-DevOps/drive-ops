@@ -15,8 +15,9 @@ type Config struct {
 
 	// SQS specific
 	SQS_DRIVER_ASSIGNED_URL string
-	AWSRegion   string
-	SQSEndpoint string // [NEW] Needed for LocalStack overrides
+	SQS_TRIP_COMPLETED_URL  string // [ADD THIS] Required for Phase 3 completion
+	AWSRegion               string
+	SQSEndpoint             string // Needed for LocalStack overrides
 }
 
 // LoadConfig loads broker configuration from environment variables
@@ -56,8 +57,8 @@ func LoadConfig() (*Config, error) {
 
 		// Warning only (allows running SQS-only mode)
 		if user == "" || password == "" {
-            log.Println("Warning: RabbitMQ credentials not fully set, connection might fail if required")
-        }
+			log.Println("Warning: RabbitMQ credentials not fully set, connection might fail if required")
+		}
 
 		encodedUser := url.QueryEscape(user)
 		encodedPassword := url.QueryEscape(password)
@@ -68,18 +69,21 @@ func LoadConfig() (*Config, error) {
 	exchangeType := getEnv("RABBITMQ_EXCHANGE_TYPE", "topic")
 
 	// 2. SQS Configuration
-	sqsQueueURL := os.Getenv("SQS_DRIVER_ASSIGNED_URL")
-	// Updated default to us-east-2 based on your infrastructure README
+	// Read explicit functional queue URLs from environment
+	sqsAssignedURL := os.Getenv("SQS_DRIVER_ASSIGNED_URL")
+	sqsCompletedURL := os.Getenv("SQS_TRIP_COMPLETED_URL")
+	
 	awsRegion := getEnv("AWS_REGION", "us-east-2") 
-	sqsEndpoint := os.Getenv("SQS_ENDPOINT") // Read custom endpoint for LocalStack
+	sqsEndpoint := os.Getenv("SQS_ENDPOINT") 
 
 	return &Config{
-		URL:          connURL,
-		ExchangeName: exchangeName,
-		ExchangeType: exchangeType,
-		SQS_DRIVER_ASSIGNED_URL:  sqsQueueURL,
-		AWSRegion:    awsRegion,
-		SQSEndpoint:  sqsEndpoint,
+		URL:                     connURL,
+		ExchangeName:            exchangeName,
+		ExchangeType:            exchangeType,
+		SQS_DRIVER_ASSIGNED_URL: sqsAssignedURL,
+		SQS_TRIP_COMPLETED_URL:  sqsCompletedURL, // [ADD THIS] Mapping the environment variable
+		AWSRegion:               awsRegion,
+		SQSEndpoint:             sqsEndpoint,
 	}, nil
 }
 

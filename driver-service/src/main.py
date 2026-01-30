@@ -696,9 +696,12 @@ async def accept_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(g
 @app.post("/drivers/{driver_id}/trips/{trip_id}/reject")
 async def reject_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(get_db)):
     """
-    Driver rejects trip request
-    Used by Telegram bot "Reject" button
+    Driver rejects trip request. 
+    Used by Telegram bot "Reject" button.
     """
+    from uuid import UUID
+    from datetime import datetime, timezone
+
     if not response_service:
         raise HTTPException(
             status_code=503,
@@ -709,34 +712,33 @@ async def reject_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(g
     drivers_storage = app.state.drivers_storage
     trip_requests_storage = app.state.trip_requests_storage
 
-    # Verify driver exists in database and sync to memory if needed
-    from uuid import UUID
+    # Verify driver in DB and sync with memory
     try:
         driver_uuid = UUID(driver_id)
         driver_repo = DriverRepository(db)
         driver = await driver_repo.get_by_id(driver_uuid)
+        
         if not driver:
             raise HTTPException(status_code=404, detail="Driver not found in database")
 
-        # Ensure driver is in memory storage
+        # Update memory storage if driver is not present
         if driver_id not in drivers_storage:
             logger.warning(f"Driver {driver_id} not in memory storage, adding now")
             drivers_storage[driver_id] = {
                 "id": driver_id,
                 "name": f"{driver.first_name} {driver.last_name}",
                 "status": "ONLINE" if driver.is_active else "OFFLINE",
-                "latitude": 50.4501,
+                "latitude": 50.4501,  # Default coordinates (Kyiv)
                 "longitude": 30.5234
             }
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid driver ID format")
 
-    # Verify trip exists
+    # Check for the existence of the trip request
     if trip_id not in trip_requests_storage:
         raise HTTPException(status_code=404, detail="Trip request not found")
 
-    # Process rejection
-    from datetime import datetime, timezone
+    # Process rejection via response service
     success = await response_service.handle_driver_reject(
         driver_id=driver_id,
         trip_id=trip_id,
@@ -755,54 +757,65 @@ async def reject_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(g
         "driver_id": driver_id
     }
 
+
 @app.post("/drivers/{driver_id}/trips/{trip_id}/complete")
 async def complete_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(get_db)):
     """
-    Driver completes trip
-    Used by Telegram bot "Finish Trip" button
+    Driver completes trip.
+    Used by Telegram bot "Finish Trip" button.
     """
-    from datetime import datetime, timezone
     from uuid import UUID
+    from datetime import datetime, timezone
 
-    # Use storage from app.state
+    # Access local storage from app state
     drivers_storage = app.state.drivers_storage
     trip_requests_storage = app.state.trip_requests_storage
 
-    # Verify driver exists in database
+    # 1. Verify driver exists in database and sync to memory storage if needed
     try:
         driver_uuid = UUID(driver_id)
         driver_repo = DriverRepository(db)
         driver = await driver_repo.get_by_id(driver_uuid)
+        
         if not driver:
             raise HTTPException(status_code=404, detail="Driver not found in database")
 
-        # Ensure driver is in memory storage
+        # Ensure driver is present in memory storage for consistent state
         if driver_id not in drivers_storage:
-            logger.warning(f"Driver {driver_id} not in memory storage, adding now")
+            logger.info(f"Syncing driver {driver_id} from DB to memory storage")
             drivers_storage[driver_id] = {
                 "id": driver_id,
                 "name": f"{driver.first_name} {driver.last_name}",
                 "status": "ONLINE" if driver.is_active else "OFFLINE",
-                "latitude": 50.4501,
+                "latitude": 50.4501,  # Default Kyiv coordinates
                 "longitude": 30.5234
             }
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid driver ID format")
 
-    # Update local storage if trip exists there
-    if trip_id in trip_requests_storage:
-        previous_status = trip_requests_storage[trip_id]["status"]
-        trip_requests_storage[trip_id]["status"] = "completed"
-        logger.info(f"Trip {trip_id} marked as completed in local storage by driver {driver_id} (previous status: {previous_status})")
-    else:
-        logger.info(f"Trip {trip_id} not in local storage")
+    # 2. Check if response service is initialized
+    if not response_service:
+        raise HTTPException(
+            status_code=503, 
+            detail="Response service not initialized"
+        )
 
-    # [NOTE] RabbitMQ Publisher was removed in favor of SQS.
-    # TODO: Implement 'trip.event.completed' publishing via SQSPublisher in a future task.
-    logger.warning(f"Trip completion event for {trip_id} NOT sent to TripService (Pending SQS Migration)")
+    # 3. Process completion via DriverResponseService
+    # This now handles both SQS event publishing and local status updates
+    success = await response_service.handle_trip_completion(
+        driver_id=driver_id,
+        trip_id=trip_id,
+        timestamp=datetime.now(timezone.utc)
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=500, 
+            detail="Failed to process trip completion or publish SQS event"
+        )
 
     return {
-        "message": "Trip marked as completed locally (Event sync pending SQS migration)",
+        "message": "Trip marked as completed and event published to SQS",
         "trip_id": trip_id,
         "driver_id": driver_id,
         "status": "completed"
@@ -813,6 +826,7 @@ async def complete_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends
 def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
+
 
 @app.get("/")
 def root():
@@ -825,7 +839,7 @@ def root():
             "driver_management": True,
             "trip_requests": True,
             "driver_responses": True,
-            "sqs_enabled": True,  # [CHANGE] Updated flag
+            "sqs_enabled": True,  # Flag for SQS status
             "rabbitmq_consumers": settings.RABBITMQ_HOST is not None
         }
     }

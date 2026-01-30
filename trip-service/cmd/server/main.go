@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	// [NEW] AWS SDK Imports
 	"github.com/aws/aws-sdk-go-v2/config"
 
 	"trip-service/internal/broker"
@@ -81,14 +80,12 @@ func main() {
 		log.Fatalf("Failed to load broker config: %v", err)
 	}
 
-	// [FIXED] Create a custom HTTP client. 
-	// The timeout must be greater than SQS WaitTimeSeconds (20s).
+	// Custom HTTP client for Long Polling (Timeout > 20s)
 	customHttpClient := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
-	// [NEW] Initialize AWS Config
-	// Pass customHttpClient to avoid premature timeouts during Long Polling.
+	// Initialize AWS Config
 	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion(brokerConfig.AWSRegion),
 		config.WithHTTPClient(customHttpClient),
@@ -97,7 +94,7 @@ func main() {
 		log.Fatalf("Failed to load AWS Config: %v", err)
 	}
 
-	// 3. Initialize RabbitMQ publisher (Keeping this for OUTBOUND events as per current scope)
+	// 3. Initialize Outbound Publisher (RabbitMQ)
 	var publisher *broker.RabbitMQPublisher
 	err = connectWithRetry("RabbitMQ Publisher", func() error {
 		var err error
@@ -108,40 +105,39 @@ func main() {
 		log.Fatalf("Fatal: %v", err)
 	}
 
-	// 4. Dependency Injection: Repository -> Service -> Handler
+	// 4. Dependency Injection
 	repo := repository.NewTripRepository(db)
 	svc := service.NewTripService(repo, publisher)
 	handler := api.NewTripHandler(svc)
 
-	// [CHANGED] Initialize SQS Consumer (Replaces RabbitMQ Consumer)
-	sqsConsumer := broker.NewSQSConsumer(awsCfg, brokerConfig.SQS_DRIVER_ASSIGNED_URL, svc, brokerConfig)
-
-	// Create a cancellable context for consumer shutdown
+	// --- SQS Consumer Setup ---
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
-	// [NEW] Channel to propagate fatal consumer errors to the main goroutine
-	consumerErrCh := make(chan error, 1)
+	consumerErrCh := make(chan error, 2) // Increased buffer for multiple consumers
 
-	// [FIXED] Only start consumer in background if SQS URL is provided.
-	// This prevents the service from crashing in integration tests where SQS is absent.
-	if brokerConfig.SQS_DRIVER_ASSIGNED_URL != "" {
+	// Helper to start consumers in the background
+	startConsumer := func(name string, url string) {
+		if url == "" {
+			log.Printf("WARNING: %s URL is empty. Consumer skipped.", name)
+			return
+		}
+		consumer := broker.NewSQSConsumer(awsCfg, url, svc, brokerConfig)
 		go func() {
-			if err := sqsConsumer.Start(consumerCtx); err != nil {
-				// Only propagate error if it wasn't a requested shutdown
+			log.Printf("INFO: Starting %s SQS Consumer on: %s", name, url)
+			if err := consumer.Start(consumerCtx); err != nil {
 				if consumerCtx.Err() == nil {
-					consumerErrCh <- err
+					consumerErrCh <- fmt.Errorf("%s failed: %w", name, err)
 				}
 			}
 		}()
-		log.Printf("INFO: SQS Consumer initialized for queue: %s", brokerConfig.SQS_DRIVER_ASSIGNED_URL)
-	} else {
-		log.Println("WARNING: SQS_DRIVER_ASSIGNED_URL is empty. SQS Consumer skipped (normal for tests).")
 	}
+
+	// Start separate consumers for Assigned and Completed queues
+	startConsumer("DriverAssigned", brokerConfig.SQS_DRIVER_ASSIGNED_URL)
+	startConsumer("TripCompleted", brokerConfig.SQS_TRIP_COMPLETED_URL)
 
 	// 5. Router setup
 	r := chi.NewRouter()
-
 	r.Get("/health", handler.HealthCheck)
-
 	r.Route("/trips", func(r chi.Router) {
 		r.Post("/", handler.CreateTrip)
 		r.Get("/{id}", handler.GetTrip)
@@ -165,30 +161,26 @@ func main() {
 		}
 	}()
 
-	// [FIXED] Wait for either an OS interrupt or a fatal background error
+	// Wait for OS signal or fatal consumer error
 	select {
 	case sig := <-stop:
-		log.Printf("Received signal %v, shutting down server...", sig)
+		log.Printf("Received signal %v, shutting down...", sig)
 	case err := <-consumerErrCh:
-		log.Fatalf("CRITICAL: SQS Consumer failed: %v", err)
+		log.Fatalf("CRITICAL: %v", err)
 	}
 
-	// 7. Graceful shutdown logic
+	// 7. Graceful shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Stop HTTP Server
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("Server shutdown error: %v", err)
 	}
 
-	// [CHANGED] Stop SQS Consumer
-	log.Println("Stopping SQS Consumer...")
+	log.Println("Stopping SQS Consumers...")
 	consumerCancel()
-	// Optional: Add a small delay or WaitGroup if you need to ensure the poll loop exits strictly
 	time.Sleep(500 * time.Millisecond)
 
-	// Close publisher
 	if err := publisher.Close(); err != nil {
 		log.Printf("Error closing publisher: %v", err)
 	}
