@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-2"
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
-    SQS_ENDPOINT_URL: Optional[str] = None
-    SQS_DRIVER_ASSIGNED_URL: str = None
+    SQS_ENDPOINT: Optional[str] = None
+    SQS_DRIVER_ASSIGNED_URL: Optional[str] = None
 
     # --- RabbitMQ Settings (Deprecated but kept for safety) ---
     ENABLE_RABBITMQ: bool = True

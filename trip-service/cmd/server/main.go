@@ -11,7 +11,6 @@ import (
 	"time"
 
 	// [NEW] AWS SDK Imports
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 
 	"trip-service/internal/broker"
@@ -86,23 +85,11 @@ func main() {
 	// This custom resolver checks if SQS_ENDPOINT is set (e.g. http://localstack:4566)
 	// and forces the SDK to use it.
 	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(brokerConfig.AWSRegion),
-		config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
-			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-				if brokerConfig.SQSEndpoint != "" {
-					return aws.Endpoint{
-						URL:           brokerConfig.SQSEndpoint,
-						SigningRegion: region,
-					}, nil
-				}
-				// Fallback to standard AWS endpoint
-				return aws.Endpoint{}, &aws.EndpointNotFoundError{}
-			},
-		)),
-	)
-	if err != nil {
-		log.Fatalf("Failed to load AWS Config: %v", err)
-	}
+    config.WithRegion(brokerConfig.AWSRegion),
+)
+if err != nil {
+    log.Fatalf("Failed to load AWS Config: %v", err)
+}
 
 	// 3. Initialize RabbitMQ publisher (Keeping this for OUTBOUND events as per current scope)
 	var publisher *broker.RabbitMQPublisher
@@ -121,7 +108,7 @@ func main() {
 	handler := api.NewTripHandler(svc)
 
 	// [CHANGED] Initialize SQS Consumer (Replaces RabbitMQ Consumer)
-	sqsConsumer := broker.NewSQSConsumer(awsCfg, brokerConfig.SQSQueueURL, svc)
+	sqsConsumer := broker.NewSQSConsumer(awsCfg, brokerConfig.SQS_DRIVER_ASSIGNED_URL, svc, brokerConfig)
 
 	// Create a cancellable context for consumer shutdown
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())

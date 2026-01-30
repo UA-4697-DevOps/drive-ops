@@ -26,9 +26,14 @@ type SQSConsumer struct {
 	svc      DriverAssigner
 }
 
-// NewSQSConsumer creates a new consumer instance
-func NewSQSConsumer(cfg aws.Config, queueURL string, svc DriverAssigner) *SQSConsumer {
-	client := sqs.NewFromConfig(cfg)
+// NewSQSConsumer creates a new consumer instance with modern endpoint resolution
+func NewSQSConsumer(cfg aws.Config, queueURL string, svc DriverAssigner, brokerCfg *Config) *SQSConsumer {
+	client := sqs.NewFromConfig(cfg, func(o *sqs.Options) {
+		if brokerCfg.SQSEndpoint != "" {
+			o.BaseEndpoint = aws.String(brokerCfg.SQSEndpoint)
+		}
+	})
+
 	return &SQSConsumer{
 		client:   client,
 		queueURL: queueURL,
@@ -70,8 +75,10 @@ func (c *SQSConsumer) poll(ctx context.Context) {
 	}
 
 	for _, msg := range output.Messages {
+		// [FIXED] Safe MessageId extraction for logging
+		msgID := aws.ToString(msg.MessageId)
 		if err := c.processMessage(ctx, msg); err != nil {
-			log.Printf("WARN: Failed to process message %s (will retry): %v", *msg.MessageId, err)
+			log.Printf("WARN: Failed to process message %s (will retry): %v", msgID, err)
 		} else {
 			c.deleteMessage(ctx, msg)
 		}
@@ -79,51 +86,66 @@ func (c *SQSConsumer) poll(ctx context.Context) {
 }
 
 func (c *SQSConsumer) processMessage(ctx context.Context, msg types.Message) error {
-	var event DriverAssignedEvent
-	if err := json.Unmarshal([]byte(*msg.Body), &event); err != nil {
-		log.Printf("ERROR: Malformed JSON in message %s: %v", *msg.MessageId, err)
-		return nil 
+	// [FIXED] Extract values safely using aws.ToString to prevent nil pointer panics
+	body := aws.ToString(msg.Body)
+	msgID := aws.ToString(msg.MessageId)
+
+	if body == "" {
+		log.Printf("ERROR: Message %s received with empty body", msgID)
+		return nil // Nothing to process, delete it
 	}
 
-	log.Printf("INFO: Received driver.assigned event: TripID=%s DriverID=%s", event.Payload.TripID, event.Payload.DriverID)
+	var event DriverAssignedEvent
+	if err := json.Unmarshal([]byte(body), &event); err != nil {
+		log.Printf("ERROR: Malformed JSON in message %s: %v", msgID, err)
+		return nil // Invalid JSON, delete it
+	}
+
+	log.Printf("INFO: Received driver.assigned event: TripID=%s DriverID=%s", 
+		event.Payload.TripID, event.Payload.DriverID)
 
 	tripID, err := uuid.Parse(event.Payload.TripID)
 	if err != nil {
-		log.Printf("ERROR: Invalid Trip UUID: %v", err)
+		log.Printf("ERROR: Invalid Trip UUID in message %s: %v", msgID, err)
 		return nil
 	}
 	driverID, err := uuid.Parse(event.Payload.DriverID)
 	if err != nil {
-		log.Printf("ERROR: Invalid Driver UUID: %v", err)
+		log.Printf("ERROR: Invalid Driver UUID in message %s: %v", msgID, err)
 		return nil
 	}
 
-	// Call the interface method
+	// Call the service method
 	err = c.svc.AssignDriver(ctx, tripID, driverID)
-	
 	if err != nil {
-		// Idempotency: If status is invalid (already done) or trip not found, we ACK the message.
 		if errors.Is(err, domain.ErrInvalidTripStatus) || errors.Is(err, domain.ErrTripNotFound) {
-			log.Printf("INFO: Idempotency check: %v. Deleting message.", err)
+			log.Printf("INFO: Idempotency check for message %s: %v. Deleting.", msgID, err)
 			return nil
 		}
-		return err // Retry message
+		return err // Retry on other errors
 	}
 
-	// [ADDED] Success log for visibility
 	log.Printf("SUCCESS: Trip %s updated to ACTIVE with Driver %s", tripID, driverID)
-
 	return nil
 }
 
 func (c *SQSConsumer) deleteMessage(ctx context.Context, msg types.Message) {
+	msgID := aws.ToString(msg.MessageId)
+
+	// [FIXED] Explicit nil check for ReceiptHandle as it is a required pointer for DeleteMessage
+	if msg.ReceiptHandle == nil {
+		log.Printf("ERROR: Cannot delete message %s: ReceiptHandle is nil", msgID)
+		return
+	}
+
 	_, err := c.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
 		QueueUrl:      aws.String(c.queueURL),
 		ReceiptHandle: msg.ReceiptHandle,
 	})
+
 	if err != nil {
-		log.Printf("ERROR: Failed to delete message %s: %v", *msg.MessageId, err)
+		log.Printf("ERROR: Failed to delete message %s: %v", msgID, err)
 	} else {
-		log.Printf("DEBUG: SQS Message %s deleted", *msg.MessageId)
+		log.Printf("DEBUG: SQS Message %s successfully deleted", msgID)
 	}
 }

@@ -2,6 +2,7 @@ package broker
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 )
@@ -13,7 +14,7 @@ type Config struct {
 	ExchangeType string
 
 	// SQS specific
-	SQSQueueURL string
+	SQS_DRIVER_ASSIGNED_URL string
 	AWSRegion   string
 	SQSEndpoint string // [NEW] Needed for LocalStack overrides
 }
@@ -54,9 +55,9 @@ func LoadConfig() (*Config, error) {
 		password := os.Getenv("RABBITMQ_PASSWORD")
 
 		// Warning only (allows running SQS-only mode)
-		if user == "" {
-			// log.Println("Warning: RABBITMQ_USER not set") 
-		}
+		if user == "" || password == "" {
+            log.Println("Warning: RabbitMQ credentials not fully set, connection might fail if required")
+        }
 
 		encodedUser := url.QueryEscape(user)
 		encodedPassword := url.QueryEscape(password)
@@ -67,7 +68,7 @@ func LoadConfig() (*Config, error) {
 	exchangeType := getEnv("RABBITMQ_EXCHANGE_TYPE", "topic")
 
 	// 2. SQS Configuration
-	sqsQueueURL := os.Getenv("SQS_QUEUE_URL")
+	sqsQueueURL := os.Getenv("SQS_DRIVER_ASSIGNED_URL")
 	// Updated default to us-east-2 based on your infrastructure README
 	awsRegion := getEnv("AWS_REGION", "us-east-2") 
 	sqsEndpoint := os.Getenv("SQS_ENDPOINT") // Read custom endpoint for LocalStack
@@ -76,7 +77,7 @@ func LoadConfig() (*Config, error) {
 		URL:          connURL,
 		ExchangeName: exchangeName,
 		ExchangeType: exchangeType,
-		SQSQueueURL:  sqsQueueURL,
+		SQS_DRIVER_ASSIGNED_URL:  sqsQueueURL,
 		AWSRegion:    awsRegion,
 		SQSEndpoint:  sqsEndpoint,
 	}, nil

@@ -137,8 +137,9 @@ class DriverResponseService:
         trip_data["responses"][driver_id] = "accept"
         
         # Update driver status
-        if driver_data:
-            driver_data["status"] = "ON_TRIP"
+        if driver_id in self.drivers:
+            self.drivers[driver_id]["status"] = "ON_TRIP"
+            logger.info(f"Driver {driver_id} status updated to ON_TRIP locally")
         
         logger.info(
             f"Successfully processed driver accept and published assignment - "
