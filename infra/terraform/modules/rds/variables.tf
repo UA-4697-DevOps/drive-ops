@@ -124,6 +124,12 @@ variable "skip_final_snapshot" {
   default     = true
 }
 
+variable "final_snapshot_identifier" {
+  type        = string
+  description = "The name of the final DB snapshot when skip_final_snapshot is false. If empty and skip_final_snapshot is false, a default name will be generated."
+  default     = ""
+}
+
 # ============================================================================
 # Security and Protection
 # ============================================================================
