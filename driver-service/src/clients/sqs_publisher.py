@@ -37,24 +37,28 @@ class SQSPublisher:
         expected by TripService (Go).
         """
         now_iso = datetime.now(timezone.utc).isoformat()
-        correlation_id = str(uuid.uuid4()) # Можна передавати з запиту, якщо є
+        correlation_id = str(uuid.uuid4()) 
 
         payload = {
             "tripId": str(trip_id),
             "driverId": str(driver_id),
             "driverName": driver_name,
             "vehicleInfo": vehicle_info,
-            "assignedAt": now_iso  # [NEW] Очікується Go-структурою в Payload
+            "assignedAt": now_iso
         }
 
-        # Envelope matching the Go DriverAssignedEvent struct
+        # [FIXED] MessageDeduplicationId must be a stable idempotency key.
+        # A random UUID (like in messageId) defeats deduplication.
+        # We use a combination of business IDs to ensure retries are ignored by AWS SQS FIFO.
+        deduplication_id = f"assign_{trip_id}_{driver_id}"
+
         message_body = {
             "version": "1.0",
             "messageId": str(uuid.uuid4()),
-            "correlationId": correlation_id, # [NEW] Top-level field
+            "correlationId": correlation_id,
             "eventType": "driver.assigned",
-            "source": "driver-service",      # [NEW] Top-level field
-            "timestamp": now_iso,            # [NEW] Top-level field
+            "source": "driver-service",
+            "timestamp": now_iso,
             "payload": payload
         }
 
@@ -65,8 +69,8 @@ class SQSPublisher:
             response = self.sqs.send_message(
                 QueueUrl=self.queue_url,
                 MessageBody=json.dumps(message_body),
-                MessageGroupId=str(trip_id), 
-                MessageDeduplicationId=message_body["messageId"] 
+                MessageGroupId=str(trip_id), # Groups messages by trip to maintain order per trip
+                MessageDeduplicationId=deduplication_id # [FIXED] Stable ID for idempotency
             )
             logger.info(f"Published SQS event driver.assigned for Trip {trip_id}. CorrelationID: {correlation_id}")
             return True

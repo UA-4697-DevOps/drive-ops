@@ -78,18 +78,24 @@ func main() {
 	// 2. Load Broker Config
 	brokerConfig, err := broker.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load broker config: %v", err)
+    	log.Fatalf("Failed to load broker config: %v", err)
 	}
 
-	// [NEW] Initialize AWS Config (LocalStack Aware)
-	// This custom resolver checks if SQS_ENDPOINT is set (e.g. http://localstack:4566)
-	// and forces the SDK to use it.
+	// [FIXED] Create a custom HTTP client. 
+	// The timeout must be greater than SQS WaitTimeSeconds (20s).
+	customHttpClient := &http.Client{
+    	Timeout: 30 * time.Second,
+	}
+
+	// [NEW] Initialize AWS Config
+	// Pass customHttpClient to avoid premature timeouts during Long Polling.
 	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
-    config.WithRegion(brokerConfig.AWSRegion),
-)
-if err != nil {
-    log.Fatalf("Failed to load AWS Config: %v", err)
-}
+    	config.WithRegion(brokerConfig.AWSRegion),
+    	config.WithHTTPClient(customHttpClient),
+	)
+	if err != nil {
+    	log.Fatalf("Failed to load AWS Config: %v", err)
+	}
 
 	// 3. Initialize RabbitMQ publisher (Keeping this for OUTBOUND events as per current scope)
 	var publisher *broker.RabbitMQPublisher

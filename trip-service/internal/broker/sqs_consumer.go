@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt" // [NEW] Added for Errorf
 	"log"
 	"time"
 
@@ -43,6 +44,12 @@ func NewSQSConsumer(cfg aws.Config, queueURL string, svc DriverAssigner, brokerC
 
 // Start begins the polling loop
 func (c *SQSConsumer) Start(ctx context.Context) error {
+	// [FIXED] Fail Fast: Validate the queue URL before entering the loop.
+	// This prevents the service from repeatedly polling an empty URL.
+	if c.queueURL == "" {
+		return fmt.Errorf("fatal error: SQS_DRIVER_ASSIGNED_URL is not set; consumer cannot start")
+	}
+
 	log.Printf("INFO: Starting SQS Consumer on queue: %s", c.queueURL)
 
 	for {
@@ -60,7 +67,7 @@ func (c *SQSConsumer) poll(ctx context.Context) {
 	output, err := c.client.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
 		QueueUrl:            aws.String(c.queueURL),
 		MaxNumberOfMessages: 10,
-		WaitTimeSeconds:     20,
+		WaitTimeSeconds:     20, // Long polling
 		VisibilityTimeout:   30,
 		AttributeNames:      []types.QueueAttributeName{types.QueueAttributeNameAll},
 	})
@@ -70,12 +77,11 @@ func (c *SQSConsumer) poll(ctx context.Context) {
 			return
 		}
 		log.Printf("ERROR: Failed to poll SQS: %v", err)
-		time.Sleep(5 * time.Second)
+		time.Sleep(5 * time.Second) // Error backoff
 		return
 	}
 
 	for _, msg := range output.Messages {
-		// [FIXED] Safe MessageId extraction for logging
 		msgID := aws.ToString(msg.MessageId)
 		if err := c.processMessage(ctx, msg); err != nil {
 			log.Printf("WARN: Failed to process message %s (will retry): %v", msgID, err)
@@ -86,19 +92,18 @@ func (c *SQSConsumer) poll(ctx context.Context) {
 }
 
 func (c *SQSConsumer) processMessage(ctx context.Context, msg types.Message) error {
-	// [FIXED] Extract values safely using aws.ToString to prevent nil pointer panics
 	body := aws.ToString(msg.Body)
 	msgID := aws.ToString(msg.MessageId)
 
 	if body == "" {
 		log.Printf("ERROR: Message %s received with empty body", msgID)
-		return nil // Nothing to process, delete it
+		return nil
 	}
 
 	var event DriverAssignedEvent
 	if err := json.Unmarshal([]byte(body), &event); err != nil {
 		log.Printf("ERROR: Malformed JSON in message %s: %v", msgID, err)
-		return nil // Invalid JSON, delete it
+		return nil
 	}
 
 	log.Printf("INFO: Received driver.assigned event: TripID=%s DriverID=%s", 
@@ -115,14 +120,13 @@ func (c *SQSConsumer) processMessage(ctx context.Context, msg types.Message) err
 		return nil
 	}
 
-	// Call the service method
 	err = c.svc.AssignDriver(ctx, tripID, driverID)
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidTripStatus) || errors.Is(err, domain.ErrTripNotFound) {
 			log.Printf("INFO: Idempotency check for message %s: %v. Deleting.", msgID, err)
 			return nil
 		}
-		return err // Retry on other errors
+		return err 
 	}
 
 	log.Printf("SUCCESS: Trip %s updated to ACTIVE with Driver %s", tripID, driverID)
@@ -132,7 +136,6 @@ func (c *SQSConsumer) processMessage(ctx context.Context, msg types.Message) err
 func (c *SQSConsumer) deleteMessage(ctx context.Context, msg types.Message) {
 	msgID := aws.ToString(msg.MessageId)
 
-	// [FIXED] Explicit nil check for ReceiptHandle as it is a required pointer for DeleteMessage
 	if msg.ReceiptHandle == nil {
 		log.Printf("ERROR: Cannot delete message %s: ReceiptHandle is nil", msgID)
 		return
