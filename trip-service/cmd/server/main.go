@@ -121,16 +121,21 @@ func main() {
 	// [NEW] Channel to propagate fatal consumer errors to the main goroutine
 	consumerErrCh := make(chan error, 1)
 
-	// Start consumer in background goroutine
-	go func() {
-		// Start() is a blocking call, so we wrap it
-		if err := sqsConsumer.Start(consumerCtx); err != nil {
-			// [FIXED] Only propagate error if it wasn't a requested shutdown
-			if consumerCtx.Err() == nil {
-				consumerErrCh <- err
+	// [FIXED] Only start consumer in background if SQS URL is provided.
+	// This prevents the service from crashing in integration tests where SQS is absent.
+	if brokerConfig.SQS_DRIVER_ASSIGNED_URL != "" {
+		go func() {
+			if err := sqsConsumer.Start(consumerCtx); err != nil {
+				// Only propagate error if it wasn't a requested shutdown
+				if consumerCtx.Err() == nil {
+					consumerErrCh <- err
+				}
 			}
-		}
-	}()
+		}()
+		log.Printf("INFO: SQS Consumer initialized for queue: %s", brokerConfig.SQS_DRIVER_ASSIGNED_URL)
+	} else {
+		log.Println("WARNING: SQS_DRIVER_ASSIGNED_URL is empty. SQS Consumer skipped (normal for tests).")
+	}
 
 	// 5. Router setup
 	r := chi.NewRouter()
