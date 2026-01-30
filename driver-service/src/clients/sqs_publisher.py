@@ -36,7 +36,7 @@ class SQSPublisher:
         Publishes the driver.assigned event to SQS matching the STRICT schema 
         expected by TripService (Go).
         """
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
         correlation_id = str(uuid.uuid4()) 
 
         payload = {

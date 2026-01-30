@@ -78,23 +78,23 @@ func main() {
 	// 2. Load Broker Config
 	brokerConfig, err := broker.LoadConfig()
 	if err != nil {
-    	log.Fatalf("Failed to load broker config: %v", err)
+		log.Fatalf("Failed to load broker config: %v", err)
 	}
 
 	// [FIXED] Create a custom HTTP client. 
 	// The timeout must be greater than SQS WaitTimeSeconds (20s).
 	customHttpClient := &http.Client{
-    	Timeout: 30 * time.Second,
+		Timeout: 30 * time.Second,
 	}
 
 	// [NEW] Initialize AWS Config
 	// Pass customHttpClient to avoid premature timeouts during Long Polling.
 	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
-    	config.WithRegion(brokerConfig.AWSRegion),
-    	config.WithHTTPClient(customHttpClient),
+		config.WithRegion(brokerConfig.AWSRegion),
+		config.WithHTTPClient(customHttpClient),
 	)
 	if err != nil {
-    	log.Fatalf("Failed to load AWS Config: %v", err)
+		log.Fatalf("Failed to load AWS Config: %v", err)
 	}
 
 	// 3. Initialize RabbitMQ publisher (Keeping this for OUTBOUND events as per current scope)
@@ -118,12 +118,17 @@ func main() {
 
 	// Create a cancellable context for consumer shutdown
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
+	// [NEW] Channel to propagate fatal consumer errors to the main goroutine
+	consumerErrCh := make(chan error, 1)
 
 	// Start consumer in background goroutine
 	go func() {
 		// Start() is a blocking call, so we wrap it
 		if err := sqsConsumer.Start(consumerCtx); err != nil {
-			log.Printf("SQS Consumer stopped with error: %v", err)
+			// [FIXED] Only propagate error if it wasn't a requested shutdown
+			if consumerCtx.Err() == nil {
+				consumerErrCh <- err
+			}
 		}
 	}()
 
@@ -155,9 +160,13 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal
-	<-stop
-	log.Println("Shutting down server...")
+	// [FIXED] Wait for either an OS interrupt or a fatal background error
+	select {
+	case sig := <-stop:
+		log.Printf("Received signal %v, shutting down server...", sig)
+	case err := <-consumerErrCh:
+		log.Fatalf("CRITICAL: SQS Consumer failed: %v", err)
+	}
 
 	// 7. Graceful shutdown logic
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
