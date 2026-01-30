@@ -68,7 +68,7 @@ variable "engine" {
 variable "engine_version" {
   type        = string
   description = "PostgreSQL engine version (e.g., '15.8', '16.1'). Refer to AWS documentation for available versions. Newer versions include security patches and performance improvements."
-  default     = "15.8"
+  default     = "15.15"
 }
 
 # ============================================================================
