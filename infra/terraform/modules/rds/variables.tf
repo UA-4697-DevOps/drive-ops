@@ -79,6 +79,11 @@ variable "instance_class" {
   type        = string
   description = "The instance type of the RDS instance (e.g., db.t3.micro, db.t3.small, db.r6g.large). Controls CPU, memory, and network performance. Use t3.micro for dev, t3.medium+ for prod."
   default     = "db.t3.micro"
+
+  validation {
+    condition     = var.instance_class == "db.t3.micro" || var.instance_class == "db.t4g.micro"
+    error_message = "We are allow to use only Free Tier instances."
+  }
 }
 
 variable "allocated_storage" {

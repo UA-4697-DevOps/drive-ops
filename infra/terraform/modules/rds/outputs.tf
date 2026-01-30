@@ -74,10 +74,10 @@ output "connection_string" {
 output "db_connection_info" {
   description = "Consolidated connection information object for easy reference. Password must be retrieved separately from Secrets Manager."
   value = {
-    host              = aws_db_instance.main.address
-    port              = aws_db_instance.main.port
-    database          = aws_db_instance.main.db_name
-    username          = aws_db_instance.main.username
+    host     = aws_db_instance.main.address
+    port     = aws_db_instance.main.port
+    database = aws_db_instance.main.db_name
+    username = aws_db_instance.main.username
     # secret_arn          = aws_secretsmanager_secret.db_credentials.arn
     # secret_name         = aws_secretsmanager_secret.db_credentials.name
     endpoint          = aws_db_instance.main.endpoint
