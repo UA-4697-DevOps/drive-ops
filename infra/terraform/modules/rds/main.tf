@@ -26,10 +26,11 @@ resource "aws_db_instance" "main" {
   vpc_security_group_ids = [var.db_security_group_id]
   publicly_accessible    = false
 
-  backup_retention_period = var.backup_retention_period
-  multi_az                = var.multi_az
-  deletion_protection     = var.deletion_protection
-  skip_final_snapshot     = var.skip_final_snapshot
+  backup_retention_period   = var.backup_retention_period
+  multi_az                  = var.multi_az
+  deletion_protection       = var.deletion_protection
+  skip_final_snapshot       = var.skip_final_snapshot
+  final_snapshot_identifier = var.skip_final_snapshot ? null : var.final_snapshot_identifier
 
   # Performance Insights (CKV_AWS_354 compliance)
   performance_insights_enabled          = var.enable_performance_insights

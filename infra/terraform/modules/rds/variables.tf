@@ -19,12 +19,21 @@ variable "env" {
 variable "db_name" {
   type        = string
   description = "The name of the default database to create when the RDS instance is created. Must begin with a letter and contain only alphanumeric characters."
+
+  validation {
+    condition     = can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.db_name))
+    error_message = "db_name must be 1-63 characters, start with a letter or underscore, and contain only alphanumeric characters and underscores."
+  }
 }
 
 variable "master_username" {
   type        = string
   description = "Username for the master DB user. Cannot be 'admin', 'root', 'rdsadmin', or other reserved words."
-  default     = "postgres"
+
+  validation {
+    condition     = can(regex("^[A-Za-z][A-Za-z0-9_]{0,15}$", var.master_username)) && !contains(["admin", "root", "rdsadmin", "postgres"], lower(var.master_username))
+    error_message = "master_username must be 1-16 characters, start with a letter, contain only alphanumeric characters and underscores, and not be a reserved word."
+  }
 }
 
 # ============================================================================
