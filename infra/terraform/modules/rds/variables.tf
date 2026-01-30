@@ -77,12 +77,12 @@ variable "engine_version" {
 
 variable "instance_class" {
   type        = string
-  description = "The instance type of the RDS instance (e.g., db.t3.micro, db.t3.small, db.r6g.large). Controls CPU, memory, and network performance. Use t3.micro for dev, t3.medium+ for prod."
+  description = "The instance type of the RDS instance. This module currently restricts to Free Tier sizes (db.t3.micro or db.t4g.micro)."
   default     = "db.t3.micro"
 
   validation {
     condition     = var.instance_class == "db.t3.micro" || var.instance_class == "db.t4g.micro"
-    error_message = "We are allow to use only Free Tier instances."
+    error_message = "Only Free Tier instance classes are allowed (db.t3.micro or db.t4g.micro)."
   }
 }
 
@@ -162,17 +162,21 @@ variable "performance_insights_retention_period" {
 }
 
 # ============================================================================
-# Security and Debugging Options
+# Security Options
 # ============================================================================
 
-variable "expose_master_password" {
-  type        = bool
-  description = "SECURITY WARNING: If true, exposes the master password as a Terraform output. This can leak credentials through CI logs, state files, and console output. Should ONLY be enabled for local debugging and NEVER in production. Applications should always retrieve passwords from AWS Secrets Manager instead. Default: false (disabled for security)."
-  default     = false
+variable "master_password" {
+  type        = string
+  description = "RDS master password. This should be passed from the 'secrets' module output, never hardcoded. The password is generated and managed by the secrets module."
+  sensitive   = true
 }
 
+# ============================================================================
+# Resource Tagging
+# ============================================================================
+
 variable "tags" {
-  description = "A map of tags to apply to the DB resource"
   type        = map(string)
+  description = "A map of tags to apply to all RDS resources (instance, subnet group, etc.)"
   default     = {}
 }

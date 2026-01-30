@@ -8,12 +8,25 @@ terraform {
 
 dependency "vpc" {
   config_path = "../vpc"
+
   mock_outputs = {
     vpc_id             = "vpc-123456"
     private_subnet_ids = ["private-subnet-1", "private-subnet-2"]
     public_subnet_ids  = ["public-subnet-1", "public-subnet-2"]
     sg_db_id           = "sg-1242414124214214124"
   }
+
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init"]
+}
+
+dependency "secrets" {
+  config_path = "../secrets"
+
+  mock_outputs = {
+    rds_master_password = "mock-password"
+  }
+
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init"]
 }
 
 locals {
@@ -27,6 +40,7 @@ inputs = {
   private_subnet_ids      = dependency.vpc.outputs.private_subnet_ids
   db_security_group_id    = dependency.vpc.outputs.sg_db_id
   master_username         = "postgres"
+  master_password         = dependency.secrets.outputs.rds_master_password
   engine_version          = "15.15"
   instance_class          = "db.t3.micro"
   allocated_storage       = 20

@@ -20,7 +20,7 @@ resource "aws_db_instance" "main" {
 
   db_name  = var.db_name
   username = var.master_username
-  password = random_password.master_password.result
+  password = var.master_password
 
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [var.db_security_group_id]
@@ -32,10 +32,4 @@ resource "aws_db_instance" "main" {
   skip_final_snapshot     = var.skip_final_snapshot
 
   tags = var.tags
-}
-
-resource "random_password" "master_password" {
-  length           = 32
-  special          = true
-  override_special = "!#$%&*()-_=+[]{}<>:?"
 }
