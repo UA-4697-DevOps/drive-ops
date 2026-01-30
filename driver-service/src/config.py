@@ -23,11 +23,11 @@ class Settings(BaseSettings):
     DATABASE_URL: Optional[str] = None
 
     # --- AWS / SQS Settings (NEW) ---
-    AWS_REGION: str = "us-east-1"
-    AWS_ACCESS_KEY_ID: str = "test"
-    AWS_SECRET_ACCESS_KEY: str = "test"
-    SQS_ENDPOINT_URL: str = "http://localstack:4566"
-    SQS_DRIVER_ASSIGNED_URL: str = "http://localstack:4566/000000000000/driver-assigned"
+    AWS_REGION: str = "us-east-2"
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    SQS_ENDPOINT_URL: Optional[str] = None
+    SQS_DRIVER_ASSIGNED_URL: str = None
 
     # --- RabbitMQ Settings (Deprecated but kept for safety) ---
     ENABLE_RABBITMQ: bool = True

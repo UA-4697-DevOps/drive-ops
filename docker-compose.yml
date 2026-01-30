@@ -24,24 +24,6 @@ services:
     networks:
       - drive-ops-net
 
-  # [NEW] LocalStack for SQS Emulation
-  localstack:
-    image: localstack/localstack:latest
-    container_name: drive-ops-localstack
-    ports:
-      - "4566:4566"            # SQS API Port
-    environment:
-      - SERVICES=sqs           # Only start SQS
-      - DEBUG=1
-      - DOCKER_HOST=unix:///var/run/docker.sock
-      - AWS_DEFAULT_REGION=us-east-2
-      - AWS_ACCESS_KEY_ID=test
-      - AWS_SECRET_ACCESS_KEY=test
-    volumes:
-      - "./infra/localstack:/etc/localstack/init/ready.d" # [IMPORTANT] Scripts to create queues
-    networks:
-      - drive-ops-net
-
   # RabbitMQ Message Broker (Keep for legacy/other parts)
   mq:
     image: rabbitmq:3-management-alpine
@@ -92,12 +74,10 @@ services:
     restart: always
     env_file: .env
     environment:
-      # [NEW] AWS / SQS Config for LocalStack
       - AWS_REGION=us-east-2
-      - AWS_ACCESS_KEY_ID=test
-      - AWS_SECRET_ACCESS_KEY=test
-      - SQS_QUEUE_URL=http://localstack:4566/000000000000/driver-assigned
-      - SQS_ENDPOINT=http://localstack:4566 # This triggers the custom resolver in main.go
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - SQS_QUEUE_URL=${SQS_DRIVER_ASSIGNED_URL}
     ports:
       - "8081:8081"
     healthcheck:
@@ -111,8 +91,6 @@ services:
         condition: service_healthy
       mq:
         condition: service_healthy
-      localstack: # [NEW] Wait for SQS
-        condition: service_started
       trip-migrations:
         condition: service_completed_successfully
     networks:
@@ -152,11 +130,11 @@ services:
       
       # --- AWS / SQS Configuration ---
       - AWS_REGION=us-east-2
-      - AWS_ACCESS_KEY_ID=test
-      - AWS_SECRET_ACCESS_KEY=test
-      - SQS_ENDPOINT_URL=http://localstack:4566
-      - SQS_DRIVER_ASSIGNED_URL=http://localstack:4566/000000000000/driver-assigned
-      
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - SQS_TRIP_CREATED_URL=${SQS_TRIP_CREATED_URL}
+      - SQS_DRIVER_ASSIGNED_URL=${SQS_DRIVER_ASSIGNED_URL}
+      - SQS_TRIP_COMPLETED_URL=${SQS_TRIP_COMPLETED_URL}
     ports:
       - "8082:8082" 
     healthcheck:
@@ -170,8 +148,6 @@ services:
         condition: service_healthy
       mq:
         condition: service_healthy
-      localstack:
-        condition: service_started
       driver-migrations:
         condition: service_completed_successfully
     networks:
