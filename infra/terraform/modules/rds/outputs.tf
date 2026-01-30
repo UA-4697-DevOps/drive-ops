@@ -64,6 +64,7 @@ output "db_connection_info" {
     multi_az          = aws_db_instance.main.multi_az
     storage_encrypted = aws_db_instance.main.storage_encrypted
   }
+  sensitive = true
 }
 
 # ============================================================================
