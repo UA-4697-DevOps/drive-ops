@@ -248,21 +248,28 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 
 	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("Failed to read response body: %v", err)
-	}
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        t.Fatalf("Failed to read response body: %v", err)
+    }
 
-	// Parse and verify response body
-	var health map[string]interface{}
-	if err := json.Unmarshal(body, &health); err != nil {
-		t.Fatalf("Failed to decode response: %v. Body was: %s", err, string(body))
-	}
+    // Parse and verify response body
+    var health map[string]interface{}
+    if err := json.Unmarshal(body, &health); err != nil {
+        t.Fatalf("Failed to decode response: %v. Body was: %s", err, string(body))
+    }
 
-	if status, ok := health["status"]; !ok || status != "ok" {
-		t.Errorf("Expected status 'ok', got %v", status)
-	}
+    // Verify the status key is 'ok'
+    // In our new architecture, 'ok' confirms SQS Publisher and DB are successfully initialized
+    status, ok := health["status"]
+    if !ok || status != "ok" {
+        t.Errorf("Expected status 'ok', got %v. Ensure SQS_TRIP_CREATED_URL is valid in the test environment.", status)
+    }
 
-	t.Log("Health endpoint returned 200 OK")
+    // Log additional health metadata if provided by the service
+    if detail, ok := health["detail"]; ok {
+        t.Logf("Health Details: %v", detail)
+    }
 
+    t.Log("Health endpoint returned 200 OK - Service is fully operational with AWS SQS FIFO")
 }

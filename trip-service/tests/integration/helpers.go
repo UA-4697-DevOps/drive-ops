@@ -58,16 +58,30 @@ func ClearTestData(db *gorm.DB) error {
 	return db.Exec("TRUNCATE TABLE trips CASCADE").Error
 }
 
-// MakeHTTPRequest makes an HTTP request for testing endpoints
+// MakeHTTPRequest makes an HTTP request with a retry mechanism for container boot time
 func MakeHTTPRequest(method, url string) (*http.Response, error) {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
+    client := &http.Client{
+        Timeout: 5 * time.Second, // Shorter per-request timeout for retries
+    }
 
-	req, err := http.NewRequest(method, url, nil)
-	if err != nil {
-		return nil, err
-	}
+    var resp *http.Response
+    var err error
 
-	return client.Do(req)
+    // Retry loop (e.g., 5 attempts with a 2-second sleep between)
+    for i := 0; i < 5; i++ {
+        req, err := http.NewRequest(method, url, nil)
+        if err != nil {
+            return nil, err
+        }
+
+        resp, err = client.Do(req)
+        if err == nil {
+            return resp, nil
+        }
+
+        log.Printf("Attempt %d: Service at %s not ready yet, retrying...", i+1, url)
+        time.Sleep(2 * time.Second)
+    }
+
+    return nil, fmt.Errorf("service at %s failed to respond after 5 attempts: %w", url, err)
 }
