@@ -80,9 +80,16 @@ func MakeHTTPRequest(method, url string) (*http.Response, error) {
         if err == nil {
             return resp, nil
         }
+		// CodeRabbit Fix: Close body if it exists to prevent resource leaks
+		if resp != nil && resp.Body != nil {
+    		_ = resp.Body.Close()
+		}
 
         log.Printf("Attempt %d: Service at %s not ready yet, retrying...", i+1, url)
-        time.Sleep(2 * time.Second)
+		
+        if i < 4 {
+    		time.Sleep(2 * time.Second)
+		}
     }
 
     // Now err is guaranteed to contain the last error from client.Do(req)
