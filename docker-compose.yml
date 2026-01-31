@@ -78,9 +78,9 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - SQS_DRIVER_ASSIGNED_URL=${SQS_DRIVER_ASSIGNED_URL}
-      - SQS_ENDPOINT=${SQS_ENDPOINT}
       - SQS_TRIP_CREATED_URL=${SQS_TRIP_CREATED_URL}
       - SQS_TRIP_COMPLETED_URL=${SQS_TRIP_COMPLETED_URL}
+      # [REMOVED] SQS_ENDPOINT removed to stop blank string warnings
     ports:
       - "8081:8081"
     healthcheck:
@@ -128,7 +128,6 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app/src
-      # Update to use asyncpg for FastAPI/SQLAlchemy async support
       - DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:5432/${DRIVER_DB_NAME}
       
       # --- AWS / SQS Configuration ---
@@ -138,7 +137,7 @@ services:
       - SQS_TRIP_CREATED_URL=${SQS_TRIP_CREATED_URL}
       - SQS_DRIVER_ASSIGNED_URL=${SQS_DRIVER_ASSIGNED_URL}
       - SQS_TRIP_COMPLETED_URL=${SQS_TRIP_COMPLETED_URL}
-      - SQS_ENDPOINT=${SQS_ENDPOINT}
+      # [REMOVED] SQS_ENDPOINT removed to stop blank string warnings
     ports:
       - "8082:8082" 
     healthcheck:
