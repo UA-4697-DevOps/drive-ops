@@ -60,3 +60,7 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 *.pem
+*.bak
+.terragrunt-cache/
+.terraform/
+.terraform.lock.hcl
