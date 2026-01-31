@@ -464,9 +464,19 @@ async def update_bot_user_driver_status(
     # Sync with in-memory storage (Critical for finding drivers)
     drivers_storage = app.state.drivers_storage
     driver_key = str(bot_user.driver_id)
+    
     if driver_key in drivers_storage:
         drivers_storage[driver_key]["status"] = "ONLINE" if is_online else "OFFLINE"
-
+    else:
+        # [FIX] Create a basic entry if missing from memory to ensure consistency
+        drivers_storage[driver_key] = {
+            "id": driver_key,
+            "name": bot_user.driver_name or f"Driver {driver_key}",
+            "status": "ONLINE" if is_online else "OFFLINE",
+            "latitude": 50.4501,  # Default to Kyiv center
+            "longitude": 30.5234
+        }
+        
     logger.info(f"Bot user {chat_id} driver status changed to {new_status}")
     return bot_user
 
@@ -517,6 +527,7 @@ async def send_trip_request(
     # Track trip request in storage
     # This ensures that when the driver accepts later, we have the record
     trip_requests_storage = app.state.trip_requests_storage
+    
     if notification.trip_id not in trip_requests_storage:
         trip_requests_storage[notification.trip_id] = {
             "status": "pending",
@@ -524,6 +535,14 @@ async def send_trip_request(
             "responses": {},
             "created_at": notification.created_at.isoformat()
         }
+    else:
+        # [FIX] Support multiple driver notifications for the same trip 
+        # instead of overwriting or dropping the notification record.
+        trip_record = trip_requests_storage[notification.trip_id]
+        if notification.driver_id not in trip_record.get("notified_drivers", []):
+            trip_record.setdefault("notified_drivers", []).append(notification.driver_id)
+            
+    logger.info(f"Notification recorded for Trip {notification.trip_id} -> Driver {notification.driver_id}")
     
     return {
         "message": "Trip request sent successfully",
@@ -824,13 +843,13 @@ async def complete_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint"""
+    """Health check endpoint for monitoring and load balancers"""
     return {"status": "healthy"}
 
 
 @app.get("/")
 def root():
-    """Root endpoint with service info"""
+    """Root endpoint with dynamic service and feature status"""
     return {
         "service": "Driver Service",
         "version": "0.2.0",
@@ -839,7 +858,9 @@ def root():
             "driver_management": True,
             "trip_requests": True,
             "driver_responses": True,
-            "sqs_enabled": True,  # Flag for SQS status
-            "rabbitmq_consumers": settings.RABBITMQ_HOST is not None
+            # [FIX] Reflect actual runtime status rather than hardcoded True
+            "sqs_enabled": sqs_publisher is not None,
+            # [FIX] Use bool() to handle empty strings correctly from settings
+            "rabbitmq_consumers": bool(settings.RABBITMQ_HOST)
         }
     }
