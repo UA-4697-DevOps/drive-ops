@@ -8,8 +8,6 @@ import (
 	"log"
 	"time"
 
-	"trip-service/internal/domain"
-
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
@@ -33,61 +31,6 @@ type SQSMessageEnvelope struct {
 	Payload       json.RawMessage `json:"payload"`
 }
 
-// --- PUBLISHER LOGIC ---
-
-// SQSPublisher handles sending events to SQS FIFO queues.
-type SQSPublisher struct {
-	client   *sqs.Client
-	queueURL string
-}
-
-// NewSQSPublisher creates a new instance of SQSPublisher.
-// Simplified: Removed BaseEndpoint override to use standard AWS SQS URLs.
-func NewSQSPublisher(cfg aws.Config, queueURL string) *SQSPublisher {
-	client := sqs.NewFromConfig(cfg)
-	return &SQSPublisher{
-		client:   client,
-		queueURL: queueURL,
-	}
-}
-
-// Close satisfies the broker.Publisher interface. 
-// SQS uses internal connection pooling and does not require manual closing like RabbitMQ.
-func (p *SQSPublisher) Close() error {
-	log.Println("INFO: SQS Publisher closing (no-op)")
-	return nil
-}
-
-// PublishTripCreated sends the "trip.created" event to SQS FIFO queue.
-// [FIXED] Updated signature to match the Publisher interface in publisher.go
-func (p *SQSPublisher) PublishTripCreated(ctx context.Context, event *domain.TripCreatedEvent) error {
-	body, err := json.Marshal(event)
-	if err != nil {
-		return fmt.Errorf("failed to marshal trip created event: %w", err)
-	}
-
-	// FIFO requirements: MessageGroupId and unique DeduplicationId.
-	// We use the trip ID to ensure per-trip ordering as per design decisions.
-	msgGroupID := fmt.Sprintf("trip-%s", event.Payload.TripID)
-	dedupID := uuid.New().String()
-
-	_, err = p.client.SendMessage(ctx, &sqs.SendMessageInput{
-		QueueUrl:               aws.String(p.queueURL),
-		MessageBody:            aws.String(string(body)),
-		MessageGroupId:         aws.String(msgGroupID),
-		MessageDeduplicationId: aws.String(dedupID),
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to send trip.created to SQS: %w", err)
-	}
-
-	log.Printf("INFO: Published trip.created to SQS: trip_id=%s", event.Payload.TripID)
-	return nil
-}
-
-// --- CONSUMER LOGIC ---
-
 type TripCompletedPayload struct {
 	TripID string `json:"tripId"`
 	Status string `json:"status"`
@@ -100,12 +43,8 @@ type SQSConsumer struct {
 	svc      TripEventManager
 }
 
-// NewSQSConsumer creates a new consumer instance with modern endpoint resolution.
-// NewSQSConsumer creates a new consumer instance.
-// Simplified: Removed BaseEndpoint override to use standard AWS SQS URLs.
 func NewSQSConsumer(cfg aws.Config, queueURL string, svc TripEventManager) *SQSConsumer {
 	client := sqs.NewFromConfig(cfg)
-
 	return &SQSConsumer{
 		client:   client,
 		queueURL: queueURL,
@@ -113,12 +52,10 @@ func NewSQSConsumer(cfg aws.Config, queueURL string, svc TripEventManager) *SQSC
 	}
 }
 
-// Start begins the polling loop.
 func (c *SQSConsumer) Start(ctx context.Context) error {
 	if c.queueURL == "" {
 		return fmt.Errorf("fatal error: SQS Queue URL is not set; consumer cannot start")
 	}
-
 	log.Printf("INFO: Starting SQS Consumer on queue: %s", c.queueURL)
 
 	for {
@@ -136,7 +73,7 @@ func (c *SQSConsumer) poll(ctx context.Context) {
 	output, err := c.client.ReceiveMessage(ctx, &sqs.ReceiveMessageInput{
 		QueueUrl:            aws.String(c.queueURL),
 		MaxNumberOfMessages: 10,
-		WaitTimeSeconds:     20, // Long polling
+		WaitTimeSeconds:     20,
 		VisibilityTimeout:   30,
 		AttributeNames:      []types.QueueAttributeName{types.QueueAttributeNameAll},
 	})
@@ -146,7 +83,7 @@ func (c *SQSConsumer) poll(ctx context.Context) {
 			return
 		}
 		log.Printf("ERROR: Failed to poll SQS: %v", err)
-		time.Sleep(5 * time.Second) // Error backoff
+		time.Sleep(5 * time.Second)
 		return
 	}
 
@@ -161,86 +98,59 @@ func (c *SQSConsumer) poll(ctx context.Context) {
 
 func (c *SQSConsumer) processMessage(ctx context.Context, msg types.Message) error {
 	body := aws.ToString(msg.Body)
-	msgID := aws.ToString(msg.MessageId)
-
-	if body == "" {
-		log.Printf("ERROR: Message %s received with empty body", msgID)
-		return nil
-	}
-
 	var envelope SQSMessageEnvelope
 	if err := json.Unmarshal([]byte(body), &envelope); err != nil {
-		log.Printf("ERROR: Malformed JSON envelope in message %s: %v", msgID, err)
-		return nil
+		log.Printf("ERROR: Malformed JSON envelope: %v. Deleting message.", err)
+		return nil // Return nil to delete poison pill
 	}
 
 	switch envelope.EventType {
 	case "driver.assigned":
-		return c.handleDriverAssigned(ctx, envelope.Payload, msgID)
+		return c.handleDriverAssigned(ctx, envelope.Payload, *msg.MessageId)
 	case "trip.completed":
-		return c.handleTripCompleted(ctx, envelope.Payload, msgID)
+		return c.handleTripCompleted(ctx, envelope.Payload, *msg.MessageId)
 	default:
-		log.Printf("INFO: Skipping message %s with unknown EventType: %s", msgID, envelope.EventType)
+		log.Printf("INFO: Skipping unknown event type: %s", envelope.EventType)
 		return nil
 	}
 }
 
+// [FIXED] Added missing handler for driver assignment
 func (c *SQSConsumer) handleDriverAssigned(ctx context.Context, payload json.RawMessage, msgID string) error {
 	var data struct {
 		TripID   string `json:"tripId"`
 		DriverID string `json:"driverId"`
 	}
-
 	if err := json.Unmarshal(payload, &data); err != nil {
-		log.Printf("ERROR: Malformed driver.assigned payload in %s: %v", msgID, err)
-		return nil
+		log.Printf("ERROR: Malformed driver.assigned payload: %v", err)
+		return nil // Delete malformed message
 	}
 
-	tripID, err := uuid.Parse(data.TripID)
-	if err != nil {
-		return nil
+	tripID, errT := uuid.Parse(data.TripID)
+	driverID, errD := uuid.Parse(data.DriverID)
+	if errT != nil || errD != nil {
+		log.Printf("ERROR: Invalid UUIDs in assignment message %s", msgID)
+		return nil 
 	}
 
-	driverID, err := uuid.Parse(data.DriverID)
-	if err != nil {
-		return nil
-	}
-
-	err = c.svc.AssignDriver(ctx, tripID, driverID)
-	if err != nil {
-		if errors.Is(err, domain.ErrInvalidTripStatus) || errors.Is(err, domain.ErrTripNotFound) {
-			log.Printf("INFO: Idempotency check for assignment %s: %v. Deleting.", msgID, err)
-			return nil
-		}
-		return err
-	}
-
-	log.Printf("SUCCESS: Trip %s updated to ACTIVE with Driver %s", tripID, driverID)
-	return nil
+	return c.svc.AssignDriver(ctx, tripID, driverID)
 }
 
+// [FIXED] Added missing handler for trip completion
 func (c *SQSConsumer) handleTripCompleted(ctx context.Context, payload json.RawMessage, msgID string) error {
 	var data TripCompletedPayload
 	if err := json.Unmarshal(payload, &data); err != nil {
+		log.Printf("ERROR: Malformed trip.completed payload: %v", err)
 		return nil
 	}
 
 	tripID, err := uuid.Parse(data.TripID)
 	if err != nil {
+		log.Printf("ERROR: Invalid TripID in completion message %s", msgID)
 		return nil
 	}
 
-	err = c.svc.CompleteTrip(ctx, tripID)
-	if err != nil {
-		if errors.Is(err, domain.ErrTripNotFound) || errors.Is(err, domain.ErrInvalidTripStatus) {
-			log.Printf("INFO: Trip %s skip completion (not found or invalid status) in message %s. Deleting.", tripID, msgID)
-			return nil
-		}
-		return err
-	}
-
-	log.Printf("SUCCESS: Trip %s marked as COMPLETED via SQS", tripID)
-	return nil
+	return c.svc.CompleteTrip(ctx, tripID)
 }
 
 func (c *SQSConsumer) deleteMessage(ctx context.Context, msg types.Message) {

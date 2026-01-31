@@ -15,7 +15,6 @@ import (
 	"trip-service/internal/broker"
 	"trip-service/internal/repository"
 	"trip-service/internal/service"
-
 	api "trip-service/internal/api/http"
 
 	"github.com/go-chi/chi/v5"
@@ -35,6 +34,10 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("Note: .env file not found, using system env variables")
 	}
+
+	// [FIXED] Define a background context to manage the entire application lifecycle
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
 
 	// Helper for retry logic
 	connectWithRetry := func(desc string, fn func() error) error {
@@ -80,13 +83,14 @@ func main() {
 		log.Fatalf("Failed to load broker config: %v", err)
 	}
 
-	// Custom HTTP client for Long Polling (Timeout > 20s)
+	// [FIXED] Custom HTTP client for Long Polling (Timeout > 20s)
+	// This is critical for SQS WaitTimeSeconds=20
 	customHttpClient := &http.Client{
 		Timeout: 30 * time.Second,
 	}
 
-	// Initialize AWS Config
-	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
+	// 3. Initialize AWS Config (Using the appCtx)
+	awsCfg, err := config.LoadDefaultConfig(appCtx,
 		config.WithRegion(brokerConfig.AWSRegion),
 		config.WithHTTPClient(customHttpClient),
 	)
@@ -94,92 +98,98 @@ func main() {
 		log.Fatalf("Failed to load AWS Config: %v", err)
 	}
 
-	// 3. Initialize Outbound Publisher (SQS)
+	// 4. Initialize Outbound Publisher (SQS)
 	if brokerConfig.SQS_TRIP_CREATED_URL == "" {
 		log.Fatalf("Fatal: SQS_TRIP_CREATED_URL is not set in environment")
 	}
 	
-	// [FIX] Signature updated: Removed brokerConfig argument
+	// [FIXED] Passing the AWS Config object to the New Publisher
 	publisher := broker.NewSQSPublisher(awsCfg, brokerConfig.SQS_TRIP_CREATED_URL)
 	log.Printf("Successfully initialized SQS Publisher on: %s", brokerConfig.SQS_TRIP_CREATED_URL)
 
-	// 4. Dependency Injection
+	// 5. Dependency Injection
 	repo := repository.NewTripRepository(db)
 	svc := service.NewTripService(repo, publisher)
 	handler := api.NewTripHandler(svc)
 
 	// --- SQS Consumer Setup ---
-	consumerCtx, consumerCancel := context.WithCancel(context.Background())
-	consumerErrCh := make(chan error, 2)
+    // [FIXED] Use the appCtx created at the start for unified cancellation
+    consumerErrCh := make(chan error, 2)
 
-	// Helper to start consumers in the background
-	startConsumer := func(name string, url string) {
-		if url == "" {
-			log.Printf("WARNING: %s URL is empty. Consumer skipped.", name)
-			return
-		}
-		// [FIX] Signature updated: Removed brokerConfig argument
-		consumer := broker.NewSQSConsumer(awsCfg, url, svc)
-		go func() {
-			log.Printf("INFO: Starting %s SQS Consumer on: %s", name, url)
-			if err := consumer.Start(consumerCtx); err != nil {
-				if consumerCtx.Err() == nil {
-					consumerErrCh <- fmt.Errorf("%s failed: %w", name, err)
-				}
-			}
-		}()
-	}
+    // Helper to start consumers in the background
+    startConsumer := func(name string, url string) {
+        if url == "" {
+            log.Printf("WARNING: %s URL is empty. Consumer skipped.", name)
+            return
+        }
+        
+        // [FIXED] Using the simplified constructor from our refactored sqs_consumer.go
+        consumer := broker.NewSQSConsumer(awsCfg, url, svc)
+        go func() {
+            log.Printf("INFO: Starting %s SQS Consumer on: %s", name, url)
+            // Passes appCtx so polling stops when appCancel() is called
+            if err := consumer.Start(appCtx); err != nil {
+                if appCtx.Err() == nil {
+                    consumerErrCh <- fmt.Errorf("%s failed: %w", name, err)
+                }
+            }
+        }()
+    }
 
-	// Start separate consumers for Assigned and Completed queues
-	startConsumer("DriverAssigned", brokerConfig.SQS_DRIVER_ASSIGNED_URL)
-	startConsumer("TripCompleted", brokerConfig.SQS_TRIP_COMPLETED_URL)
+    // Start separate consumers for Assigned and Completed queues
+    startConsumer("DriverAssigned", brokerConfig.SQS_DRIVER_ASSIGNED_URL)
+    startConsumer("TripCompleted", brokerConfig.SQS_TRIP_COMPLETED_URL)
 
-	// 5. Router setup
-	r := chi.NewRouter()
-	r.Get("/health", handler.HealthCheck)
-	r.Route("/trips", func(r chi.Router) {
-		r.Post("/", handler.CreateTrip)
-		r.Get("/{id}", handler.GetTrip)
-		r.Patch("/{id}/assign-driver", handler.AssignDriver)
-	})
+    // 5. Router setup
+    r := chi.NewRouter()
+    r.Get("/health", handler.HealthCheck)
+    r.Route("/trips", func(r chi.Router) {
+        r.Post("/", handler.CreateTrip)
+        r.Get("/{id}", handler.GetTrip)
+        r.Patch("/{id}/assign-driver", handler.AssignDriver)
+    })
 
-	// 6. Setup HTTP server with graceful shutdown
-	serverPort := getEnv("TRIP_SERVICE_PORT", ":8081")
-	srv := &http.Server{
-		Addr:    serverPort,
-		Handler: r,
-	}
+    // 6. Setup HTTP server with graceful shutdown
+    serverPort := getEnv("TRIP_SERVICE_PORT", ":8081")
+    srv := &http.Server{
+        Addr:    serverPort,
+        Handler: r,
+    }
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+    stop := make(chan os.Signal, 1)
+    signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	go func() {
-		log.Printf("Trip Service is running on %s...", serverPort)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed: %v", err)
-		}
-	}()
+    go func() {
+        log.Printf("Trip Service is running on %s...", serverPort)
+        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            log.Fatalf("Server failed: %v", err)
+        }
+    }()
 
-	// Wait for OS signal or fatal consumer error
-	select {
-	case sig := <-stop:
-		log.Printf("Received signal %v, shutting down...", sig)
-	case err := <-consumerErrCh:
-		log.Fatalf("CRITICAL: %v", err)
-	}
+    // Wait for OS signal or fatal consumer error
+    select {
+    case sig := <-stop:
+        log.Printf("Received signal %v, shutting down...", sig)
+    case err := <-consumerErrCh:
+        // [FIXED] Log fatal error but allow the shutdown logic below to run
+        log.Printf("CRITICAL CONSUMER ERROR: %v", err)
+    }
 
-	// 7. Graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+    // 7. Graceful shutdown sequence
+    // First: Stop taking new HTTP requests
+    shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer shutdownCancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("Server shutdown error: %v", err)
-	}
+    if err := srv.Shutdown(shutdownCtx); err != nil {
+        log.Printf("Server shutdown error: %v", err)
+    }
 
-	log.Println("Stopping SQS Consumers...")
-	consumerCancel()
-	
-	time.Sleep(500 * time.Millisecond)
+    // Second: Signal SQS Consumers to stop polling
+    log.Println("Stopping SQS Consumers...")
+    appCancel() 
+    
+    // Give goroutines a moment to finish their last process/delete cycle
+    time.Sleep(500 * time.Millisecond)
 
-	log.Println("Server stopped gracefully")
+    log.Println("Server stopped gracefully")
 }
