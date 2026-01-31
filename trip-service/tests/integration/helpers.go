@@ -63,20 +63,20 @@ func ClearTestData(db *gorm.DB) error {
 // MakeHTTPRequest makes an HTTP request with a retry mechanism for container boot time
 func MakeHTTPRequest(method, url string) (*http.Response, error) {
     client := &http.Client{
-        Timeout: 5 * time.Second, // Shorter per-request timeout for retries
+        Timeout: 5 * time.Second,
     }
 
     var resp *http.Response
-    var err error
+    var err error // Outer variable to store the execution error
 
-    // Retry loop (e.g., 5 attempts with a 2-second sleep between)
     for i := 0; i < 5; i++ {
-        req, err := http.NewRequest(method, url, nil)
-        if err != nil {
-            return nil, err
+        // Use reqErr to avoid shadowing the main err variable
+        req, reqErr := http.NewRequest(method, url, nil)
+        if reqErr != nil {
+            return nil, reqErr
         }
 
-        resp, err = client.Do(req)
+        resp, err = client.Do(req) // Assign execution error to the outer err variable
         if err == nil {
             return resp, nil
         }
@@ -85,5 +85,6 @@ func MakeHTTPRequest(method, url string) (*http.Response, error) {
         time.Sleep(2 * time.Second)
     }
 
+    // Now err is guaranteed to contain the last error from client.Do(req)
     return nil, fmt.Errorf("service at %s failed to respond after 5 attempts: %w", url, err)
 }
