@@ -82,7 +82,7 @@ docker logs trip-migrations
 Follow these steps to completely remove the deployed infrastructure and reclaim system resources. This procedure ensures a "clean slate" for testing deployments from scratch.
 
 ### 1. Stop Services and Wipe Data
-This command stops all containers and **permanently deletes** persistent volumes (resetting database and message broker state).
+This command stops all containers and **permanently deletes** persistent volumes (resetting database).
 ```bash
 sudo docker compose -f /opt/drive-ops/docker-compose.yml down -v
 ```

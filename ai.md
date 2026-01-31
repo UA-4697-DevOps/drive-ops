@@ -7,14 +7,14 @@
 
 **Communication Channels:**
 * **Synchronous (HTTP/REST):**
-    * `TG User` $\leftrightarrow$ `Client Gateway` (Telegram API)
-    * `Client Gateway` $\rightarrow$ `Trip Service` (Create Order / Poll Status)
-    * `Client Gateway` $\rightarrow$ `Driver Service` (Accept Order)
-    * `Driver Service` $\rightarrow$ `Client Gateway` (Webhook: Notify Driver)
+  * `TG User` $\leftrightarrow$ `Client Gateway` (Telegram API)
+  * `Client Gateway` $\rightarrow$ `Trip Service` (Create Order / Poll Status)
+  * `Client Gateway` $\rightarrow$ `Driver Service` (Accept Order)
+  * `Driver Service` $\rightarrow$ `Client Gateway` (Webhook: Notify Driver)
 * **Asynchronous (AWS SQS / LocalStack):**
-    * `Trip Service` $\rightarrow$ `Driver Service` (Queue: `trip-created-dev.fifo`)
-    * `Driver Service` $\rightarrow$ `Trip Service` (Queue: `driver-assigned-dev.fifo`)
-    * `Driver Service` $\rightarrow$ `Trip Service` (Queue: `trip-completed-dev.fifo`)
+  * `Trip Service` $\rightarrow$ `Driver Service` (Queue: `trip-created-dev.fifo`)
+  * `Driver Service` $\rightarrow$ `Trip Service` (Queue: `driver-assigned-dev.fifo`)
+  * `Driver Service` $\rightarrow$ `Trip Service` (Queue: `trip-completed-dev.fifo`)
 
 ## 2. Infrastructure & DevOps Principles
 **Environment:**
