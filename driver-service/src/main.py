@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, status, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import update
 
-# Imports
+# Internal Imports
 from src.database import get_db
 from src.driver_models import Driver, BotUser
 from src.services.driver_repository import DriverRepository
@@ -20,16 +20,10 @@ from src.schemas.bot_user_schemas import (
     BotUserDriverRegistration
 )
 from src.config import settings
-
-# Imports for Task #41
 from src.schemas.trip_request import TripRequestNotification
 from src.services.driver_notification_service import DriverNotificationService
 from src.clients.gateway_client import ClientGatewayClient
-
-# [CHANGE] Import SQS Publisher instead of RabbitMQPublisher
 from src.clients.sqs_publisher import SQSPublisher
-# from src.clients.rabbitmq_publisher import RabbitMQPublisher 
-
 from src.services.driver_response_service import DriverResponseService
 
 # Logging Setup
@@ -39,17 +33,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# In-memory storage (will be replaced with database)
+# In-memory storage (Temporary solution before DB migration)
 drivers = {}
 trip_requests = {}
 
-# Global services
+# Global services references
 gateway_client = None
 notification_service = None
-sqs_publisher = None  # [CHANGE] Renamed from rabbitmq_publisher
+sqs_publisher = None 
 response_service = None
 
-# Consumers (keeping references for graceful shutdown)
+# Consumers references for graceful shutdown
 trip_events_consumer = None
 driver_responses_consumer = None
 trip_events_consumer_task = None
@@ -58,56 +52,58 @@ driver_responses_consumer_task = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager for FastAPI app"""
+    """Lifecycle manager for FastAPI application startup and shutdown"""
     global gateway_client, notification_service, sqs_publisher, response_service
     global trip_events_consumer, driver_responses_consumer
     global trip_events_consumer_task, driver_responses_consumer_task
 
-    # Startup
+    # --- STARTUP PHASE ---
     logger.info("Starting Driver Service...")
 
-    # Store references in app.state for endpoints
+    # Attach storage to app state for access in endpoint dependencies
     app.state.drivers_storage = drivers
     app.state.trip_requests_storage = trip_requests
+    app.state.response_service = None  # Initialize as None for safety check
 
-    logger.info(f"Lifespan: Set app.state.trip_requests_storage (id={id(trip_requests)})")
+    logger.info(f"Lifespan: Initialized trip_requests_storage (id={id(trip_requests)})")
 
-    # Initialize Gateway Client
+    # Initialize Client Gateway (Telegram Bot API)
     gateway_client = ClientGatewayClient(
         base_url=settings.CLIENT_GATEWAY_URL,
         timeout=settings.GATEWAY_TIMEOUT
     )
 
-    # Initialize Notification Service
+    # Initialize internal notification logic
     notification_service = DriverNotificationService(
         gateway_client=gateway_client,
         drivers_storage=drivers,
         max_retries=settings.MAX_RETRY_ATTEMPTS
     )
 
-    # [CHANGE] Initialize SQS Publisher & Response Service
-    # We move this OUT of the RabbitMQ block because SQS is now independent
+    # 1. Initialize AWS SQS Integration
     try:
         sqs_publisher = SQSPublisher()
-        logger.info("SQS Publisher initialized")
+        logger.info("SQS Publisher successfully initialized")
         
-        # Initialize Driver Response Service with SQS Publisher
+        # Initialize Driver Response Service using the SQS Publisher
         response_service = DriverResponseService(
             publisher=sqs_publisher,
             drivers_storage=drivers,
             trip_requests_storage=trip_requests
         )
+        app.state.response_service = response_service
         logger.info("Driver Response Service initialized with SQS")
 
     except Exception as e:
-        logger.error(f"Failed to initialize SQS Publisher/ResponseService: {e}")
+        logger.error(f"CRITICAL ERROR: Failed to initialize SQS components: {e}")
+        # We do not stop the app here to allow health checks, but services will be degraded.
 
-    # Start RabbitMQ consumers if enabled (for INCOMING messages like trip.created)
+    # 2. Start Background Message Queue Consumers
     if settings.RABBITMQ_HOST:
         try:
-            # Start Trip Events Consumer
+            # Trip Events Consumer: Handles incoming trip creation notifications
             from consumers.trip_events_consumer import TripEventsConsumer
-            logger.info(f"Creating TripEventsConsumer...")
+            logger.info("Creating TripEventsConsumer (RabbitMQ)...")
             trip_events_consumer = TripEventsConsumer(
                 rabbitmq_host=settings.RABBITMQ_HOST,
                 rabbitmq_port=settings.RABBITMQ_PORT,
@@ -120,31 +116,35 @@ async def lifespan(app: FastAPI):
             trip_events_consumer_task = asyncio.create_task(
                 asyncio.to_thread(trip_events_consumer.start_consuming)
             )
-            logger.info("Trip Events Consumer started")
+            logger.info("Trip Events Consumer background task started")
 
-            # Start Driver Responses Consumer
-            from consumers.driver_response_consumer import DriverResponseConsumer
-            driver_responses_consumer = DriverResponseConsumer(
-                rabbitmq_host=settings.RABBITMQ_HOST,
-                rabbitmq_port=settings.RABBITMQ_PORT,
-                rabbitmq_user=settings.RABBITMQ_USER,
-                rabbitmq_pass=settings.RABBITMQ_PASS,
-                queue_name=settings.DRIVER_RESPONSES_QUEUE,
-                response_service=response_service
-            )
-            driver_responses_consumer_task = asyncio.create_task(
-                asyncio.to_thread(driver_responses_consumer.start_consuming)
-            )
-            logger.info("Driver Responses Consumer started")
+            # Driver Responses Consumer: Handles accept/reject commands from drivers
+            # [FIXED] Guard check: Do not start if response_service failed to initialize
+            if response_service:
+                from consumers.driver_response_consumer import DriverResponseConsumer
+                driver_responses_consumer = DriverResponseConsumer(
+                    rabbitmq_host=settings.RABBITMQ_HOST,
+                    rabbitmq_port=settings.RABBITMQ_PORT,
+                    rabbitmq_user=settings.RABBITMQ_USER,
+                    rabbitmq_pass=settings.RABBITMQ_PASS,
+                    queue_name=settings.DRIVER_RESPONSES_QUEUE,
+                    response_service=response_service
+                )
+                driver_responses_consumer_task = asyncio.create_task(
+                    asyncio.to_thread(driver_responses_consumer.start_consuming)
+                )
+                logger.info("Driver Responses Consumer background task started")
+            else:
+                logger.warning("SKIPPED: DriverResponseConsumer not started because response_service is None")
 
         except Exception as e:
             logger.error(f"Failed to start RabbitMQ consumers: {e}")
 
-    logger.info("Driver Service started successfully")
+    logger.info("Driver Service startup phase finished")
 
     yield
 
-    # Shutdown
+    # --- SHUTDOWN PHASE ---
     logger.info("Shutting down Driver Service...")
 
     if trip_events_consumer_task:
@@ -168,7 +168,7 @@ async def lifespan(app: FastAPI):
     if gateway_client:
         await gateway_client.close()
 
-    logger.info("Driver Service stopped")
+    logger.info("Driver Service stopped gracefully")
 
 app = FastAPI(
     title="DriverService",

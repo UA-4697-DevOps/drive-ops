@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"errors" // [ДОДАНО] Пакет для роботи з помилками (errors.Is)
+	"errors"
 	"fmt"
 	"log"
 
@@ -41,7 +41,7 @@ func NewTripService(repo *repository.TripRepository, publisher broker.Publisher)
 	}
 }
 
-// CreateTrip handles the logic for initiating a new trip request (Phase 1)
+// CreateTrip initiates a new trip request (Phase 1)
 func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
 	if trip.Pickup == "" || trip.Dropoff == "" || trip.PassengerID == uuid.Nil {
 		return domain.ErrInvalidCreateTripData
@@ -50,18 +50,23 @@ func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
 	trip.ID = uuid.New()
 	trip.Status = domain.TripStatusPending
 
+	// 1. Persist to Database
 	if err := s.repo.Create(ctx, trip); err != nil {
 		return err
 	}
 
-	// Phase 2: Notify Driver Service via SQS about new trip
+	// 2. Notify Driver Service via SQS (Phase 2)
 	event := broker.BuildTripCreatedEvent(trip, trip.ID.String())
+	
+	// [FIXED] As per CodeRabbitAI: We no longer silently drop errors here.
+	// Returning an error ensures the client (Bot) knows the notification failed,
+	// preventing trips from being stuck in PENDING without driver awareness.
 	if err := s.publisher.PublishTripCreated(ctx, event); err != nil {
 		log.Printf("ERROR: Failed to publish trip.event.created for trip_id=%s: %v", trip.ID, err)
-	} else {
-		log.Printf("INFO: Successfully published trip.event.created for trip_id=%s", trip.ID)
+		return fmt.Errorf("failed to notify drivers via SQS: %w", err)
 	}
 
+	log.Printf("INFO: Successfully published trip.event.created for trip_id=%s", trip.ID)
 	return nil
 }
 
@@ -83,23 +88,21 @@ func (s *TripService) AssignDriver(ctx context.Context, tripID uuid.UUID, driver
 	return s.repo.AssignDriver(ctx, tripID, driverID)
 }
 
-// CompleteTrip handles the business logic for completing a trip.
-// It uses an atomic database update to handle idempotency and prevent race conditions.
+// CompleteTrip marks a trip as finished using an atomic database update.
 func (s *TripService) CompleteTrip(ctx context.Context, tripID uuid.UUID) error {
 	if tripID == uuid.Nil {
 		return domain.ErrInvalidID
 	}
 
-	// [FIXED] Використовуємо атомарний метод репозиторію для запобігання race conditions (TOCTOU).
+	// [FIXED] Atomic update to prevent TOCTOU race conditions.
 	if err := s.repo.CompleteTrip(ctx, tripID); err != nil {
-		// Якщо репозиторій повертає ErrInvalidTripStatus, це означає, що поїздка 
-		// вже COMPLETED. Ми обробляємо це як успішну ідемпотентну дію.
+		// If the trip is already COMPLETED or in an invalid state, 
+		// we treat it as an idempotent success.
 		if errors.Is(err, domain.ErrInvalidTripStatus) {
 			log.Printf("INFO: Trip %s skip completion (already completed or wrong state).", tripID)
 			return nil
 		}
 		
-		// Обробка справжніх помилок репозиторію (наприклад, проблеми зі з'єднанням)
 		log.Printf("ERROR: Failed to complete trip %s: %v", tripID, err)
 		return err
 	}
