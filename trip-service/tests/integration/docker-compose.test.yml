@@ -1,4 +1,5 @@
 services:
+  # Database for Trip Service state persistence
   postgres-test:
     image: postgres:15-alpine
     container_name: trip-service-test-db
@@ -13,3 +14,33 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # RabbitMQ (Legacy/Bridge Support)
+  # Even though we moved to SQS, some tests might still depend on this container starting
+  drive-ops-mq:
+    image: rabbitmq:3-management
+    container_name: drive-ops-mq-test
+    environment:
+      RABBITMQ_DEFAULT_USER: testuser
+      RABBITMQ_DEFAULT_PASS: testpass
+    ports:
+      - "5673:5672"   # Mapped to 5673 to avoid local conflicts
+      - "15673:15672"
+
+  # Integration Test Environment Variables
+  # Note: Real AWS tests require these secrets in your CI runner (GitHub Actions)
+  trip-service-test:
+    build: 
+      context: ../../
+      dockerfile: Dockerfile
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgres://testuser:testpass@postgres-test:5432/trip_service_test?sslmode=disable
+      - AWS_REGION=us-east-2
+      - AWS_ACCESS_KEY_ID=testing
+      - AWS_SECRET_ACCESS_KEY=testing
+      - SQS_TRIP_CREATED_URL=https://sqs.us-east-2.amazonaws.com/123456789012/trip-created-dev.fifo
+      - SQS_DRIVER_ASSIGNED_URL=https://sqs.us-east-2.amazonaws.com/123456789012/driver-assigned-dev.fifo
+      - SQS_TRIP_COMPLETED_URL=https://sqs.us-east-2.amazonaws.com/123456789012/trip-completed-dev.fifo

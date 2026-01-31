@@ -233,36 +233,44 @@ func TestTripRepository_Delete(t *testing.T) {
 	t.Log("Successfully deleted trip")
 }
 
-// TestHealthEndpoint tests the health check endpoint
 func TestHealthEndpoint(t *testing.T) {
-	//t.Skip("Skipping health endpoint test - HTTP server not yet implemented")
+    var resp *http.Response
+    var err error
+    
+    // [FIX] Retry loop to wait for the containerized service to boot in CI
+    maxRetries := 5
+    for i := 0; i < maxRetries; i++ {
+        resp, err = MakeHTTPRequest("GET", "http://localhost:8081/health")
+        if err == nil && resp.StatusCode == http.StatusOK {
+            break
+        }
+        t.Logf("Waiting for service... attempt %d/%d", i+1, maxRetries)
+        time.Sleep(2 * time.Second)
+    }
 
-	resp, err := MakeHTTPRequest("GET", "http://localhost:8081/health")
-	if err != nil {
-		t.Fatalf("Failed to make health check request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+    if err != nil {
+        t.Fatalf("Service unreachable after %d retries: %v", maxRetries, err)
+    }
+    defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
-	}
+    if resp.StatusCode != http.StatusOK {
+        t.Errorf("Expected status 200, got %d", resp.StatusCode)
+    }
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("Failed to read response body: %v", err)
-	}
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        t.Fatalf("Failed to read response body: %v", err)
+    }
 
-	// Parse and verify response body
-	var health map[string]interface{}
-	if err := json.Unmarshal(body, &health); err != nil {
-		t.Fatalf("Failed to decode response: %v. Body was: %s", err, string(body))
-	}
+    var health map[string]interface{}
+    if err := json.Unmarshal(body, &health); err != nil {
+        t.Fatalf("Failed to decode response: %v. Body was: %s", err, string(body))
+    }
 
-	if status, ok := health["status"]; !ok || status != "ok" {
-		t.Errorf("Expected status 'ok', got %v", status)
-	}
+    // [FIX] Precise type assertion to ensure the 'status' key exists and is correct
+    if status, ok := health["status"].(string); !ok || status != "ok" {
+        t.Errorf("Expected status 'ok', got %v", health["status"])
+    }
 
-	t.Log("Health endpoint returned 200 OK")
-
+    t.Log("Health endpoint successfully returned 200 OK")
 }
