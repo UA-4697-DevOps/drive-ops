@@ -9,23 +9,24 @@ import (
 
 // simpleGeocode provides basic geocoding for Kyiv addresses (MVP/demo)
 func simpleGeocode(address string) (lat, lng float64) {
+	// Kyiv city center defaults
 	defaultLat, defaultLng := 50.4501, 30.5234
-	if len(address) > 0 {
-		return defaultLat, defaultLng
-	}
 	return defaultLat, defaultLng
 }
 
-// BuildTripCreatedEvent constructs a TripCreatedEvent from a Trip
+// BuildTripCreatedEvent constructs a TripCreatedEvent from a Trip.
+// [CRITICAL] Ensure domain.TripCreatedEvent has json:"camelCase" tags.
 func BuildTripCreatedEvent(trip *domain.Trip, correlationID string) *domain.TripCreatedEvent {
 	event := &domain.TripCreatedEvent{}
 
+	// Envelope Fields - Standardized for cross-service compatibility
 	event.EventID = uuid.New().String()
-	event.EventType = "trip.event.created"
+	event.EventType = "trip.created" 
 	event.EventVersion = "1.0"
 	event.CorrelationID = correlationID
-	event.Timestamp = time.Now()
+	event.Timestamp = time.Now().UTC()
 
+	// Payload Mapping
 	event.Payload.TripID = trip.ID.String()
 	event.Payload.PassengerID = trip.PassengerID.String()
 	event.Payload.CreatedAt = trip.CreatedAt
@@ -48,18 +49,18 @@ func BuildTripCreatedEvent(trip *domain.Trip, correlationID string) *domain.Trip
 	return event
 }
 
-// DriverAssignedEvent strictly matches the "driver.assigned" payload 
-// defined in architecture/sqs-design-decisions.md
+// DriverAssignedEvent strictly matches the "driver.assigned" payload.
+// These tags ensure the Go Trip Service can READ what the Python Driver Service SENDS.
 type DriverAssignedEvent struct {
 	Version       string    `json:"version"`
 	MessageID     string    `json:"messageId"`
 	Timestamp     time.Time `json:"timestamp"`
 	CorrelationID string    `json:"correlationId"`
-	EventType     string    `json:"eventType"` // "driver.assigned"
-	Source        string    `json:"source"`    // "driver-service"
+	EventType     string    `json:"eventType"`
+	Source        string    `json:"source"`
 	Payload       struct {
-		TripID      string `json:"tripId"`
-		DriverID    string `json:"driverId"`
+		TripID      string `json:"tripId"`      // Must match Python key
+		DriverID    string `json:"driverId"`    // Must match Python key
 		DriverName  string `json:"driverName"`
 		VehicleInfo struct {
 			Make         string `json:"make"`

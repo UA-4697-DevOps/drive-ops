@@ -1,74 +1,53 @@
 package broker
 
 import (
-	"fmt"
+	"errors"
 	"log"
-	"net/url"
 	"os"
 )
 
-// Config holds Broker (RabbitMQ & SQS) connection configuration
+// Config holds Broker (Legacy RabbitMQ & Modern SQS) configuration
 type Config struct {
+	// RabbitMQ (Legacy)
 	URL          string
 	ExchangeName string
-	ExchangeType string
+	ExchangeType string // [RESTORED] Prevent build errors in legacy files
 
-	// SQS functional queue URLs
-	SQS_TRIP_CREATED_URL    string // [NEW] Added for Phase 2: Trip Creation
+	// SQS FIFO Queue URLs (Production)
+	SQS_TRIP_CREATED_URL    string
 	SQS_DRIVER_ASSIGNED_URL string
-	SQS_TRIP_COMPLETED_URL  string 
-	
-	AWSRegion   string
-	SQSEndpoint string // LocalStack override
+	SQS_TRIP_COMPLETED_URL  string
+
+	AWSRegion string
 }
 
 // LoadConfig loads broker configuration from environment variables
 func LoadConfig() (*Config, error) {
-	// 1. Legacy RabbitMQ Configuration (Kept for bridge stability)
-	var connURL string
-	if rabbitmqURL := os.Getenv("RABBITMQ_URL"); rabbitmqURL != "" {
-		connURL = rabbitmqURL
-	} else {
-		host := getEnv("RABBITMQ_HOST", "localhost")
-		port := getEnv("RABBITMQ_PORT", "5672")
-		user := os.Getenv("RABBITMQ_USER")
-		password := os.Getenv("RABBITMQ_PASSWORD")
-
-		if user == "" || password == "" {
-			log.Println("Warning: RabbitMQ credentials not set; ignore if running SQS-only mode")
-		}
-
-		encodedUser := url.QueryEscape(user)
-		encodedPassword := url.QueryEscape(password)
-		connURL = fmt.Sprintf("amqp://%s:%s@%s:%s/", encodedUser, encodedPassword, host, port)
-	}
-
-	exchangeName := getEnv("RABBITMQ_EXCHANGE", "trip_events")
-	exchangeType := getEnv("RABBITMQ_EXCHANGE_TYPE", "topic")
-
-	// 2. SQS Configuration [UPDATED]
-	// Retrieve all functional FIFO queue URLs from environment
-	sqsCreatedURL := os.Getenv("SQS_TRIP_CREATED_URL")    // [NEW]
+	// 1. SQS Configuration (Primary for Phase 2)
+	sqsCreatedURL := os.Getenv("SQS_TRIP_CREATED_URL")
 	sqsAssignedURL := os.Getenv("SQS_DRIVER_ASSIGNED_URL")
 	sqsCompletedURL := os.Getenv("SQS_TRIP_COMPLETED_URL")
-	
-	awsRegion := getEnv("AWS_REGION", "us-east-2") 
-	sqsEndpoint := os.Getenv("SQS_ENDPOINT") 
+	awsRegion := getEnv("AWS_REGION", "us-east-2")
 
-	// Validation: Ensure the primary migration URL is present
-	if sqsCreatedURL == "" {
-		log.Println("Warning: SQS_TRIP_CREATED_URL is missing; publishing will fail")
+	// Strict Validation: Fail fast if SQS URLs are missing in Production
+	if sqsCreatedURL == "" || sqsAssignedURL == "" || sqsCompletedURL == "" {
+		return nil, errors.New("missing required SQS Queue URLs; check SQS_TRIP_CREATED_URL, SQS_DRIVER_ASSIGNED_URL, and SQS_TRIP_COMPLETED_URL")
+	}
+
+	// 2. RabbitMQ Configuration (Kept for Bridge Stability)
+	rabbitmqURL := os.Getenv("RABBITMQ_URL")
+	if rabbitmqURL == "" {
+		log.Println("INFO: RABBITMQ_URL not set; legacy bridge functions will be disabled")
 	}
 
 	return &Config{
-		URL:                     connURL,
-		ExchangeName:            exchangeName,
-		ExchangeType:            exchangeType,
-		SQS_TRIP_CREATED_URL:    sqsCreatedURL,    // [NEW]
+		URL:                     rabbitmqURL,
+		ExchangeName:            getEnv("RABBITMQ_EXCHANGE", "trip_events"),
+		ExchangeType:            getEnv("RABBITMQ_EXCHANGE_TYPE", "topic"), // [RESTORED]
+		SQS_TRIP_CREATED_URL:    sqsCreatedURL,
 		SQS_DRIVER_ASSIGNED_URL: sqsAssignedURL,
-		SQS_TRIP_COMPLETED_URL:  sqsCompletedURL, 
+		SQS_TRIP_COMPLETED_URL:  sqsCompletedURL,
 		AWSRegion:               awsRegion,
-		SQSEndpoint:             sqsEndpoint,
 	}, nil
 }
 

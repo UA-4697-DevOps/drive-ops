@@ -4,50 +4,50 @@ import (
 	"time"
 )
 
-// Location описує координати для поїздки
+// Location describes the coordinates and address for a trip
 type Location struct {
 	Address string  `json:"address"`
 	Lat     float64 `json:"lat"`
 	Lng     float64 `json:"lng"`
 }
 
-// BaseEvent містить метадані, спільні для всіх подій
+// BaseEvent contains metadata common to all events
 type BaseEvent struct {
-	EventID       string    `json:"event_id"`
-	EventType     string    `json:"event_type"`    // Напр. trip.event.created
-	EventVersion  string    `json:"event_version"`
-	CorrelationID string    `json:"correlation_id"`
-	Timestamp     time.Time `json:"timestamp"`
+	EventID       string    `json:"eventId"`       // Unique event identifier
+	EventType     string    `json:"eventType"`     // e.g., trip.created
+	EventVersion  string    `json:"version"`       // Schema version
+	CorrelationID string    `json:"correlationId"` // Used for distributed tracing
+	Timestamp     time.Time `json:"timestamp"`     // Time when the event occurred
 }
 
-// TripCreatedEvent відповідає схемі trip.event.created
+// TripCreatedEvent corresponds to the trip.created schema
 type TripCreatedEvent struct {
 	BaseEvent
 	Payload struct {
-		TripID      string    `json:"trip_id"`
-		PassengerID string    `json:"passenger_id"`
+		TripID      string    `json:"tripId"`      
+		PassengerID string    `json:"passengerId"` 
 		Pickup      Location  `json:"pickup"`
 		Dropoff     Location  `json:"dropoff"`
-		CreatedAt   time.Time `json:"created_at"`
+		CreatedAt   time.Time `json:"createdAt"`   
 	} `json:"payload"`
 }
 
-// DriverAssignedEvent відповідає схемі trip.event.driver_assigned
+// DriverAssignedEvent corresponds to the driver.assigned schema
 type DriverAssignedEvent struct {
 	BaseEvent
 	Payload struct {
-		TripID     string    `json:"trip_id"`
-		DriverID   string    `json:"driver_id"`
-		AssignedAt time.Time `json:"assigned_at"`
+		TripID     string    `json:"tripId"`     
+		DriverID   string    `json:"driverId"`   
+		AssignedAt time.Time `json:"assignedAt"` 
 	} `json:"payload"`
 }
 
-// TripCompletedEvent відповідає схемі trip.event.completed
+// TripCompletedEvent corresponds to the trip.completed schema
 type TripCompletedEvent struct {
 	BaseEvent
 	Payload struct {
-		TripID      string    `json:"trip_id"`
-		DriverID    string    `json:"driver_id"`
-		CompletedAt time.Time `json:"completed_at"`
+		TripID      string    `json:"tripId"`      
+		DriverID    string    `json:"driverId"`    
+		CompletedAt time.Time `json:"completedAt"` 
 	} `json:"payload"`
 }
