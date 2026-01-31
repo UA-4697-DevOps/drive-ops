@@ -47,7 +47,6 @@ func (m *MockTripService) CheckHealth(ctx context.Context) error {
 }
 
 func TestRabbitMQConsumer_HandleDriverAssigned(t *testing.T) {
-	// Setup generic mock service
 	mockSvc := new(MockTripService)
 	consumer := &RabbitMQConsumer{
 		service: mockSvc,
@@ -57,11 +56,13 @@ func TestRabbitMQConsumer_HandleDriverAssigned(t *testing.T) {
 		tripID := uuid.New()
 		driverID := uuid.New()
 		
-		// Create a valid event payload
+		// [SYNCED] Using updated domain structs. 
+		// json.Marshal will now produce camelCase keys automatically.
 		event := domain.DriverAssignedEvent{
 			BaseEvent: domain.BaseEvent{
-				EventType: "trip.event.driver_assigned",
-				Timestamp: time.Now(),
+				EventID:   uuid.New().String(),
+				EventType: "driver.assigned",
+				Timestamp: time.Now().UTC(),
 			},
 		}
 		event.Payload.TripID = tripID.String()
@@ -69,10 +70,8 @@ func TestRabbitMQConsumer_HandleDriverAssigned(t *testing.T) {
 		
 		body, _ := json.Marshal(event)
 
-		// Expect AssignDriver to be called
 		mockSvc.On("AssignDriver", mock.Anything, tripID, driverID).Return(nil).Once()
 
-		// Execute
 		err := consumer.handleDriverAssigned(context.Background(), body)
 		assert.NoError(t, err)
 
@@ -82,7 +81,7 @@ func TestRabbitMQConsumer_HandleDriverAssigned(t *testing.T) {
 	t.Run("Invalid JSON", func(t *testing.T) {
 		err := consumer.handleDriverAssigned(context.Background(), []byte("invalid json"))
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to unmarshal JSON")
+		assert.Contains(t, err.Error(), "unmarshal JSON")
 	})
 
 	t.Run("Invalid IDs", func(t *testing.T) {
@@ -99,7 +98,6 @@ func TestRabbitMQConsumer_HandleDriverAssigned(t *testing.T) {
 }
 
 func TestRabbitMQConsumer_HandleTripCompleted(t *testing.T) {
-	// Setup generic mock service
 	mockSvc := new(MockTripService)
 	consumer := &RabbitMQConsumer{
 		service: mockSvc,
@@ -109,23 +107,22 @@ func TestRabbitMQConsumer_HandleTripCompleted(t *testing.T) {
 		tripID := uuid.New()
 		driverID := uuid.New()
 
-		// Create a valid event payload
+		// [SYNCED] json.Marshal uses the new camelCase tags from domain.events.go
 		event := domain.TripCompletedEvent{
 			BaseEvent: domain.BaseEvent{
-				EventType: "trip.event.completed",
-				Timestamp: time.Now(),
+				EventID:   uuid.New().String(),
+				EventType: "trip.completed",
+				Timestamp: time.Now().UTC(),
 			},
 		}
 		event.Payload.TripID = tripID.String()
 		event.Payload.DriverID = driverID.String()
-		event.Payload.CompletedAt = time.Now()
+		event.Payload.CompletedAt = time.Now().UTC()
 
 		body, _ := json.Marshal(event)
 
-		// Expect CompleteTrip to be called
 		mockSvc.On("CompleteTrip", mock.Anything, tripID).Return(nil).Once()
 
-		// Execute
 		err := consumer.handleTripCompleted(context.Background(), body)
 		assert.NoError(t, err)
 
@@ -135,7 +132,7 @@ func TestRabbitMQConsumer_HandleTripCompleted(t *testing.T) {
 	t.Run("Invalid JSON", func(t *testing.T) {
 		err := consumer.handleTripCompleted(context.Background(), []byte("invalid json"))
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to unmarshal JSON")
+		assert.Contains(t, err.Error(), "unmarshal JSON")
 	})
 
 	t.Run("Invalid Trip ID", func(t *testing.T) {

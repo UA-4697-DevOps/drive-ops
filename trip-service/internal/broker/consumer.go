@@ -1,16 +1,16 @@
 package broker
 
 import (
-    "context"
-    "encoding/json"
-    "fmt"
-    "log"
-    "sync"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"sync"
 
-    "trip-service/internal/domain" // Corrected: removed drive-ops/ prefix
+	"trip-service/internal/domain" // Corrected: removed drive-ops/ prefix
 
-    "github.com/google/uuid"
-    amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/google/uuid"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // TripAssigner defines the capability required by the consumer
@@ -44,73 +44,61 @@ func NewRabbitMQConsumer(config *Config, svc TripAssigner) (*RabbitMQConsumer, e
 
 	channel, err := conn.Channel()
 	if err != nil {
-		if closeErr := conn.Close(); closeErr != nil {
-			log.Printf("Error closing connection after channel failure: %v", closeErr)
-		}
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to open channel: %w", err)
 	}
 
-	cleanup := func() {
-		if channel != nil {
-			if err := channel.Close(); err != nil {
-				log.Printf("Error closing channel during cleanup: %v", err)
-			}
-		}
-		if err := conn.Close(); err != nil {
-			log.Printf("Error closing connection during cleanup: %v", err)
-		}
+	// [REFINED] Setting QOS to 1 ensures the consumer only gets one message at a time.
+	// This is critical when using Nack with Requeue to prevent overwhelming the service.
+	err = channel.Qos(1, 0, false)
+	if err != nil {
+		_ = channel.Close()
+		_ = conn.Close()
+		return nil, fmt.Errorf("failed to set QOS: %w", err)
 	}
-	// Declare exchange to ensure it exists
+
+	cleanup := func() {
+		_ = channel.Close()
+		_ = conn.Close()
+	}
+
+	// Declare exchange
 	err = channel.ExchangeDeclare(
-		config.ExchangeName, // name
-		config.ExchangeType, // type
-		true,                // durable
-		false,               // auto-deleted
-		false,               // internal
-		false,               // no-wait
-		nil,                 // arguments
+		config.ExchangeName,
+		config.ExchangeType,
+		true,  // durable
+		false, // auto-deleted
+		false, // internal
+		false, // no-wait
+		nil,   // arguments
 	)
 	if err != nil {
 		cleanup()
 		return nil, fmt.Errorf("failed to declare exchange: %w", err)
 	}
-	// Declare a queue
+
+	// Declare queue
 	q, err := channel.QueueDeclare(
-		"trip_service_consumer", // name
-		true,                    // durable
-		false,                   // delete when unused
-		false,                   // exclusive
-		false,                   // no-wait
-		nil,                     // arguments
+		"trip_service_consumer",
+		true,  // durable
+		false, // delete when unused
+		false, // exclusive
+		false, // no-wait
+		nil,   // arguments
 	)
 	if err != nil {
 		cleanup()
 		return nil, fmt.Errorf("failed to declare queue: %w", err)
 	}
-	// Bind queue to exchange for driver_assigned events
-	err = channel.QueueBind(
-		q.Name,                       // queue name
-		"trip.event.driver_assigned", // routing key
-		config.ExchangeName,          // exchange
-		false,
-		nil,
-	)
-	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to bind queue to driver_assigned: %w", err)
-	}
 
-	// Bind queue to exchange for completed events
-	err = channel.QueueBind(
-		q.Name,                  // queue name
-		"trip.event.completed",  // routing key
-		config.ExchangeName,     // exchange
-		false,
-		nil,
-	)
-	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to bind queue to completed: %w", err)
+	// Binding logic for driver_assigned and completed events...
+	routingKeys := []string{"trip.event.driver_assigned", "trip.event.completed"}
+	for _, key := range routingKeys {
+		err = channel.QueueBind(q.Name, key, config.ExchangeName, false, nil)
+		if err != nil {
+			cleanup()
+			return nil, fmt.Errorf("failed to bind queue to %s: %w", key, err)
+		}
 	}
 
 	return &RabbitMQConsumer{
@@ -125,13 +113,13 @@ func NewRabbitMQConsumer(config *Config, svc TripAssigner) (*RabbitMQConsumer, e
 // Start begins consuming messages from RabbitMQ
 func (c *RabbitMQConsumer) Start(ctx context.Context) error {
 	msgs, err := c.channel.Consume(
-		c.queueName, // queue
-		"",          // consumer
-		false,       // auto-ack (we manual ack in handleDelivery)
-		false,       // exclusive
-		false,       // no-local
-		false,       // no-wait
-		nil,         // args
+		c.queueName,
+		"",
+		false, // auto-ack is FALSE (Manual Ack required)
+		false,
+		false,
+		false,
+		nil,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to register RabbitMQ consumer: %w", err)
@@ -159,34 +147,44 @@ func (c *RabbitMQConsumer) Start(ctx context.Context) error {
 	return nil
 }
 
-// handleDelivery processes a single message
+// handleDelivery processes a single message with reliable Ack/Nack strategy
 func (c *RabbitMQConsumer) handleDelivery(ctx context.Context, d amqp.Delivery) {
-	// Acknowledge message to prevent it from getting stuck in "Unacked" state
-	defer func() {
-		if err := d.Ack(false); err != nil {
-			log.Printf("ERROR: Error acknowledging message: %v", err)
-		}
-	}()
+	var err error
 
-	// Note: Routing keys here use the legacy "trip.event.*" format
+	// 1. Route message based on legacy keys
 	switch d.RoutingKey {
 	case "trip.event.driver_assigned":
-		if err := c.handleDriverAssigned(ctx, d.Body); err != nil {
-			log.Printf("ERROR: Error handling driver assigned event: %v", err)
-		}
+		err = c.handleDriverAssigned(ctx, d.Body)
 	case "trip.event.completed":
-		if err := c.handleTripCompleted(ctx, d.Body); err != nil {
-			log.Printf("ERROR: Error handling trip completed event: %v", err)
-		}
+		err = c.handleTripCompleted(ctx, d.Body)
 	default:
-		log.Printf("INFO: Received message with unknown routing key: %s", d.RoutingKey)
+		log.Printf("INFO: Unknown routing key: %s. Acknowledging and dropping.", d.RoutingKey)
+		_ = d.Ack(false)
+		return
+	}
+
+	// 2. Handle Outcome
+	if err != nil {
+		log.Printf("ERROR: Processing failed for %s: %v", d.RoutingKey, err)
+		
+		// [RELIABILITY FIX] Nack with requeue=true
+		// If DB is down, the message stays in the queue to try again later.
+		if nackErr := d.Nack(false, true); nackErr != nil {
+			log.Printf("CRITICAL: Failed to nack message: %v", nackErr)
+		}
+		return
+	}
+
+	// 3. Success Path: Manual Acknowledge
+	if ackErr := d.Ack(false); ackErr != nil {
+		log.Printf("ERROR: Failed to acknowledge message: %v", ackErr)
 	}
 }
 
 func (c *RabbitMQConsumer) handleDriverAssigned(ctx context.Context, body []byte) error {
 	var event domain.DriverAssignedEvent
 	if err := json.Unmarshal(body, &event); err != nil {
-		return fmt.Errorf("failed to unmarshal JSON: %w", err)
+		return fmt.Errorf("unmarshal JSON: %w", err)
 	}
 
 	tripID, err := uuid.Parse(event.Payload.TripID)
@@ -200,18 +198,13 @@ func (c *RabbitMQConsumer) handleDriverAssigned(ctx context.Context, body []byte
 	}
 
 	log.Printf("INFO: Processing driver assignment (RabbitMQ): trip=%s, driver=%s", tripID, driverID)
-
-	if err := c.service.AssignDriver(ctx, tripID, driverID); err != nil {
-		return fmt.Errorf("failed to assign driver via service: %w", err)
-	}
-
-	return nil
+	return c.service.AssignDriver(ctx, tripID, driverID)
 }
 
 func (c *RabbitMQConsumer) handleTripCompleted(ctx context.Context, body []byte) error {
 	var event domain.TripCompletedEvent
 	if err := json.Unmarshal(body, &event); err != nil {
-		return fmt.Errorf("failed to unmarshal JSON: %w", err)
+		return fmt.Errorf("unmarshal JSON: %w", err)
 	}
 
 	tripID, err := uuid.Parse(event.Payload.TripID)
@@ -220,29 +213,17 @@ func (c *RabbitMQConsumer) handleTripCompleted(ctx context.Context, body []byte)
 	}
 
 	log.Printf("INFO: Processing trip completion (RabbitMQ): trip=%s", tripID)
-
-	if err := c.service.CompleteTrip(ctx, tripID); err != nil {
-		return fmt.Errorf("failed to complete trip via service: %w", err)
-	}
-
-	return nil
+	return c.service.CompleteTrip(ctx, tripID)
 }
 
 // Close gracefully shuts down the RabbitMQ connection
 func (c *RabbitMQConsumer) Close() error {
-	var errs []error
-	
-	if err := c.channel.Close(); err != nil {
-		errs = append(errs, err)
+	if c.channel != nil {
+		_ = c.channel.Close()
 	}
-	if err := c.conn.Close(); err != nil {
-		errs = append(errs, err)
+	if c.conn != nil {
+		_ = c.conn.Close()
 	}
-	
 	c.wg.Wait()
-
-	if len(errs) > 0 {
-		return fmt.Errorf("errors closing RabbitMQ consumer: %v", errs)
-	}
 	return nil
 }
