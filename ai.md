@@ -138,7 +138,7 @@ sequenceDiagram
 * `documentation/`: Project documentation and architecture diagrams.
 * `.github/`: **CI/CD Workflows**. GitHub Actions for build and deployment.
 * `docker-compose.yml`: Local orchestration for **Services** and **Databases** (Postgres). Connects to real AWS SQS.
-* `.env.example`: Configuration template. **Must** contain real AWS Credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) as local mocking is disabled.
+* `.env.example`: Configuration template.
 * `.coderrabbit.yaml`: AI Code Review configuration.
 * `CONTRIBUTING.md`: Guidelines for contributing to the project.
 
@@ -205,32 +205,33 @@ sequenceDiagram
 **Architecture:** Standard Go Project Layout (Clean Architecture).
 **Structure:**
 * `cmd/server/`: Main application entry point.
-    * `main.go`: Service initialization and dependency injection.
+  * `main.go`: Service initialization and dependency injection.
 * `db/`: Database management.
-    * `migrations/`: SQL migration files (`up`/`down`).
-    * `seeds/`: Initial data for development.
+  * `migrations/`: SQL migration files (`up`/`down`).
+  * `seeds/`: Initial data for development.
 * `docs/`: **Service Documentation**.
-    * `CI_TESTING.md`: Testing guidelines.
-    * `MIGRATIONS.MD`: Database migration guide.
-    * `trip-events.md`: Event schema documentation.
+  * `CI_TESTING.md`: Testing guidelines.
+  * `MIGRATIONS.MD`: Database migration guide.
+  * `trip-events.md`: Event schema documentation.
 * `internal/`: Private code (Library pattern).
-    * `api/http/`: REST API handlers.
-        * `handler.go`: REST API handlers (e.g., `POST /trips`).
-    * `broker/`: SQS Publisher/Consumer implementation.
-        * `config.go`: Broker configuration settings.
-        * `consumer.go`: Base consumer interface.
-        * `sqs_consumer.go`: **SQS Implementation**. Handles `driver.assigned` and `trip.completed` events.
-        * `publisher.go`: Message publisher interface.
-        * `events.go`: Event builders and payload structures.
-    * `domain/`: Struct definitions and Domain Errors.
-        * `trip.go`: Core entities and errors (`ErrInvalidTripStatus`, etc.).
-        * `events.go`: Event structs (`TripCreatedEvent`, etc.).
-    * `repository/`: Data Access Layer (GORM).
-        * `trip_repository.go`: DB operations (Atomic updates, locking).
-        * `trip_repository_test.go`: Integration tests (Testcontainers).
-    * `service/`: Business Logic.
-        * `trip_service.go`: Service orchestration.
-        * `trip_mock.go`: Mock implementations for testing.
+  * `api/http/`: REST API handlers.
+    * `handler.go`: REST API handlers (e.g., `POST /trips`).
+  * `broker/`: SQS Publisher/Consumer implementation.
+    * `config.go`: Broker configuration settings.
+    * `consumer.go`: Base consumer interface.
+    * `sqs_consumer.go`: **SQS Implementation**. Handles `driver.assigned` and `trip.completed` events.
+    * `sqs_publisher.go`: **SQS Publisher Implementation**. Publishes `trip.created` with FIFO deduplication.
+    * `publisher.go`: Message publisher interface.
+    * `events.go`: Event builders and payload structures.
+  * `domain/`: Struct definitions and Domain Errors.
+    * `trip.go`: Core entities and errors (`ErrInvalidTripStatus`, etc.).
+    * `events.go`: Event structs (`TripCreatedEvent`, etc.).
+  * `repository/`: Data Access Layer (GORM).
+    * `trip_repository.go`: DB operations (Atomic updates, locking).
+    * `trip_repository_test.go`: Integration tests (Testcontainers).
+  * `service/`: Business Logic.
+    * `trip_service.go`: Service orchestration.
+    * `trip_mock.go`: Mock implementations for testing.
 * `tests/`: System-wide integration tests.
 * `Dockerfile`: Container configuration for the Go app.
 * `Dockerfile.migrations`: **Migration Runner**. Uses `migrate/migrate`.
