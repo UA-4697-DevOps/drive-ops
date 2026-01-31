@@ -1,16 +1,16 @@
 package broker
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"log"
-	"sync"
+    "context"
+    "encoding/json"
+    "fmt"
+    "log"
+    "sync"
 
-	"trip-service/internal/domain"
+    "trip-service/internal/domain" // Corrected: removed drive-ops/ prefix
 
-	"github.com/google/uuid"
-	amqp "github.com/rabbitmq/amqp091-go"
+    "github.com/google/uuid"
+    amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // TripAssigner defines the capability required by the consumer
@@ -122,33 +122,33 @@ func NewRabbitMQConsumer(config *Config, svc TripAssigner) (*RabbitMQConsumer, e
 	}, nil
 }
 
-// Start begins consuming messages
+// Start begins consuming messages from RabbitMQ
 func (c *RabbitMQConsumer) Start(ctx context.Context) error {
 	msgs, err := c.channel.Consume(
 		c.queueName, // queue
 		"",          // consumer
-		false,       // auto-ack
+		false,       // auto-ack (we manual ack in handleDelivery)
 		false,       // exclusive
 		false,       // no-local
 		false,       // no-wait
 		nil,         // args
 	)
 	if err != nil {
-		return fmt.Errorf("failed to register consumer: %w", err)
+		return fmt.Errorf("failed to register RabbitMQ consumer: %w", err)
 	}
 
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
-		log.Println("Started consuming events...")
+		log.Println("INFO: Started consuming RabbitMQ events...")
 		for {
 			select {
 			case <-ctx.Done():
-				log.Println("Consumer stopping...")
+				log.Println("INFO: RabbitMQ Consumer stopping...")
 				return
 			case d, ok := <-msgs:
 				if !ok {
-					log.Println("RabbitMQ channel closed")
+					log.Println("WARN: RabbitMQ channel closed")
 					return
 				}
 				c.handleDelivery(ctx, d)
@@ -161,25 +161,25 @@ func (c *RabbitMQConsumer) Start(ctx context.Context) error {
 
 // handleDelivery processes a single message
 func (c *RabbitMQConsumer) handleDelivery(ctx context.Context, d amqp.Delivery) {
-	// Acknowledge message always to prevent loops, unless we want to requeue on transient failures
-	// For MVP: Log and Drop strategies.
+	// Acknowledge message to prevent it from getting stuck in "Unacked" state
 	defer func() {
 		if err := d.Ack(false); err != nil {
-			log.Printf("Error acknowledging message: %v", err)
+			log.Printf("ERROR: Error acknowledging message: %v", err)
 		}
 	}()
 
+	// Note: Routing keys here use the legacy "trip.event.*" format
 	switch d.RoutingKey {
 	case "trip.event.driver_assigned":
 		if err := c.handleDriverAssigned(ctx, d.Body); err != nil {
-			log.Printf("Error handling driver assigned event: %v", err)
-			return
+			log.Printf("ERROR: Error handling driver assigned event: %v", err)
 		}
 	case "trip.event.completed":
 		if err := c.handleTripCompleted(ctx, d.Body); err != nil {
-			log.Printf("Error handling trip completed event: %v", err)
-			return
+			log.Printf("ERROR: Error handling trip completed event: %v", err)
 		}
+	default:
+		log.Printf("INFO: Received message with unknown routing key: %s", d.RoutingKey)
 	}
 }
 
@@ -189,7 +189,6 @@ func (c *RabbitMQConsumer) handleDriverAssigned(ctx context.Context, body []byte
 		return fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 
-	// Validate IDs
 	tripID, err := uuid.Parse(event.Payload.TripID)
 	if err != nil {
 		return fmt.Errorf("invalid trip ID '%s': %w", event.Payload.TripID, err)
@@ -200,14 +199,12 @@ func (c *RabbitMQConsumer) handleDriverAssigned(ctx context.Context, body []byte
 		return fmt.Errorf("invalid driver ID '%s': %w", event.Payload.DriverID, err)
 	}
 
-	log.Printf("Processing driver assignment: trip=%s, driver=%s", tripID, driverID)
+	log.Printf("INFO: Processing driver assignment (RabbitMQ): trip=%s, driver=%s", tripID, driverID)
 
-	// Delegate to service
 	if err := c.service.AssignDriver(ctx, tripID, driverID); err != nil {
 		return fmt.Errorf("failed to assign driver via service: %w", err)
 	}
 
-	log.Printf("Successfully processed driver assignment for trip %s", tripID)
 	return nil
 }
 
@@ -217,29 +214,23 @@ func (c *RabbitMQConsumer) handleTripCompleted(ctx context.Context, body []byte)
 		return fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 
-	// Validate trip ID
 	tripID, err := uuid.Parse(event.Payload.TripID)
 	if err != nil {
 		return fmt.Errorf("invalid trip ID '%s': %w", event.Payload.TripID, err)
 	}
 
-	log.Printf("Processing trip completion: trip=%s, driver=%s", tripID, event.Payload.DriverID)
+	log.Printf("INFO: Processing trip completion (RabbitMQ): trip=%s", tripID)
 
-	// Delegate to service
 	if err := c.service.CompleteTrip(ctx, tripID); err != nil {
 		return fmt.Errorf("failed to complete trip via service: %w", err)
 	}
 
-	log.Printf("Successfully processed trip completion for trip %s", tripID)
 	return nil
 }
 
-// Close gracefully shuts down the consumer
+// Close gracefully shuts down the RabbitMQ connection
 func (c *RabbitMQConsumer) Close() error {
 	var errs []error
-	
-	// Wait for processing to finish if we were using a more complex shutdown
-	// For now, channel close is enough
 	
 	if err := c.channel.Close(); err != nil {
 		errs = append(errs, err)
@@ -248,11 +239,10 @@ func (c *RabbitMQConsumer) Close() error {
 		errs = append(errs, err)
 	}
 	
-	// Wait for goroutine
 	c.wg.Wait()
 
 	if len(errs) > 0 {
-		return fmt.Errorf("errors closing consumer: %v", errs)
+		return fmt.Errorf("errors closing RabbitMQ consumer: %v", errs)
 	}
 	return nil
 }

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
-	"trip-service/internal/domain"
+	"trip-service/internal/domain" // Corrected: removed drive-ops/ prefix
 )
 
 // Publisher defines the interface for publishing events
@@ -41,7 +41,7 @@ func NewRabbitMQPublisher(config *Config) (*RabbitMQPublisher, error) {
 		return nil, fmt.Errorf("failed to open channel: %w", err)
 	}
 
-	// Declare exchange
+	// [FIXED] Uses config.ExchangeType which was restored in config.go
 	err = channel.ExchangeDeclare(
 		config.ExchangeName, // name
 		config.ExchangeType, // type
@@ -52,16 +52,13 @@ func NewRabbitMQPublisher(config *Config) (*RabbitMQPublisher, error) {
 		nil,                 // arguments
 	)
 	if err != nil {
-		if closeErr := channel.Close(); closeErr != nil {
-			log.Printf("Error closing channel after exchange declare failure: %v", closeErr)
-		}
-		if closeErr := conn.Close(); closeErr != nil {
-			log.Printf("Error closing connection after exchange declare failure: %v", closeErr)
-		}
+		// Clean up on failure
+		_ = channel.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to declare exchange: %w", err)
 	}
 
-	log.Printf("Connected to RabbitMQ, exchange: %s", config.ExchangeName)
+	log.Printf("INFO: Connected to RabbitMQ, exchange: %s", config.ExchangeName)
 
 	return &RabbitMQPublisher{
 		conn:         conn,
@@ -77,7 +74,7 @@ func (p *RabbitMQPublisher) PublishTripCreated(ctx context.Context, event *domai
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
 
-	// Lock to protect concurrent access to channel (amqp.Channel is not thread-safe)
+	// [CRITICAL] Mutex Lock: amqp.Channel is NOT thread-safe for publishing
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -96,36 +93,30 @@ func (p *RabbitMQPublisher) PublishTripCreated(ctx context.Context, event *domai
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to publish event: %w", err)
+		return fmt.Errorf("failed to publish RabbitMQ event: %w", err)
 	}
 
-	log.Printf("Published event: type=%s, trip_id=%s", event.EventType, event.Payload.TripID)
+	log.Printf("INFO: Published RabbitMQ event: type=%s, trip_id=%s", event.EventType, event.Payload.TripID)
 	return nil
 }
 
 // Close closes the RabbitMQ connection
 func (p *RabbitMQPublisher) Close() error {
-	// Lock to protect concurrent access to channel
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	var chanErr, connErr error
 
 	if p.channel != nil {
-		if chanErr = p.channel.Close(); chanErr != nil {
-			log.Printf("Error closing channel: %v", chanErr)
-		}
+		chanErr = p.channel.Close()
 	}
 
 	if p.conn != nil {
-		if connErr = p.conn.Close(); connErr != nil {
-			log.Printf("Error closing connection: %v", connErr)
-		}
+		connErr = p.conn.Close()
 	}
 
-	log.Println("Closed RabbitMQ connection")
+	log.Println("INFO: Closed RabbitMQ connection")
 
-	// Return channel error first if present, otherwise connection error
 	if chanErr != nil {
 		return chanErr
 	}
