@@ -6,7 +6,8 @@ import logging
 from typing import List, Dict, Any
 from datetime import datetime
 
-from src.schemas.trip_request import TripRequestNotification
+# [FIXED] Imported Location schema to satisfy TripRequestNotification requirements
+from src.schemas.trip_request import TripRequestNotification, Location
 from src.clients.gateway_client import ClientGatewayClient
 from src.utils.geo import find_nearby_drivers
 
@@ -28,29 +29,37 @@ class DriverNotificationService:
 
     async def notify_available_drivers(self, trip_payload: dict):
         """
-        [FIXED] Entry point for SQS Consumer. 
-        Parses raw SQS payload and triggers the nearby driver search.
-        Updated to use snake_case keys (trip_id) to match Go service output.
+        Processes trip payload and triggers geo-fenced notifications.
+        [FIXED] Updated to use camelCase (tripId) and Location objects for schema compliance.
         """
-        # Match Go's JSON tags (snake_case)
-        trip_id = trip_payload.get('trip_id')
-        pickup = trip_payload.get('pickup', {})
+        # [FIXED] Synchronized with Go service output (camelCase)
+        trip_id = trip_payload.get('tripId')
+        pickup_data = trip_payload.get('pickup', {})
+        dropoff_data = trip_payload.get('dropoff', {})
         
-        # Extract coordinates with Kyiv defaults
-        lat = pickup.get('lat', 50.4501)
-        lng = pickup.get('lng', 30.5234)
+        # Coordinates for geo-fencing
+        lat = pickup_data.get('lat', 50.4501)
+        lng = pickup_data.get('lng', 30.5234)
 
         logger.info(f"SQS Event: Processing driver discovery for Trip {trip_id}")
 
-        # Prepare data for the notification schema
+        # [FIXED] Construct Location objects to satisfy Pydantic schema
         notification_data = {
-            "pickup_address": pickup.get('address', 'Unknown'),
-            "dropoff_address": trip_payload.get('dropoff', {}).get('address', 'Unknown'),
-            "created_at": datetime.now() # Fallback timestamp
+            "pickup": Location(
+                lat=lat,
+                lng=lng,
+                address=pickup_data.get('address', 'Unknown')
+            ),
+            "dropoff": Location(
+                lat=dropoff_data.get('lat', 0.0),
+                lng=dropoff_data.get('lng', 0.0),
+                address=dropoff_data.get('address', 'Unknown')
+            ),
+            # [FIXED] Use UTC for cross-service consistency
+            "created_at": datetime.utcnow()
         }
 
         # Bridge to the existing geo-fencing logic
-        # Ensure trip_id is a string for consistent dictionary mapping
         return await self.notify_nearby_drivers(
             trip_id=str(trip_id),
             pickup_latitude=lat,
@@ -71,7 +80,6 @@ class DriverNotificationService:
             logger.error(f"Driver not found in memory: {driver_id}")
             return False
         
-        # Support both 'AVAILABLE' (legacy) and 'ONLINE' (new status)
         status = driver.get("status", "OFFLINE")
         if status not in ["AVAILABLE", "ONLINE"]:
             logger.warning(f"Driver {driver_id} is {status}, skipping.")
@@ -79,14 +87,12 @@ class DriverNotificationService:
         
         for attempt in range(1, self.max_retries + 1):
             try:
-                # Dispatches to Telegram via Gateway
                 success = await self.gateway_client.send_driver_notification(
                     driver_id=driver_id,
                     notification=notification
                 )
                 
                 if success:
-                    # Update status so we don't spam the same driver
                     driver["status"] = "NOTIFIED"
                     return True
                 
@@ -120,6 +126,8 @@ class DriverNotificationService:
         for driver in nearby_drivers:
             driver_id = driver["id"]
             
+            # [FIXED] Pydantic will now validate correctly because notification_data 
+            # keys match the Location fields exactly
             notification = TripRequestNotification(
                 trip_id=trip_id,
                 driver_id=driver_id,
