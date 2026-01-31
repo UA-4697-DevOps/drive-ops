@@ -2,21 +2,19 @@
 
 ## 1. Project Overview & Architecture
 **Project:** drive-ops (Ride-Sharing Platform)
-
 **Architecture:** Microservices
-
 **Database Pattern:** Database-per-service (No shared tables).
 
 **Communication Channels:**
 * **Synchronous (HTTP/REST):**
-  * `TG User` <-> `Client Gateway` (Telegram API)
-  * `Client Gateway` -> `Trip Service` (Create Order / Poll Status)
-  * `Client Gateway` -> `Driver Service` (Accept Order)
-  * `Driver Service` -> `Client Gateway` (Webhook: Notify Driver)
-* **Asynchronous (AWS SQS):**
-  * `Trip Service` -> `Driver Service` (Queue: `trip-created-dev.fifo`)
-  * `Driver Service` -> `Trip Service` (Queue: `driver-assigned-dev.fifo`)
-  * `Driver Service` -> `Trip Service` (Queue: `trip-completed-dev.fifo`)
+    * `TG User` $\leftrightarrow$ `Client Gateway` (Telegram API)
+    * `Client Gateway` $\rightarrow$ `Trip Service` (Create Order / Poll Status)
+    * `Client Gateway` $\rightarrow$ `Driver Service` (Accept Order)
+    * `Driver Service` $\rightarrow$ `Client Gateway` (Webhook: Notify Driver)
+* **Asynchronous (AWS SQS / LocalStack):**
+    * `Trip Service` $\rightarrow$ `Driver Service` (Queue: `trip-created-dev.fifo`)
+    * `Driver Service` $\rightarrow$ `Trip Service` (Queue: `driver-assigned-dev.fifo`)
+    * `Driver Service` $\rightarrow$ `Trip Service` (Queue: `trip-completed-dev.fifo`)
 
 ## 2. Infrastructure & DevOps Principles
 **Environment:**
@@ -36,6 +34,7 @@
 
 ## 3. System Data Flow (Source of Truth)
 This diagram defines the canonical flow for Ride Creation and Assignment.
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -137,7 +136,7 @@ sequenceDiagram
 * `scripts/`: Helper scripts (e.g., `hooks/pre-commit` for linting).
 * `documentation/`: Project documentation and architecture diagrams.
 * `.github/`: **CI/CD Workflows**. GitHub Actions for build and deployment.
-* `docker-compose.yml`: Local orchestration for **Services** and **Databases** (Postgres). Connects to real AWS SQS.
+* `docker-compose.yml`: Local orchestration for **Services** and **Databases** (Postgres).
 * `.env.example`: Configuration template.
 * `.coderrabbit.yaml`: AI Code Review configuration.
 * `CONTRIBUTING.md`: Guidelines for contributing to the project.
@@ -171,11 +170,8 @@ sequenceDiagram
   * `clients/`: Outbound communication.
     * `gateway_client.py`: HTTP client for calling Client Gateway webhooks.
     * `sqs_publisher.py`: **SQS Publisher**. Sends `camelCase` events to AWS.
-    * `rabbitmq_publisher.py`: **Legacy**. Deprecated RabbitMQ publisher.
   * `consumers/`: Inbound SQS handlers.
     * `trip_sqs_consumer.py`: **Main SQS Consumer**. Polls `trip.created` events from AWS.
-    * `trip_events_consumer.py`: Legacy consumer logic.
-    * `driver_response_consumer.py`: Handles driver responses.
   * `schemas/`: Pydantic models (Data Transfer Objects).
     * `trip_request.py`: Schema for incoming trip data.
     * `driver_response.py`: Schema for driver actions.
@@ -218,10 +214,8 @@ sequenceDiagram
     * `handler.go`: REST API handlers (e.g., `POST /trips`).
   * `broker/`: SQS Publisher/Consumer implementation.
     * `config.go`: Broker configuration settings.
-    * `consumer.go`: Base consumer interface.
     * `sqs_consumer.go`: **SQS Implementation**. Handles `driver.assigned` and `trip.completed` events.
     * `sqs_publisher.go`: **SQS Publisher Implementation**. Publishes `trip.created` with FIFO deduplication.
-    * `publisher.go`: Message publisher interface.
     * `events.go`: Event builders and payload structures.
   * `domain/`: Struct definitions and Domain Errors.
     * `trip.go`: Core entities and errors (`ErrInvalidTripStatus`, etc.).
@@ -249,7 +243,7 @@ sequenceDiagram
     * `client-gateway/`: **Python Bot Deployment**. Symlinks source code to `/opt/drive-ops` to enable hot-reloading. Deploys container via Docker Compose.
     * `docker/`: **Engine Setup**. Installs Docker Engine, Buildx plugin, and `python3-docker` SDK. Handles GPG keys and architecture mapping (AMD64/ARM64).
     * `driver-service/`: **Driver Backend Deployment**. Symlinks source code. Orchestrates both `driver-service` and `driver-migrations` containers.
-    * `infra/`: **Core Environment Setup**. Creates `/opt/drive-ops` root. Securely copies `.env` and `docker-compose.yml`. Starts shared services (`db`, `localstack` for SQS) and waits for health checks (ports 5432/4566).
+    * `infra/`: **Core Environment Setup**. Creates `/opt/drive-ops` root. Securely copies `.env` and `docker-compose.yml`. Starts shared services (`db`) and waits for health checks (ports 5432).
     * `trip-service/`: **Go Backend Deployment**. Symlinks source code. Orchestrates both `trip-service` and `trip-migrations` containers.
   * `playbook.yaml`: Main entry point orchestrating all roles.
 * `postgres/init-db/`:
