@@ -24,28 +24,6 @@ services:
     networks:
       - drive-ops-net
 
-  # RabbitMQ Message Broker (Keep for legacy/other parts)
-  mq:
-    image: rabbitmq:3-management-alpine
-    container_name: drive-ops-mq
-    restart: always
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
-    healthcheck:
-      test: ["CMD-SHELL", "rabbitmq-diagnostics -q check_running"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    networks:
-      - drive-ops-net
-
   # --- Microservices Stack ---
 
   # Database Migrations for Trip Service
@@ -80,7 +58,6 @@ services:
       - SQS_DRIVER_ASSIGNED_URL=${SQS_DRIVER_ASSIGNED_URL}
       - SQS_TRIP_CREATED_URL=${SQS_TRIP_CREATED_URL}
       - SQS_TRIP_COMPLETED_URL=${SQS_TRIP_COMPLETED_URL}
-      # [REMOVED] SQS_ENDPOINT removed to stop blank string warnings
     ports:
       - "8081:8081"
     healthcheck:
@@ -91,8 +68,6 @@ services:
       start_period: 15s
     depends_on:
       db:
-        condition: service_healthy
-      mq:
         condition: service_healthy
       trip-migrations:
         condition: service_completed_successfully
@@ -129,15 +104,12 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app/src
       - DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:5432/${DRIVER_DB_NAME}
-      
-      # --- AWS / SQS Configuration ---
       - AWS_REGION=us-east-2
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - SQS_TRIP_CREATED_URL=${SQS_TRIP_CREATED_URL}
       - SQS_DRIVER_ASSIGNED_URL=${SQS_DRIVER_ASSIGNED_URL}
       - SQS_TRIP_COMPLETED_URL=${SQS_TRIP_COMPLETED_URL}
-      # [REMOVED] SQS_ENDPOINT removed to stop blank string warnings
     ports:
       - "8082:8082" 
     healthcheck:
@@ -148,8 +120,6 @@ services:
       start_period: 15s
     depends_on:
       db:
-        condition: service_healthy
-      mq:
         condition: service_healthy
       driver-migrations:
         condition: service_completed_successfully
@@ -182,4 +152,3 @@ networks:
 
 volumes:
   postgres_data:
-  rabbitmq_data:

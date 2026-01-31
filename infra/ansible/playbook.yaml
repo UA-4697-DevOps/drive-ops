@@ -11,8 +11,7 @@
     drive_ops_src_root: "/vagrant"
     # Build strategy: 'always' for dev hot-reloads, 'policy' for stable environments
     docker_build_strategy: "always"
-    # FIXED: Deduplicating user list using Jinja2 'unique' filter to avoid redundant entries
-    # This handles cases where 'ansible_user_id' is already 'vagrant'
+    # Deduplicating user list using Jinja2 'unique' filter to avoid redundant entries
     docker_users: "{{ (['vagrant', ansible_user_id]) | unique }}"
 
     # System packages to be installed
@@ -34,15 +33,12 @@
       tags: always
     
     - name: Install general system dependencies and utilities
-      # FIXED: Moved general tools (git, vim, htop, etc.) here from the Docker role
-      # This follows the 'Separation of Concerns' principle for cleaner roles
       ansible.builtin.apt:
         name: "{{ system_packages }}"
         state: present
       tags: always
 
     - name: Install kernel headers (Skip on WSL)
-      # Standard headers are unavailable for custom Microsoft WSL 2 kernels
       ansible.builtin.apt:
         name: "linux-headers-{{ ansible_kernel }}"
         state: present
@@ -59,7 +55,8 @@
     # 1. Base Docker Engine installation with dearmored keys and arch mapping
     - { role: docker, tags: [ docker ] }
 
-    # 2. Shared Infrastructure (DB, MQ, and Centralized Configs)
+    # 2. Shared Infrastructure (PostgreSQL and Centralized Configs)
+    # [FINALIZED] MQ removed from infra description to match Clean Slate logic
     - { role: infra, tags: [ infra ] }
 
     # 3. Independent Services (Microservices stack)
@@ -73,6 +70,7 @@
         msg: 
           - "========================================"
           - " Infrastructure is ready!"
+          - " Architecture: AWS SQS FIFO Unified Bus"
           - " Target group: {{ ansible_limit | default('local_vm') }}"
           - " Source root: {{ drive_ops_src_root }}"
           - " Users added to docker group: {{ docker_users | join(', ') }}"
