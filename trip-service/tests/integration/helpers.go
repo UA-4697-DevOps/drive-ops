@@ -1,6 +1,8 @@
 package integration
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 	"testing"
 	"time"

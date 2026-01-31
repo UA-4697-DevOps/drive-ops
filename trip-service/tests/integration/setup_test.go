@@ -24,16 +24,16 @@ func TestMain(m *testing.M) {
     // Inject mandatory AWS SQS variables for the test environment
     // These prevent broker.LoadConfig() from calling log.Fatalf during service init
     if os.Getenv("AWS_REGION") == "" {
-        os.Setenv("AWS_REGION", "us-east-2") 
+        _ = os.Setenv("AWS_REGION", "us-east-2") // Added _ =
     }
     if os.Getenv("SQS_TRIP_CREATED_URL") == "" {
-        os.Setenv("SQS_TRIP_CREATED_URL", "https://sqs.us-east-2.amazonaws.com/123456789012/trip-created-dev.fifo")
+        _ = os.Setenv("SQS_TRIP_CREATED_URL", "https://sqs.us-east-2.amazonaws.com/123456789012/trip-created-dev.fifo")
     }
     if os.Getenv("AWS_ACCESS_KEY_ID") == "" {
-        os.Setenv("AWS_ACCESS_KEY_ID", "testing_key")
+        _ = os.Setenv("AWS_ACCESS_KEY_ID", "testing_key")
     }
     if os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
-        os.Setenv("AWS_SECRET_ACCESS_KEY", "testing_secret")
+        _ = os.Setenv("AWS_SECRET_ACCESS_KEY", "testing_secret")
     }
 
     dsn := getTestDSN()
