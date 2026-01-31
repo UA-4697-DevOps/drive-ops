@@ -15,7 +15,7 @@ func simpleGeocode(address string) (lat, lng float64) {
 }
 
 // BuildTripCreatedEvent constructs a TripCreatedEvent from a Trip.
-// [CRITICAL] Ensure domain.TripCreatedEvent has json:"camelCase" tags.
+// Standardizes the envelope fields for SQS FIFO delivery.
 func BuildTripCreatedEvent(trip *domain.Trip, correlationID string) *domain.TripCreatedEvent {
 	event := &domain.TripCreatedEvent{}
 
@@ -47,26 +47,4 @@ func BuildTripCreatedEvent(trip *domain.Trip, correlationID string) *domain.Trip
 	}
 
 	return event
-}
-
-// DriverAssignedEvent strictly matches the "driver.assigned" payload.
-// These tags ensure the Go Trip Service can READ what the Python Driver Service SENDS.
-type DriverAssignedEvent struct {
-	Version       string    `json:"version"`
-	MessageID     string    `json:"messageId"`
-	Timestamp     time.Time `json:"timestamp"`
-	CorrelationID string    `json:"correlationId"`
-	EventType     string    `json:"eventType"`
-	Source        string    `json:"source"`
-	Payload       struct {
-		TripID      string `json:"tripId"`      // Must match Python key
-		DriverID    string `json:"driverId"`    // Must match Python key
-		DriverName  string `json:"driverName"`
-		VehicleInfo struct {
-			Make         string `json:"make"`
-			Model        string `json:"model"`
-			LicensePlate string `json:"licensePlate"`
-		} `json:"vehicleInfo"`
-		AssignedAt time.Time `json:"assignedAt"`
-	} `json:"payload"`
 }
