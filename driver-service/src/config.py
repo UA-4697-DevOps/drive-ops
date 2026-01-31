@@ -19,18 +19,20 @@ class Settings(BaseSettings):
     DB_USER: str = "postgres"
     DB_PASSWORD: str = "postgres"
     DRIVER_DB_NAME: str = "driver_db"
-    # Added explicit DATABASE_URL to support the override in docker-compose
     DATABASE_URL: Optional[str] = None
 
-    # --- AWS / SQS Settings (NEW) ---
+    # --- AWS / SQS Settings ---
     AWS_REGION: str = "us-east-2"
     AWS_ACCESS_KEY_ID: Optional[str] = None
     AWS_SECRET_ACCESS_KEY: Optional[str] = None
-    SQS_ENDPOINT: Optional[str] = None
+    # [REMOVED] SQS_ENDPOINT removed to finalize real AWS production alignment
+    
+    # Queue URLs for Trip Lifecycle
+    SQS_TRIP_CREATED_URL: Optional[str] = None 
     SQS_DRIVER_ASSIGNED_URL: Optional[str] = None
     SQS_TRIP_COMPLETED_URL: Optional[str] = None
 
-    # --- RabbitMQ Settings (Deprecated but kept for safety) ---
+    # --- RabbitMQ Settings (Deprecated) ---
     ENABLE_RABBITMQ: bool = True
     RABBITMQ_HOST: str = "mq"
     RABBITMQ_PORT: int = 5672

@@ -94,16 +94,14 @@ func main() {
 		log.Fatalf("Failed to load AWS Config: %v", err)
 	}
 
-	// 3. Initialize Outbound Publisher (RabbitMQ)
-	var publisher *broker.RabbitMQPublisher
-	err = connectWithRetry("RabbitMQ Publisher", func() error {
-		var err error
-		publisher, err = broker.NewRabbitMQPublisher(brokerConfig)
-		return err
-	})
-	if err != nil {
-		log.Fatalf("Fatal: %v", err)
+	// 3. Initialize Outbound Publisher (SQS)
+	if brokerConfig.SQS_TRIP_CREATED_URL == "" {
+		log.Fatalf("Fatal: SQS_TRIP_CREATED_URL is not set in environment")
 	}
+	
+	// [FIX] Signature updated: Removed brokerConfig argument
+	publisher := broker.NewSQSPublisher(awsCfg, brokerConfig.SQS_TRIP_CREATED_URL)
+	log.Printf("Successfully initialized SQS Publisher on: %s", brokerConfig.SQS_TRIP_CREATED_URL)
 
 	// 4. Dependency Injection
 	repo := repository.NewTripRepository(db)
@@ -112,7 +110,7 @@ func main() {
 
 	// --- SQS Consumer Setup ---
 	consumerCtx, consumerCancel := context.WithCancel(context.Background())
-	consumerErrCh := make(chan error, 2) // Increased buffer for multiple consumers
+	consumerErrCh := make(chan error, 2)
 
 	// Helper to start consumers in the background
 	startConsumer := func(name string, url string) {
@@ -120,7 +118,8 @@ func main() {
 			log.Printf("WARNING: %s URL is empty. Consumer skipped.", name)
 			return
 		}
-		consumer := broker.NewSQSConsumer(awsCfg, url, svc, brokerConfig)
+		// [FIX] Signature updated: Removed brokerConfig argument
+		consumer := broker.NewSQSConsumer(awsCfg, url, svc)
 		go func() {
 			log.Printf("INFO: Starting %s SQS Consumer on: %s", name, url)
 			if err := consumer.Start(consumerCtx); err != nil {
@@ -179,11 +178,8 @@ func main() {
 
 	log.Println("Stopping SQS Consumers...")
 	consumerCancel()
+	
 	time.Sleep(500 * time.Millisecond)
-
-	if err := publisher.Close(); err != nil {
-		log.Printf("Error closing publisher: %v", err)
-	}
 
 	log.Println("Server stopped gracefully")
 }

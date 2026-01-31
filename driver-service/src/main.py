@@ -99,11 +99,30 @@ async def lifespan(app: FastAPI):
         # We do not stop the app here to allow health checks, but services will be degraded.
 
     # 2. Start Background Message Queue Consumers
+    logger.info("Initializing Background Consumers...")
+
+    # A. New SQS Trip Consumer (Replacing RabbitMQ for Trip Created events)
+    if settings.SQS_TRIP_CREATED_URL:
+        try:
+            from src.consumers.trip_sqs_consumer import TripSQSConsumer
+            logger.info("Starting TripSQSConsumer (AWS SQS)...")
+            trip_sqs_consumer = TripSQSConsumer(
+                notification_service=notification_service,
+                trip_requests_storage=trip_requests
+            )
+            # SQS consumer is native async, no need for to_thread
+            trip_events_consumer_task = asyncio.create_task(trip_sqs_consumer.start())
+            logger.info("Trip SQS Consumer background task started")
+        except Exception as e:
+            logger.error(f"Failed to start SQS Trip Consumer: {e}")
+
+    # B. Legacy RabbitMQ Consumers (Keeping as a bridge or if SQS is disabled)
     if settings.RABBITMQ_HOST:
         try:
-            # Trip Events Consumer: Handles incoming trip creation notifications
-            from consumers.trip_events_consumer import TripEventsConsumer
-            logger.info("Creating TripEventsConsumer (RabbitMQ)...")
+            # [FIXED] Updated import path to src.consumers for Docker compatibility
+            from src.consumers.trip_events_consumer import TripEventsConsumer
+            logger.info("Creating TripEventsConsumer (RabbitMQ Bridge)...")
+            
             trip_events_consumer = TripEventsConsumer(
                 rabbitmq_host=settings.RABBITMQ_HOST,
                 rabbitmq_port=settings.RABBITMQ_PORT,
@@ -113,15 +132,17 @@ async def lifespan(app: FastAPI):
                 notification_service=notification_service,
                 trip_requests_storage=trip_requests
             )
-            trip_events_consumer_task = asyncio.create_task(
+            # Legacy consumer uses pika (blocking), so we use to_thread
+            legacy_trip_task = asyncio.create_task(
                 asyncio.to_thread(trip_events_consumer.start_consuming)
             )
-            logger.info("Trip Events Consumer background task started")
+            logger.info("Legacy RabbitMQ Trip Consumer started")
 
-            # Driver Responses Consumer: Handles accept/reject commands from drivers
+            # Driver Responses Consumer (RabbitMQ)
             # [FIXED] Guard check: Do not start if response_service failed to initialize
             if response_service:
-                from consumers.driver_response_consumer import DriverResponseConsumer
+                # [FIXED] Updated import path to src.consumers
+                from src.consumers.driver_response_consumer import DriverResponseConsumer
                 driver_responses_consumer = DriverResponseConsumer(
                     rabbitmq_host=settings.RABBITMQ_HOST,
                     rabbitmq_port=settings.RABBITMQ_PORT,

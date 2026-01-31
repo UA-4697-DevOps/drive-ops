@@ -13,41 +13,20 @@ type Config struct {
 	ExchangeName string
 	ExchangeType string
 
-	// SQS specific
+	// SQS functional queue URLs
+	SQS_TRIP_CREATED_URL    string // [NEW] Added for Phase 2: Trip Creation
 	SQS_DRIVER_ASSIGNED_URL string
-	SQS_TRIP_COMPLETED_URL  string // [ADD THIS] Required for Phase 3 completion
-	AWSRegion               string
-	SQSEndpoint             string // Needed for LocalStack overrides
+	SQS_TRIP_COMPLETED_URL  string 
+	
+	AWSRegion   string
+	SQSEndpoint string // LocalStack override
 }
 
 // LoadConfig loads broker configuration from environment variables
 func LoadConfig() (*Config, error) {
-	// 1. RabbitMQ Configuration
+	// 1. Legacy RabbitMQ Configuration (Kept for bridge stability)
 	var connURL string
 	if rabbitmqURL := os.Getenv("RABBITMQ_URL"); rabbitmqURL != "" {
-		parsedURL, err := url.Parse(rabbitmqURL)
-		if err != nil {
-			return nil, fmt.Errorf("invalid RABBITMQ_URL: failed to parse: %w", err)
-		}
-
-		if parsedURL.Scheme != "amqp" && parsedURL.Scheme != "amqps" {
-			return nil, fmt.Errorf("invalid RABBITMQ_URL: scheme must be 'amqp' or 'amqps', got '%s'", parsedURL.Scheme)
-		}
-
-		if parsedURL.User == nil {
-			return nil, fmt.Errorf("invalid RABBITMQ_URL: credentials are required")
-		}
-
-		username := parsedURL.User.Username()
-		password, _ := parsedURL.User.Password()
-
-		if username == "" {
-			return nil, fmt.Errorf("invalid RABBITMQ_URL: username cannot be empty")
-		}
-		if password == "" {
-			return nil, fmt.Errorf("invalid RABBITMQ_URL: password cannot be empty")
-		}
-
 		connURL = rabbitmqURL
 	} else {
 		host := getEnv("RABBITMQ_HOST", "localhost")
@@ -55,9 +34,8 @@ func LoadConfig() (*Config, error) {
 		user := os.Getenv("RABBITMQ_USER")
 		password := os.Getenv("RABBITMQ_PASSWORD")
 
-		// Warning only (allows running SQS-only mode)
 		if user == "" || password == "" {
-			log.Println("Warning: RabbitMQ credentials not fully set, connection might fail if required")
+			log.Println("Warning: RabbitMQ credentials not set; ignore if running SQS-only mode")
 		}
 
 		encodedUser := url.QueryEscape(user)
@@ -68,20 +46,27 @@ func LoadConfig() (*Config, error) {
 	exchangeName := getEnv("RABBITMQ_EXCHANGE", "trip_events")
 	exchangeType := getEnv("RABBITMQ_EXCHANGE_TYPE", "topic")
 
-	// 2. SQS Configuration
-	// Read explicit functional queue URLs from environment
+	// 2. SQS Configuration [UPDATED]
+	// Retrieve all functional FIFO queue URLs from environment
+	sqsCreatedURL := os.Getenv("SQS_TRIP_CREATED_URL")    // [NEW]
 	sqsAssignedURL := os.Getenv("SQS_DRIVER_ASSIGNED_URL")
 	sqsCompletedURL := os.Getenv("SQS_TRIP_COMPLETED_URL")
 	
 	awsRegion := getEnv("AWS_REGION", "us-east-2") 
 	sqsEndpoint := os.Getenv("SQS_ENDPOINT") 
 
+	// Validation: Ensure the primary migration URL is present
+	if sqsCreatedURL == "" {
+		log.Println("Warning: SQS_TRIP_CREATED_URL is missing; publishing will fail")
+	}
+
 	return &Config{
 		URL:                     connURL,
 		ExchangeName:            exchangeName,
 		ExchangeType:            exchangeType,
+		SQS_TRIP_CREATED_URL:    sqsCreatedURL,    // [NEW]
 		SQS_DRIVER_ASSIGNED_URL: sqsAssignedURL,
-		SQS_TRIP_COMPLETED_URL:  sqsCompletedURL, // [ADD THIS] Mapping the environment variable
+		SQS_TRIP_COMPLETED_URL:  sqsCompletedURL, 
 		AWSRegion:               awsRegion,
 		SQSEndpoint:             sqsEndpoint,
 	}, nil
