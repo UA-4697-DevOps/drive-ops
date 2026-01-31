@@ -30,30 +30,40 @@ class DriverNotificationService:
     async def notify_available_drivers(self, trip_payload: dict):
         """
         Processes trip payload and triggers geo-fenced notifications.
-        [FIXED] Updated to use camelCase (tripId) and Location objects for schema compliance.
+        [FIXED] Added strict tripId validation and safe coordinate fallbacks.
         """
         # [FIXED] Synchronized with Go service output (camelCase)
         trip_id = trip_payload.get('tripId')
+
+        # [FIXED] Guard against missing tripId to prevent str(None) -> "None" conversion
+        if not trip_id:
+            logger.error(f"SQS Event Error: Missing tripId in payload. Keys present: {list(trip_payload.keys())}")
+            return []
+
         pickup_data = trip_payload.get('pickup', {})
         dropoff_data = trip_payload.get('dropoff', {})
         
-        # Coordinates for geo-fencing
-        lat = pickup_data.get('lat', 50.4501)
-        lng = pickup_data.get('lng', 30.5234)
+        # [FIXED] Default pickup to Kyiv center, but default dropoff to pickup 
+        # to avoid "Null Island" (0.0, 0.0) errors.
+        p_lat = pickup_data.get('lat', 50.4501)
+        p_lng = pickup_data.get('lng', 30.5234)
+
+        d_lat = dropoff_data.get('lat', p_lat)
+        d_lng = dropoff_data.get('lng', p_lng)
 
         logger.info(f"SQS Event: Processing driver discovery for Trip {trip_id}")
 
         # [FIXED] Construct Location objects to satisfy Pydantic schema
         notification_data = {
             "pickup": Location(
-                lat=lat,
-                lng=lng,
-                address=pickup_data.get('address', 'Unknown')
+                lat=p_lat,
+                lng=p_lng,
+                address=pickup_data.get('address', 'Unknown Pickup')
             ),
             "dropoff": Location(
-                lat=dropoff_data.get('lat', 0.0),
-                lng=dropoff_data.get('lng', 0.0),
-                address=dropoff_data.get('address', 'Unknown')
+                lat=d_lat,
+                lng=d_lng,
+                address=dropoff_data.get('address', 'Unknown Dropoff')
             ),
             # [FIXED] Use UTC for cross-service consistency
             "created_at": datetime.utcnow()
@@ -62,8 +72,8 @@ class DriverNotificationService:
         # Bridge to the existing geo-fencing logic
         return await self.notify_nearby_drivers(
             trip_id=str(trip_id),
-            pickup_latitude=lat,
-            pickup_longitude=lng,
+            pickup_latitude=p_lat,
+            pickup_longitude=p_lng,
             notification_data=notification_data
         )
     

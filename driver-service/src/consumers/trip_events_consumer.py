@@ -74,15 +74,26 @@ class TripEventsConsumer:
             raise
     
     async def process_trip_created_event(self, event_data: Dict[str, Any]):
-        """Process trip.event.created from Trip Service"""
+        """
+        Process trip.event.created from Trip Service.
+        [FIXED] Updated to handle camelCase keys from the Go service.
+        """
         try:
             payload = event_data.get("payload", {})
-            trip_id = payload.get("trip_id")
+            
+            # [FIXED] Synchronized with new Go domain tags (camelCase)
+            # We use .get() with fallbacks to maintain backward compatibility during the shift.
+            trip_id = payload.get("tripId") or payload.get("trip_id")
+            
             pickup_data = payload.get("pickup", {})
             
             logger.info(f"Processing trip.event.created for trip {trip_id}")
             
             # Check idempotency first
+            if not trip_id:
+                logger.error(f"Legacy Bridge: Missing tripId in payload. Keys: {list(payload.keys())}")
+                return
+
             if trip_id in self.trip_requests:
                 logger.info(f"Trip {trip_id} already tracked, skipping duplicate processing")
                 return
@@ -105,11 +116,12 @@ class TripEventsConsumer:
                 logger.error(f"Missing or incomplete dropoff data for trip {trip_id}")
                 return
 
-            # Create notification data
+            # Create notification data - Using UTC for consistency
             notification_data = {
                 "pickup": Location(**pickup_data),
                 "dropoff": Location(**dropoff_data),
-                "passenger_name": payload.get("passenger_id", "Unknown"),
+                # [FIXED] Updated key to match new passengerId tag
+                "passenger_name": payload.get("passengerId") or payload.get("passenger_id", "Unknown"),
                 "estimated_distance_km": 5.0,
                 "estimated_duration_min": 15,
                 "fare_estimate": 100.0,
@@ -117,7 +129,7 @@ class TripEventsConsumer:
             }
             
             notified_drivers = await self.notification_service.notify_nearby_drivers(
-                trip_id=trip_id,
+                trip_id=str(trip_id), # Ensure string conversion
                 pickup_latitude=pickup_lat,
                 pickup_longitude=pickup_lng,
                 notification_data=notification_data,
@@ -125,7 +137,7 @@ class TripEventsConsumer:
             )
             
             # Track trip request in storage
-            self.trip_requests[trip_id] = {
+            self.trip_requests[str(trip_id)] = {
                 "status": "pending",
                 "notified_drivers": notified_drivers,
                 "responses": {},
@@ -133,57 +145,59 @@ class TripEventsConsumer:
                 "pickup": pickup_data,
                 "dropoff": dropoff_data
             }
-            logger.info(f"Tracked trip request {trip_id} in storage (storage_id={id(self.trip_requests)}, total_trips={len(self.trip_requests)})")
             
-            logger.info(
-                f"Trip {trip_id} processing complete. "
-                f"Notified {len(notified_drivers)} drivers: {notified_drivers}"
-            )
+            logger.info(f"Tracked trip request {trip_id} (Legacy Bridge)")
             
         except Exception as e:
-            logger.error(
-                f"Error processing trip.event.created: {e}",
-                exc_info=True
-            )
+            logger.error(f"Error processing legacy trip created event: {e}", exc_info=True)
     
     def callback(self, ch, method, properties, body):
         """RabbitMQ callback for incoming messages"""
         try:
             event_data = json.loads(body)
-            logger.info(f"Received event: {event_data.get('event_type')}")
             
-            import asyncio
-            asyncio.run(self.process_trip_created_event(event_data))
+            # [FIXED] Updated to handle both camelCase and snake_case for logging
+            # Matches the update in process_trip_created_event
+            event_type = event_data.get('eventType') or event_data.get('event_type')
+            logger.info(f"Received legacy event: {event_type}")
             
+            # [REFINED] Get the existing loop if possible, or create one.
+            # Running asyncio from a synchronous pika callback
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            loop.run_until_complete(self.process_trip_created_event(event_data))
+            
+            # Manual Ack after successful async processing
             ch.basic_ack(delivery_tag=method.delivery_tag)
             
         except Exception as e:
-            logger.error(f"Error in callback: {e}", exc_info=True)
+            logger.error(f"Error in RabbitMQ legacy callback: {e}", exc_info=True)
+            # Nack and requeue so we don't lose the message on transient failure
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
     
     def start_consuming(self):
-        """Start consuming messages"""
+        """Start consuming messages with QOS=1 for reliability"""
         self.connect()
+        # Ensure we only process one message at a time per consumer thread
         self.channel.basic_qos(prefetch_count=1)
         self.channel.basic_consume(
             queue=self.queue_name,
             on_message_callback=self.callback
         )
         
-        logger.info(f"Started consuming from {self.queue_name}")
+        logger.info(f"Started consuming from legacy queue: {self.queue_name}")
         try:
             self.channel.start_consuming()
         except KeyboardInterrupt:
-            logger.info("Stopping consumer...")
             self.stop()
     
     def stop(self):
-        """Stop consuming and close connection (thread-safe)"""
-        # FIXED: Use thread-safe callback for pika BlockingConnection
-        if self.connection and self.connection.is_open and self.channel:
-            try:
-                self.connection.add_callback_threadsafe(self.channel.stop_consuming)
-            except Exception as e:
-                logger.error(f"Error stopping consumer: {e}")
-        # Connection will close automatically after stop_consuming completes
-        logger.info("Consumer stop requested")
+        """Thread-safe shutdown of the Pika BlockingConnection"""
+        if self.connection and self.connection.is_open:
+            logger.info("Stopping legacy consumer...")
+            # Schedule the stop command on the Pika thread
+            self.connection.add_callback_threadsafe(self.channel.stop_consuming)

@@ -11,7 +11,6 @@ class TripSQSConsumer:
         self.notification_service = notification_service
         self.trip_requests = trip_requests_storage
         
-        # SQS Client initialization
         self.sqs = boto3.client(
             "sqs",
             region_name=settings.AWS_REGION,
@@ -41,11 +40,9 @@ class TripSQSConsumer:
                     continue
 
                 for msg in messages:
-                    # [FIXED] Updated to call the internal _process_message method
                     await self._process_message(msg)
 
             except Exception as e:
-                # [FIXED] Prevent tight loops if AWS is unreachable
                 logger.error(f"Critical error in Trip SQS polling loop: {e}")
                 await asyncio.sleep(5) 
 
@@ -54,11 +51,11 @@ class TripSQSConsumer:
         try:
             body = json.loads(message['Body'])
             payload = body.get('payload', {})
-            trip_id = payload.get('tripId')  # Matching camelCase sync
+            trip_id = payload.get('tripId')
 
+            # PERMANENT FAILURE: Missing critical data
             if not trip_id:
-                logger.error(f"Missing tripId in SQS payload. Keys: {list(payload.keys())}")
-                # [FIXED] Delete incomplete message to prevent FIFO group blocking
+                logger.error(f"Poison Pill: Missing tripId in SQS payload. Keys: {list(payload.keys())}")
                 await self._delete_from_queue(receipt_handle)
                 return
 
@@ -73,17 +70,26 @@ class TripSQSConsumer:
                 "responses": {}
             }
 
+            # Attempt business logic
             await self.notification_service.notify_available_drivers(payload)
             
-            # [FIXED] Cleanup after successful processing
+            # SUCCESS: Clean up
             await self._delete_from_queue(receipt_handle)
 
         except json.JSONDecodeError as je:
-            logger.error(f"Malformed JSON in SQS message body: {je}")
-            # [FIXED] Delete malformed message to clear the FIFO group
+            # PERMANENT FAILURE: Malformed JSON can never be processed
+            logger.error(f"Poison Pill: Malformed JSON in SQS message: {je}")
             await self._delete_from_queue(receipt_handle)
+        
+        except KeyError as ke:
+            # PERMANENT FAILURE: Schema mismatch
+            logger.error(f"Poison Pill: Missing expected key in payload: {ke}")
+            await self._delete_from_queue(receipt_handle)
+
         except Exception as e:
-            logger.error(f"Failed to process Trip SQS message: {e}", exc_info=True)
+            # TRANSIENT FAILURE: Network, DB timeout, etc.
+            # We do NOT delete here. SQS will retry after visibility timeout.
+            logger.error(f"Transient error processing Trip SQS message: {e}", exc_info=True)
 
     async def _delete_from_queue(self, receipt_handle):
         """Helper to delete message from SQS FIFO queue"""
@@ -97,5 +103,4 @@ class TripSQSConsumer:
             logger.error(f"Failed to delete message from SQS: {e}")
 
     def stop(self):
-        """Signals the polling loop to stop during app shutdown"""
         self.running = False
