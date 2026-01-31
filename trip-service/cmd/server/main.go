@@ -98,10 +98,6 @@ func main() {
 	}
 
 	// 4. Initialize Outbound Publisher (SQS)
-	if brokerConfig.SQS_TRIP_CREATED_URL == "" {
-		log.Fatalf("Fatal: SQS_TRIP_CREATED_URL is not set in environment")
-	}
-	
 	publisher := broker.NewSQSPublisher(awsCfg, brokerConfig.SQS_TRIP_CREATED_URL)
 	log.Printf("Successfully initialized SQS Publisher on: %s", brokerConfig.SQS_TRIP_CREATED_URL)
 

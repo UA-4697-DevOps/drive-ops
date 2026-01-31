@@ -80,7 +80,7 @@ async def lifespan(app: FastAPI):
     try:
         sqs_publisher = SQSPublisher()
         logger.info("SQS Publisher successfully initialized")
-        
+
         # Initialize Driver Response Service using the SQS Publisher
         response_service = DriverResponseService(
             publisher=sqs_publisher,
@@ -92,6 +92,8 @@ async def lifespan(app: FastAPI):
 
     except Exception as e:
         logger.error(f"CRITICAL ERROR: Failed to initialize SQS Publisher: {e}")
+        # FAIL FAST: The service is useless without SQS connectivity
+        raise SystemExit(1)
 
     # 2. Start Background SQS Consumer
     logger.info("Initializing Background SQS Consumers...")
