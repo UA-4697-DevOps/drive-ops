@@ -25,61 +25,61 @@ var (
 
 // TestMain sets up the test environment, runs tests, and tears down
 func TestMain(m *testing.M) {
-    dsn := getTestDSN()
+	dsn := getTestDSN()
 
-    // Check if database is already running (e.g., in CI with full stack)
-    managedCompose := false
-    if err := WaitForDB(dsn, 2*time.Second); err != nil {
-        // Database not available, start docker-compose
-        log.Println("Database not available, starting docker-compose...")
-        if err := startDockerCompose(); err != nil {
-            log.Fatalf("Failed to start docker-compose: %v", err)
-        }
-        managedCompose = true
+	// Check if database is already running (e.g., in CI with full stack)
+	managedCompose := false
+	if err := WaitForDB(dsn, 2*time.Second); err != nil {
+		// Database not available, start docker-compose
+		log.Println("Database not available, starting docker-compose...")
+		if err := startDockerCompose(); err != nil {
+			log.Fatalf("Failed to start docker-compose: %v", err)
+		}
+		managedCompose = true
 
-        // [FIXED] Removed the hard sleep. WaitForDB handles the wait more intelligently.
-        log.Println("Waiting for PostgreSQL to reach 'ready' state...")
+		// Wait for database to be ready
+		log.Println("Waiting for PostgreSQL to start...")
+		time.Sleep(5 * time.Second) // Give container time to start
 
-        // Using a 90s timeout to give the container plenty of time to boot and initialize
-        if err := WaitForDB(dsn, 90*time.Second); err != nil {
-            stopDockerCompose()
-            log.Fatalf("Failed to connect to test database after start: %v", err)
-        }
-    } else {
-        log.Println("Database already running, skipping docker-compose startup")
-    }
+		if err := WaitForDB(dsn, 90*time.Second); err != nil {
+			stopDockerCompose()
+			log.Fatalf("Failed to connect to test database: %v", err)
+		}
+	} else {
+		log.Println("Database already running, skipping docker-compose startup")
+	}
 
-    log.Println("PostgreSQL is ready!")
+	log.Println("PostgreSQL is ready!")
 
-    // Set up database connection
-    var err error
-    testDB, err = SetupTestDB()
-    if err != nil {
-        if managedCompose {
-            stopDockerCompose()
-        }
-        log.Fatalf("Failed to setup test database: %v", err)
-    }
+	// Set up database connection
+	var err error
+	testDB, err = SetupTestDB()
+	if err != nil {
+		if managedCompose {
+			stopDockerCompose()
+		}
+		log.Fatalf("Failed to setup test database: %v", err)
+	}
 
-    // Run migrations
-    if err := RunMigrations(testDB); err != nil {
-        TearDownTestDB(testDB)
-        if managedCompose {
-            stopDockerCompose()
-        }
-        log.Fatalf("Failed to run migrations: %v", err)
-    }
+	// Run migrations
+	if err := RunMigrations(testDB); err != nil {
+		TearDownTestDB(testDB)
+		if managedCompose {
+			stopDockerCompose()
+		}
+		log.Fatalf("Failed to run migrations: %v", err)
+	}
 
-    // Run tests
-    code := m.Run()
+	// Run tests
+	code := m.Run()
 
-    // Cleanup
-    TearDownTestDB(testDB)
-    if managedCompose {
-        stopDockerCompose()
-    }
+	// Cleanup
+	TearDownTestDB(testDB)
+	if managedCompose {
+		stopDockerCompose()
+	}
 
-    os.Exit(code)
+	os.Exit(code)
 }
 
 // SetupTestDB creates and returns a database connection
@@ -144,8 +144,8 @@ func RunMigrations(db *gorm.DB) error {
 	// Check if migrations already applied (e.g., by trip-migrations service in CI)
 	var exists bool
 	query := `SELECT EXISTS (
-		SELECT FROM information_schema.tables 
-		WHERE table_schema = 'public' 
+		SELECT FROM information_schema.tables
+		WHERE table_schema = 'public'
 		AND table_name = 'trips'
 	)`
 	if err := db.Raw(query).Scan(&exists).Error; err != nil {
@@ -162,9 +162,8 @@ func RunMigrations(db *gorm.DB) error {
 		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
 	}
 
-	// [FIXED] Use absolute path resolution for migrations to prevent CI failures
-	_, filename, _, _ := runtime.Caller(0)
-	migrationsPath := filepath.Join(filepath.Dir(filename), "..", "..", "db", "migrations")
+	// Get path to migrations directory
+	migrationsPath := filepath.Join("..", "..", "db", "migrations")
 
 	// Read migration files
 	files, err := filepath.Glob(filepath.Join(migrationsPath, "*.up.sql"))
@@ -194,9 +193,8 @@ func RunMigrations(db *gorm.DB) error {
 
 // getTestDSN returns the database connection string for tests
 func getTestDSN() string {
-	// [FIXED] Defaulting to port 5433 to avoid conflicts with your local primary DB
 	host := getEnv("DB_HOST", "localhost")
-	port := getEnv("DB_PORT", "5433") 
+	port := getEnv("DB_PORT", "5433")
 	user := getEnv("DB_USER", "testuser")
 	password := getEnv("DB_PASSWORD", "testpass")
 	dbname := getEnv("TRIP_DB_NAME", "trip_service_test")
@@ -218,7 +216,6 @@ func getEnv(key, defaultValue string) string {
 // startDockerCompose starts the test database container
 func startDockerCompose() error {
 	composePath := getDockerComposePath()
-	// [FIXED] Standardizing command to 'docker compose' (V2)
 	cmd := exec.Command("docker", "compose", "-f", composePath, "up", "-d")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -234,7 +231,6 @@ func startDockerCompose() error {
 // stopDockerCompose stops and removes the test database container
 func stopDockerCompose() {
 	composePath := getDockerComposePath()
-	// [FIXED] Using -v to ensure volumes are wiped between test runs
 	cmd := exec.Command("docker", "compose", "-f", composePath, "down", "-v")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -248,6 +244,7 @@ func stopDockerCompose() {
 
 // getDockerComposePath returns absolute path to docker-compose.test.yml
 func getDockerComposePath() string {
+	// Get the directory where this test file is located
 	_, filename, _, _ := runtime.Caller(0)
 	testDir := filepath.Dir(filename)
 	return filepath.Join(testDir, "docker-compose.test.yml")
