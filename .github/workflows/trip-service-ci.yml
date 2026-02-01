@@ -76,9 +76,9 @@ jobs:
       AWS_ACCESS_KEY_ID: mock
       AWS_SECRET_ACCESS_KEY: mock
       AWS_REGION: us-east-2
-      SQS_TRIP_CREATED_URL: http://mock-sqs/trip-created.fifo
-      SQS_DRIVER_ASSIGNED_URL: http://mock-sqs/driver-assigned.fifo
-      SQS_TRIP_COMPLETED_URL: http://mock-sqs/trip-completed.fifo
+      SQS_TRIP_CREATED_URL: http://mock-url
+      SQS_DRIVER_ASSIGNED_URL: http://mock-url
+      SQS_TRIP_COMPLETED_URL: http://mock-url
 
     steps:
       - uses: actions/checkout@v6
@@ -106,15 +106,26 @@ jobs:
       - name: Run Go integration tests
         working-directory: trip-service
         run: |
-          # The runner is outside the Docker network, so it hits localhost:5433 (mapped in compose)
+          # 1. Database Connection (Runner -> Docker Container)
           export DB_HOST=localhost
           export DB_PORT=5433
           export DB_USER=testuser
           export DB_PASSWORD=testpass
           export TRIP_DB_NAME=trip_service_test
           
-          # Run the actual test binary
-          AWS_ACCESS_KEY_ID=mock go test -v -race ./tests/integration/...
+          # 2. SQS Mocking (Ensures Go SDK doesn't look for real AWS URLs)
+          # We use the values defined in the job's 'env' section
+          export SQS_TRIP_CREATED_URL=${{ env.SQS_TRIP_CREATED_URL }}
+          export SQS_DRIVER_ASSIGNED_URL=${{ env.SQS_DRIVER_ASSIGNED_URL }}
+          export SQS_TRIP_COMPLETED_URL=${{ env.SQS_TRIP_COMPLETED_URL }}
+          
+          # 3. AWS Credentials for Mocking
+          export AWS_ACCESS_KEY_ID=mock
+          export AWS_SECRET_ACCESS_KEY=mock
+          export AWS_REGION=us-east-2
+          
+          # 4. Execute tests with race detection
+          go test -v -race ./tests/integration/...
 
       - name: Show logs on failure
         if: failure()
