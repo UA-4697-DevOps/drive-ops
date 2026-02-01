@@ -69,7 +69,6 @@ func MakeHTTPRequest(method, url string) (*http.Response, error) {
     var resp *http.Response
     var lastErr error 
     
-    // Increased to 25 attempts to account for slow container boot + app internal retries
     const maxAttempts = 25 
 
     for i := 0; i < maxAttempts; i++ {
@@ -83,8 +82,16 @@ func MakeHTTPRequest(method, url string) (*http.Response, error) {
             // Check for 503 which happens if the proxy is up but the app isn't
             if resp.StatusCode == http.StatusServiceUnavailable {
                 _ = resp.Body.Close()
+                
+                // 1. Set lastErr so the final return knows WHY it failed
+                lastErr = fmt.Errorf("service returned 503 Service Unavailable")
+                
                 log.Printf("Attempt %d: Service at %s returned 503, retrying...", i+1, url)
-                time.Sleep(2 * time.Second)
+                
+                // 2. Skip sleep on the very last attempt
+                if i < maxAttempts-1 {
+                    time.Sleep(2 * time.Second)
+                }
                 continue
             }
             return resp, nil
@@ -96,11 +103,13 @@ func MakeHTTPRequest(method, url string) (*http.Response, error) {
 
         log.Printf("Attempt %d: Service at %s not ready yet, retrying: %v", i+1, url, lastErr)
         
-        // Sleep on every attempt except the last one
+        // 3. Keep the error branch sleep aligned too
         if i < maxAttempts-1 {
             time.Sleep(2 * time.Second)
         }
     }
 
-    return nil, fmt.Errorf("service at %s failed to respond after %d attempts: %w", url, maxAttempts, lastErr)
+    // Now if it fails after 25 attempts, lastErr will correctly say "returned 503" 
+    // instead of "connection refused" if the last attempt was a 503.
+    return nil, fmt.Errorf("service at %s failed after %d attempts: %w", url, maxAttempts, lastErr)
 }

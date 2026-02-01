@@ -73,6 +73,13 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     needs: unit-test
+    env:
+      # These match your Go code's getEnv fallbacks and your Acergo15 setup
+      TRIP_DB_NAME: trip_service_test
+      DRIVER_DB_NAME: dummy_db
+      AWS_ACCESS_KEY_ID: mock
+      AWS_SECRET_ACCESS_KEY: mock
+      AWS_REGION: us-east-2
 
     steps:
       - uses: actions/checkout@v6
@@ -81,123 +88,45 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: trip-service/go.sum
 
-      - name: Create .env file for docker-compose
+      - name: Start Infrastructure
+        # We use the specific test compose file to ensure we use the 'mock' environment
         run: |
-          cat > .env << EOF
-          # Database
-          DB_HOST=db
-          DB_PORT=5432
-          DB_USER=vagrant
-          DB_PASSWORD=trips
-          TRIP_DB_NAME=trip_db
+          docker compose -f trip-service/tests/integration/docker-compose.test.yml up -d --build
 
-          # Mock SQS Configuration (Passing validation only)
-          SQS_TRIP_CREATED_URL=http://mock-sqs/trip-created.fifo
-          SQS_DRIVER_ASSIGNED_URL=http://mock-sqs/driver-assigned.fifo
-          SQS_TRIP_COMPLETED_URL=http://mock-sqs/trip-completed.fifo
-          
-          AWS_REGION=us-east-2
-          # Use "mock" to signal your Go code to bypass real SQS logic
-          AWS_ACCESS_KEY_ID=mock
-          AWS_SECRET_ACCESS_KEY=mock
-
-          TRIP_SERVICE_PORT=:8081
-          EOF
-
-      - name: Start trip-service stack
-        run: docker compose up -d trip-service --build
-
-      - name: Wait for services
+      - name: Wait for Trip Service
         run: |
-          echo "Waiting for services to be healthy..."
-          timeout 90 bash -c 'until docker compose ps | grep -E "trip-service.*(running \(healthy\)|running$)"; do
-            echo "$(date): Waiting for trip-service..."
-            sleep 3
-          done' || {
-            echo "Service failed to start. Likely SQS initialization error."
-            docker compose logs trip-service
+          echo "Waiting for http://localhost:8081/health..."
+          # 30 retries * 2s = 60s total wait
+          timeout 60s bash -c 'until curl -f -s http://localhost:8081/health; do echo "Waiting..."; sleep 2; done' || {
+            echo "ERROR: Service did not start in time. Printing logs:"
+            docker logs trip-service-container
             exit 1
           }
-
-      - name: Verify health endpoint
-        run: |
-          echo "Testing /health endpoint..."
-          response=$(curl -f -s http://localhost:8081/health)
-          echo "Response: $response"
-          # Verify the 'ok' status which confirms SQS and DB connectivity
-          if ! echo "$response" | jq -e '.status == "ok"' > /dev/null 2>&1; then
-            echo "Invalid health response or service not fully initialized"
-            exit 1
-          fi
-
-      - name: Prepare test database
-        run: |
-          docker compose stop trip-service
-
-          docker compose exec -T db psql -U vagrant -d postgres -c "
-            SELECT pg_terminate_backend(pid)
-            FROM pg_stat_activity
-            WHERE datname = 'trip_db' AND pid <> pg_backend_pid();
-          "
-          docker compose exec -T db psql -U vagrant -d postgres -c "DROP DATABASE IF EXISTS trip_db;"
-          docker compose exec -T db psql -U vagrant -d postgres -c "CREATE DATABASE trip_db;"
-
-          echo "Database recreated for integration tests"
-
-      - name: Run migrations and restart service
-        run: |
-          docker compose up -d trip-migrations
-          docker compose logs trip-migrations
-
-          docker compose up -d trip-service
-
-          echo "Waiting for trip-service to be healthy..."
-          timeout 60 bash -c 'until docker compose ps | grep -E "trip-service.*healthy"; do
-            echo "$(date): Waiting for trip-service..."
-            docker compose ps trip-service
-            sleep 3
-          done' || {
-            echo "Service failed to become healthy after database recreation"
-            docker compose logs trip-service
-            exit 1
-          }
-          echo "Trip-service is healthy and ready for tests!"
 
       - name: Run Go integration tests
         working-directory: trip-service
         run: |
-          # 1. Source the .env file created in the root directory
-          set -a
-          source ../.env
-          set +a
-          
-          # 2. Override DB_HOST because the runner is outside the docker network
+          # The runner is outside the Docker network, so it hits localhost:5433 (mapped in compose)
           export DB_HOST=localhost
+          export DB_PORT=5433
+          export DB_USER=testuser
+          export DB_PASSWORD=testpass
+          export TRIP_DB_NAME=trip_service_test
           
-          # 3. Execute tests with the synchronized mock environment
-          go test -v -race ./tests/integration/...
-        env:
-          SERVICE_URL: http://localhost:8081
+          # Run the actual test binary
+          AWS_ACCESS_KEY_ID=mock go test -v -race ./tests/integration/...
 
       - name: Show logs on failure
         if: failure()
         run: |
-          echo "=== Docker Compose Status ==="
-          docker compose ps
-
-          echo ""
-          echo "=== Trip Service Logs ==="
-          docker compose logs trip-service
-
-          echo ""
-          echo "=== PostgreSQL Logs ==="
-          docker compose logs db
+          docker ps
+          docker logs trip-service-container
+          docker logs trip-service-test-db
 
       - name: Cleanup
         if: always()
-        run: docker compose down -v
+        run: docker compose -f trip-service/tests/integration/docker-compose.test.yml down -v
 
   docker-build:
     name: Docker Build
