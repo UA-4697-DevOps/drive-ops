@@ -26,15 +26,6 @@ variable "db_name" {
   }
 }
 
-variable "master_username" {
-  type        = string
-  description = "Username for the master DB user. Cannot be 'admin', 'root', 'rdsadmin', 'postgres', or other reserved words."
-
-  validation {
-    condition     = can(regex("^[A-Za-z][A-Za-z0-9_]{0,15}$", var.master_username)) && !contains(["admin", "root", "rdsadmin", "postgres"], lower(var.master_username))
-    error_message = "master_username must be 1-16 characters, start with a letter, contain only alphanumeric characters and underscores, and not be a reserved word."
-  }
-}
 
 # ============================================================================
 # Network Configuration (from VPC module)
@@ -188,10 +179,9 @@ variable "performance_insights_kms_key_id" {
 # Security Options
 # ============================================================================
 
-variable "master_password" {
+variable "rds_master_secret_id" {
   type        = string
-  description = "RDS master password. This should be passed from the 'secrets' module output, never hardcoded. The password is generated and managed by the secrets module."
-  sensitive   = true
+  description = "The ID of the AWS Secrets Manager secret containing RDS master credentials (username and password). This secret should be created by the 'secrets' module. The RDS module will retrieve credentials from Secrets Manager at apply time."
 }
 
 # ============================================================================

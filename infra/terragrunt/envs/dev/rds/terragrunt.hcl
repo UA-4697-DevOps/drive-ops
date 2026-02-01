@@ -23,7 +23,7 @@ dependency "secrets" {
   config_path = "../secrets"
 
   mock_outputs = {
-    rds_master_password = "mock-password"
+    rds_master_secret_id = "arn:aws:secretsmanager:us-east-2:123456789012:secret:mock-secret"
   }
 
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "init"]
@@ -35,17 +35,16 @@ locals {
 }
 
 inputs = {
-  db_name                 = "drive_ops_${local.env_vars.env}"
-  vpc_id                  = dependency.vpc.outputs.vpc_id
-  private_subnet_ids      = dependency.vpc.outputs.private_subnet_ids
-  db_security_group_id    = dependency.vpc.outputs.sg_db_id
-  master_username         = "driveops_admin"
-  master_password         = dependency.secrets.outputs.rds_master_password
-  engine_version          = "15.15"
-  instance_class          = "db.t3.micro"
-  allocated_storage       = 20
+  db_name                = "drive_ops_${local.env_vars.env}"
+  vpc_id                 = dependency.vpc.outputs.vpc_id
+  private_subnet_ids     = dependency.vpc.outputs.private_subnet_ids
+  db_security_group_id   = dependency.vpc.outputs.sg_db_id
+  rds_master_secret_id   = dependency.secrets.outputs.rds_master_secret_id
+  engine_version         = "15.15"
+  instance_class         = "db.t3.micro"
+  allocated_storage      = 20
   backup_retention_period = 1
-  multi_az                = false
-  deletion_protection     = false
-  skip_final_snapshot     = true
+  multi_az               = false
+  deletion_protection    = false
+  skip_final_snapshot    = true
 }

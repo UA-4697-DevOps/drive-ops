@@ -1,3 +1,8 @@
+# Retrieve RDS credentials from Secrets Manager
+data "aws_secretsmanager_secret_version" "rds_credentials" {
+  secret_id = var.rds_master_secret_id
+}
+
 resource "aws_db_subnet_group" "main" {
   name       = "${var.project_name}-${var.env}-db-subnet-group"
   subnet_ids = var.private_subnet_ids
@@ -8,6 +13,9 @@ resource "aws_db_subnet_group" "main" {
 }
 
 locals {
+  # Parse credentials from Secrets Manager
+  rds_credentials = jsondecode(data.aws_secretsmanager_secret_version.rds_credentials.secret_string)
+
   # Generate a default final snapshot identifier when needed
   # Format: project-env-postgres-final-YYYYMMDDHHMMSS
   default_snapshot_id = "${var.project_name}-${var.env}-postgres-final-${formatdate("YYYYMMDDhhmmss", timestamp())}"
@@ -28,8 +36,8 @@ resource "aws_db_instance" "main" {
   storage_encrypted = true
 
   db_name  = var.db_name
-  username = var.master_username
-  password = var.master_password
+  username = local.rds_credentials.username
+  password = local.rds_credentials.password
 
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [var.db_security_group_id]
