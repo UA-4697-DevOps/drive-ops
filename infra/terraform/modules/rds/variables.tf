@@ -1,0 +1,195 @@
+# ============================================================================
+# Project and Environment Variables
+# ============================================================================
+
+variable "project_name" {
+  type        = string
+  description = "The name of the project, used for naming resources (e.g., drive-ops)"
+}
+
+variable "env" {
+  type        = string
+  description = "The deployment environment (e.g., dev, staging, prod). Used for resource naming and tagging."
+}
+
+# ============================================================================
+# Database Configuration
+# ============================================================================
+
+variable "db_name" {
+  type        = string
+  description = "The name of the default database to create when the RDS instance is created. Must begin with a letter or underscore and contain only alphanumeric characters or underscores."
+
+  validation {
+    condition     = can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.db_name))
+    error_message = "db_name must be 1-63 characters, start with a letter or underscore, and contain only alphanumeric characters and underscores."
+  }
+}
+
+
+# ============================================================================
+# Network Configuration (from VPC module)
+# ============================================================================
+
+variable "vpc_id" {
+  type        = string
+  description = "The ID of the VPC where RDS will be deployed. Used for resource tagging and validation."
+}
+
+variable "private_subnet_ids" {
+  type        = list(string)
+  description = "List of private subnet IDs spanning at least 2 availability zones for the DB subnet group. Required for Multi-AZ and high availability."
+  validation {
+    condition     = length(var.private_subnet_ids) >= 2
+    error_message = "private_subnet_ids must include at least two subnets in different AZs."
+  }
+}
+
+variable "db_security_group_id" {
+  type        = string
+  description = "Security group ID for database access control (sg-db). Should only allow inbound PostgreSQL traffic (port 5432) from application security group."
+}
+
+# ============================================================================
+# Engine Configuration
+# ============================================================================
+
+variable "engine" {
+  type        = string
+  description = "The database engine to use. Must be 'postgres' for PostgreSQL."
+  default     = "postgres"
+
+  validation {
+    condition     = var.engine == "postgres"
+    error_message = "Only 'postgres' engine is supported by this module."
+  }
+}
+
+variable "engine_version" {
+  type        = string
+  description = "PostgreSQL engine version (e.g., '15.8', '16.1'). Refer to AWS documentation for available versions. Newer versions include security patches and performance improvements."
+  default     = "15.15"
+}
+
+# ============================================================================
+# Instance Sizing and Storage
+# ============================================================================
+
+variable "instance_class" {
+  type        = string
+  description = "The instance type of the RDS instance. This module currently restricts to Free Tier sizes (db.t3.micro or db.t4g.micro)."
+  default     = "db.t3.micro"
+
+  validation {
+    condition     = var.instance_class == "db.t3.micro" || var.instance_class == "db.t4g.micro"
+    error_message = "Only Free Tier instance classes are allowed (db.t3.micro or db.t4g.micro)."
+  }
+}
+
+variable "allocated_storage" {
+  type        = number
+  description = "The allocated storage size in gigabytes. Minimum is 20 GB for gp3 storage type. Can be scaled up later without downtime."
+  default     = 20
+
+  validation {
+    condition     = var.allocated_storage >= 20 && var.allocated_storage <= 65536
+    error_message = "Allocated storage must be between 20 GB and 65536 GB (64 TB)."
+  }
+}
+
+# ============================================================================
+# High Availability and Disaster Recovery
+# ============================================================================
+
+variable "multi_az" {
+  type        = bool
+  description = "Specifies if the RDS instance should be Multi-AZ for high availability. Maintains a standby replica in a different availability zone. Set to false for dev (cost savings), true for prod."
+  default     = false
+}
+
+variable "backup_retention_period" {
+  type        = number
+  description = "The number of days to retain automated backups (0-35). Set to 0 to disable backups. Recommended: 1 day for dev, 7-30 days for prod."
+  default     = 1
+
+  validation {
+    condition     = var.backup_retention_period >= 0 && var.backup_retention_period <= 35
+    error_message = "Backup retention period must be between 0 and 35 days."
+  }
+}
+
+variable "skip_final_snapshot" {
+  type        = bool
+  description = "Determines whether a final DB snapshot is created before deletion. Set to true for dev (faster cleanup), false for prod (safety)."
+  default     = true
+}
+
+variable "final_snapshot_identifier" {
+  type        = string
+  description = "The name of the final DB snapshot when skip_final_snapshot is false. If empty, a default name will be auto-generated in format: 'project-env-postgres-final-YYYYMMDDHHMMSS' (e.g., 'drive-ops-dev-postgres-final-20260201143045')."
+  default     = ""
+}
+
+# ============================================================================
+# Security and Protection
+# ============================================================================
+
+variable "deletion_protection" {
+  type        = bool
+  description = "If true, prevents the database from being deleted accidentally. Must be disabled before destroying the resource. Set to false for dev, true for prod."
+  default     = false
+}
+
+# ============================================================================
+# Optional Performance Features
+# ============================================================================
+
+variable "enable_performance_insights" {
+  type        = bool
+  description = "Enable Performance Insights for advanced database performance monitoring and analysis. Adds additional cost (~$0.18/vCPU/month). SECURITY: If enabled, you MUST provide performance_insights_kms_key_id (customer-managed KMS key) for CKV_AWS_354 compliance. Recommended for prod troubleshooting."
+  default     = false
+}
+
+variable "performance_insights_retention_period" {
+  type        = number
+  description = "The number of days to retain Performance Insights data (7 or 731). Only used if enable_performance_insights is true. 7 days is free tier, 731 days adds cost."
+  default     = 7
+
+  validation {
+    condition     = contains([7, 731], var.performance_insights_retention_period)
+    error_message = "Performance Insights retention period must be either 7 or 731 days."
+  }
+}
+
+variable "performance_insights_kms_key_id" {
+  type        = string
+  description = "The ARN of the KMS key to encrypt Performance Insights data. Required if enable_performance_insights is true (CKV_AWS_354 compliance). Use a customer-managed key (CMK), not AWS managed key. Set to null if Performance Insights is disabled."
+  default     = null
+
+  validation {
+    condition = (
+      var.performance_insights_kms_key_id == null ||
+      can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[a-f0-9-]+$", var.performance_insights_kms_key_id))
+    )
+    error_message = "performance_insights_kms_key_id must be a valid KMS key ARN (arn:aws:kms:region:account:key/key-id) or null."
+  }
+}
+
+# ============================================================================
+# Security Options
+# ============================================================================
+
+variable "rds_master_secret_id" {
+  type        = string
+  description = "The ID of the AWS Secrets Manager secret containing RDS master credentials (username and password). This secret should be created by the 'secrets' module. The RDS module will retrieve credentials from Secrets Manager at apply time."
+}
+
+# ============================================================================
+# Resource Tagging
+# ============================================================================
+
+variable "tags" {
+  type        = map(string)
+  description = "A map of tags to apply to all RDS resources (instance, subnet group, etc.)"
+  default     = {}
+}

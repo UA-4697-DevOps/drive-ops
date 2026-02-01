@@ -18,15 +18,19 @@ locals {
     local.common_vars.common_tags,
     local.env_vars.env_tags
   )
+
+  # Check if current path is in "envs/local" directory (for local testing)
+  # If true, skip S3 backend generation and use local state instead
+  is_local_env = can(regex(".*/envs/local/.*", get_terragrunt_dir()))
 }
 
 # Configure remote state backend
-# Note: For the state-backend module itself, this will be skipped
-# All other modules will use this configuration
+# Note: Skipped for modules in "local/" directory - they use local state
+# All other modules will use S3 backend
 generate "backend" {
   path      = "backend.tf"
   if_exists = "overwrite_terragrunt"
-  contents  = <<EOF
+  contents  = local.is_local_env ? "" : <<EOF
 terraform {
   backend "s3" {
     bucket         = "${local.project_name}-${local.env}-terraform-state"
