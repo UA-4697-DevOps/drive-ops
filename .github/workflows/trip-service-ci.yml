@@ -76,7 +76,6 @@ jobs:
       AWS_ACCESS_KEY_ID: mock
       AWS_SECRET_ACCESS_KEY: mock
       AWS_REGION: us-east-2
-      # ADD THESE:
       SQS_TRIP_CREATED_URL: http://mock-sqs/trip-created.fifo
       SQS_DRIVER_ASSIGNED_URL: http://mock-sqs/driver-assigned.fifo
       SQS_TRIP_COMPLETED_URL: http://mock-sqs/trip-completed.fifo
