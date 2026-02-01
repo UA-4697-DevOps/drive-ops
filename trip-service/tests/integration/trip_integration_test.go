@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 	"time"
+	"fmt"
 
 	"trip-service/internal/domain"
 	"trip-service/internal/repository"

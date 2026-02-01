@@ -68,8 +68,11 @@ func MakeHTTPRequest(method, url string) (*http.Response, error) {
 
     var resp *http.Response
     var lastErr error 
+    
+    // Increased to 25 attempts to account for slow container boot + app internal retries
+    const maxAttempts = 25 
 
-    for i := 0; i < 10; i++ {
+    for i := 0; i < maxAttempts; i++ {
         req, err := http.NewRequest(method, url, nil)
         if err != nil {
             return nil, err
@@ -94,10 +97,10 @@ func MakeHTTPRequest(method, url string) (*http.Response, error) {
         log.Printf("Attempt %d: Service at %s not ready yet, retrying: %v", i+1, url, lastErr)
         
         // Sleep on every attempt except the last one
-        if i < 9 {
+        if i < maxAttempts-1 {
             time.Sleep(2 * time.Second)
         }
     }
 
-    return nil, fmt.Errorf("service at %s failed to respond after 10 attempts: %w", url, lastErr)
+    return nil, fmt.Errorf("service at %s failed to respond after %d attempts: %w", url, maxAttempts, lastErr)
 }

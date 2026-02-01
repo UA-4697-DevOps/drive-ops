@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"log"
 	"time"
 
@@ -74,7 +75,7 @@ func (c *SQSConsumer) Start(ctx context.Context) error {
         <-ctx.Done() // Wait for shutdown signal without polling
         return nil
     }
-	
+
 	log.Printf("INFO: Starting SQS Consumer on queue: %s", c.queueURL)
 
 	for {
