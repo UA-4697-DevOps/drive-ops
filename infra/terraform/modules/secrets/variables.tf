@@ -22,5 +22,9 @@ variable "tags" {
 variable "rds_master_username" {
   type        = string
   description = "Username for the master DB user. Cannot be 'admin', 'root', 'rdsadmin', or other reserved words."
-  default     = "postgres"
+
+  validation {
+    condition     = can(regex("^[A-Za-z][A-Za-z0-9_]{0,15}$", var.rds_master_username)) && !contains(["admin", "root", "rdsadmin", "postgres"], lower(var.rds_master_username))
+    error_message = "rds_master_username must be 1-16 characters, start with a letter, contain only alphanumeric characters and underscores, and not be a reserved word."
+  }
 }

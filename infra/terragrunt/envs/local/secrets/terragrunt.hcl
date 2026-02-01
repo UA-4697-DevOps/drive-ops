@@ -15,5 +15,5 @@ inputs = {
   project_name        = local.common_vars.project_name
   env                 = local.env_vars.env
   db_identifier       = "${local.common_vars.project_name}-${local.env_vars.env}-postgres"
-  rds_master_username = "postgres"
+  rds_master_username = "driveops_admin"
 }
