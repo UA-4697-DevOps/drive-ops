@@ -7,33 +7,60 @@ services:
       POSTGRES_PASSWORD: testpass
       POSTGRES_DB: trip_service_test
     ports:
-      - "5433:5432" # Host 5433 -> Container 5432
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U testuser -d trip_service_test"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  localstack:
+    image: localstack/localstack:latest
+    container_name: trip-service-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=sqs
+      - DEFAULT_REGION=us-east-2
+    # This command ensures queues exist before the trip-service tries to use them
+    entrypoint: /bin/sh -c
+    command: >
+      "localstack start -d && 
+      echo 'Waiting for LocalStack...' && 
+      until curl -s http://localhost:4566/_localstack/health | grep -q '\"sqs\": \"\(running\|available\)\"'; do sleep 2; done && 
+      awslocal sqs create-queue --queue-name trip-created-dev.fifo --attributes FifoQueue=true &&
+      awslocal sqs create-queue --queue-name driver-assigned-dev.fifo --attributes FifoQueue=true &&
+      awslocal sqs create-queue --queue-name trip-completed-dev.fifo --attributes FifoQueue=true &&
+      echo 'SQS Queues created!' &&
+      tail -f /dev/null"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:4566/_localstack/health | grep -q '\"sqs\": \"\(running\|available\)\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   trip-service-test:
     build:
       context: ../../
       dockerfile: Dockerfile
     ports:
-      - "8081:8081" # Essential for TestHealthEndpoint
+      - "8081:8081"
     environment:
       - DB_USER=testuser
       - DB_PASSWORD=testpass
       - DB_NAME=trip_service_test
       - DB_HOST=postgres-test
       - DB_PORT=5432
-      # Mandatory SQS URLs to pass broker.LoadConfig() validation
-      - SQS_TRIP_CREATED_URL=${SQS_TRIP_CREATED_URL:-https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-dev.fifo}
-      - SQS_DRIVER_ASSIGNED_URL=${SQS_DRIVER_ASSIGNED_URL:-https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-dev.fifo}
-      - SQS_TRIP_COMPLETED_URL=${SQS_TRIP_COMPLETED_URL:-https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-dev.fifo}
-      # AWS Configuration for Local Testing
+      # Redirected to LocalStack
+      - SQS_TRIP_CREATED_URL=http://localstack:4566/000000000000/trip-created-dev.fifo
+      - SQS_DRIVER_ASSIGNED_URL=http://localstack:4566/000000000000/driver-assigned-dev.fifo
+      - SQS_TRIP_COMPLETED_URL=http://localstack:4566/000000000000/trip-completed-dev.fifo
       - AWS_REGION=us-east-2
-      - AWS_ACCESS_KEY_ID=testing
-      - AWS_SECRET_ACCESS_KEY=testing
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT_URL=http://localstack:4566
     depends_on:
       postgres-test:
         condition: service_healthy
+      localstack:
+        condition: service_healthy # Wait until queues are actually created

@@ -31,20 +31,20 @@ func TestMain(m *testing.M) {
         _ = os.Setenv("AWS_REGION", "us-east-2") // Added _ =
     }
     if os.Getenv("SQS_TRIP_CREATED_URL") == "" {
-    	_ = os.Setenv("SQS_TRIP_CREATED_URL", "https://sqs.us-east-2.amazonaws.com/123456789012/trip-created-dev.fifo")
+    	_ = os.Setenv("SQS_TRIP_CREATED_URL", "http://mock-sqs/trip-created.fifo")
 	}
 	// CodeRabbit Fix: Add the missing inbound queue URLs
 	if os.Getenv("SQS_DRIVER_ASSIGNED_URL") == "" {
-    	_ = os.Setenv("SQS_DRIVER_ASSIGNED_URL", "https://sqs.us-east-2.amazonaws.com/123456789012/driver-assigned-dev.fifo")
+    	_ = os.Setenv("SQS_DRIVER_ASSIGNED_URL", "http://mock-sqs/driver-assigned.fifo")
 	}
 	if os.Getenv("SQS_TRIP_COMPLETED_URL") == "" {
-    	_ = os.Setenv("SQS_TRIP_COMPLETED_URL", "https://sqs.us-east-2.amazonaws.com/123456789012/trip-completed-dev.fifo")
+    	_ = os.Setenv("SQS_TRIP_COMPLETED_URL", "http://mock-sqs/trip-completed.fifo")
 	}
     if os.Getenv("AWS_ACCESS_KEY_ID") == "" {
-        _ = os.Setenv("AWS_ACCESS_KEY_ID", "testing_key")
+        _ = os.Setenv("AWS_ACCESS_KEY_ID", "mock")
     }
     if os.Getenv("AWS_SECRET_ACCESS_KEY") == "" {
-        _ = os.Setenv("AWS_SECRET_ACCESS_KEY", "testing_secret")
+        _ = os.Setenv("AWS_SECRET_ACCESS_KEY", "mock")
     }
 
     dsn := getTestDSN()

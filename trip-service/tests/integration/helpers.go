@@ -67,31 +67,37 @@ func MakeHTTPRequest(method, url string) (*http.Response, error) {
     }
 
     var resp *http.Response
-    var err error // Outer variable to store the execution error
+    var lastErr error 
 
-    for i := 0; i < 5; i++ {
-        // Use reqErr to avoid shadowing the main err variable
-        req, reqErr := http.NewRequest(method, url, nil)
-        if reqErr != nil {
-            return nil, reqErr
+    for i := 0; i < 10; i++ {
+        req, err := http.NewRequest(method, url, nil)
+        if err != nil {
+            return nil, err
         }
 
-        resp, err = client.Do(req) // Assign execution error to the outer err variable
-        if err == nil {
+        resp, lastErr = client.Do(req) 
+        if lastErr == nil {
+            // Check for 503 which happens if the proxy is up but the app isn't
+            if resp.StatusCode == http.StatusServiceUnavailable {
+                _ = resp.Body.Close()
+                log.Printf("Attempt %d: Service at %s returned 503, retrying...", i+1, url)
+                time.Sleep(2 * time.Second)
+                continue
+            }
             return resp, nil
         }
-		// CodeRabbit Fix: Close body if it exists to prevent resource leaks
-		if resp != nil && resp.Body != nil {
-    		_ = resp.Body.Close()
-		}
 
-        log.Printf("Attempt %d: Service at %s not ready yet, retrying...", i+1, url)
-		
-        if i < 4 {
-    		time.Sleep(2 * time.Second)
-		}
+        if resp != nil && resp.Body != nil {
+            _ = resp.Body.Close()
+        }
+
+        log.Printf("Attempt %d: Service at %s not ready yet, retrying: %v", i+1, url, lastErr)
+        
+        // Sleep on every attempt except the last one
+        if i < 9 {
+            time.Sleep(2 * time.Second)
+        }
     }
 
-    // Now err is guaranteed to contain the last error from client.Do(req)
-    return nil, fmt.Errorf("service at %s failed to respond after 5 attempts: %w", url, err)
+    return nil, fmt.Errorf("service at %s failed to respond after 10 attempts: %w", url, lastErr)
 }
