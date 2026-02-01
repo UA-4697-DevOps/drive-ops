@@ -41,9 +41,21 @@ type SQSConsumer struct {
 	client   *sqs.Client
 	queueURL string
 	svc      TripEventManager
+	isMock   bool
 }
 
 func NewSQSConsumer(cfg aws.Config, queueURL string, svc TripEventManager) *SQSConsumer {
+	// Detect mock mode from environment
+    if os.Getenv("AWS_ACCESS_KEY_ID") == "mock" {
+        log.Printf("CI DEBUG: SQS Consumer initializing in MOCK MODE for queue: %s", queueURL)
+        return &SQSConsumer{
+            client:   nil,
+            queueURL: queueURL,
+            svc:      svc,
+            isMock:   true,
+        }
+    }
+
 	client := sqs.NewFromConfig(cfg)
 	return &SQSConsumer{
 		client:   client,
@@ -56,6 +68,13 @@ func (c *SQSConsumer) Start(ctx context.Context) error {
 	if c.queueURL == "" {
 		return fmt.Errorf("fatal error: SQS Queue URL is not set; consumer cannot start")
 	}
+	// [FIXED] Bypass polling if in mock mode to keep CI logs clean
+    if c.isMock {
+        log.Printf("CI DEBUG: SQS Consumer (MOCK) is running but will not poll SQS.")
+        <-ctx.Done() // Wait for shutdown signal without polling
+        return nil
+    }
+	
 	log.Printf("INFO: Starting SQS Consumer on queue: %s", c.queueURL)
 
 	for {

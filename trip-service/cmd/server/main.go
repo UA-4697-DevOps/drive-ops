@@ -120,6 +120,7 @@ func main() {
 			log.Printf("INFO: Starting %s SQS Consumer on: %s", name, url)
 			if err := consumer.Start(appCtx); err != nil {
 				if appCtx.Err() == nil {
+					log.Printf("ERROR: %s failed: %v", name, err)
 					consumerErrCh <- fmt.Errorf("%s failed: %w", name, err)
 				}
 			}
