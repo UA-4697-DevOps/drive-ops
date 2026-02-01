@@ -18,7 +18,7 @@ variable "env" {
 
 variable "db_name" {
   type        = string
-  description = "The name of the default database to create when the RDS instance is created. Must begin with a letter and contain only alphanumeric characters."
+  description = "The name of the default database to create when the RDS instance is created. Must begin with a letter or underscore and contain only alphanumeric characters or underscores."
 
   validation {
     condition     = can(regex("^[A-Za-z_][A-Za-z0-9_]{0,62}$", var.db_name))
@@ -28,7 +28,7 @@ variable "db_name" {
 
 variable "master_username" {
   type        = string
-  description = "Username for the master DB user. Cannot be 'admin', 'root', 'rdsadmin', or other reserved words."
+  description = "Username for the master DB user. Cannot be 'admin', 'root', 'rdsadmin', 'postgres', or other reserved words."
 
   validation {
     condition     = can(regex("^[A-Za-z][A-Za-z0-9_]{0,15}$", var.master_username)) && !contains(["admin", "root", "rdsadmin", "postgres"], lower(var.master_username))
@@ -135,7 +135,7 @@ variable "skip_final_snapshot" {
 
 variable "final_snapshot_identifier" {
   type        = string
-  description = "The name of the final DB snapshot when skip_final_snapshot is false. If empty and skip_final_snapshot is false, a default name will be generated."
+  description = "The name of the final DB snapshot when skip_final_snapshot is false. If empty, a default name will be auto-generated in format: 'project-env-postgres-final-YYYYMMDDHHMMSS' (e.g., 'drive-ops-dev-postgres-final-20260201143045')."
   default     = ""
 }
 

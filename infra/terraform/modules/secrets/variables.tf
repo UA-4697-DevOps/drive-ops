@@ -21,7 +21,7 @@ variable "tags" {
 
 variable "rds_master_username" {
   type        = string
-  description = "Username for the master DB user. Cannot be 'admin', 'root', 'rdsadmin', or other reserved words."
+  description = "The name of the default database to create when the RDS instance is created. Must begin with a letter or underscore and contain only alphanumeric characters or underscores."
 
   validation {
     condition     = can(regex("^[A-Za-z][A-Za-z0-9_]{0,15}$", var.rds_master_username)) && !contains(["admin", "root", "rdsadmin", "postgres"], lower(var.rds_master_username))

@@ -7,6 +7,15 @@ resource "aws_db_subnet_group" "main" {
   }
 }
 
+locals {
+  # Generate a default final snapshot identifier when needed
+  # Format: project-env-postgres-final-YYYYMMDDHHMMSS
+  default_snapshot_id = "${var.project_name}-${var.env}-postgres-final-${formatdate("YYYYMMDDhhmmss", timestamp())}"
+
+  # Use provided snapshot ID if given, otherwise use generated default
+  final_snapshot_id = var.final_snapshot_identifier != "" ? var.final_snapshot_identifier : local.default_snapshot_id
+}
+
 resource "aws_db_instance" "main" {
   identifier = "${var.project_name}-${var.env}-postgres"
 
@@ -30,7 +39,7 @@ resource "aws_db_instance" "main" {
   multi_az                  = var.multi_az
   deletion_protection       = var.deletion_protection
   skip_final_snapshot       = var.skip_final_snapshot
-  final_snapshot_identifier = var.skip_final_snapshot ? null : var.final_snapshot_identifier
+  final_snapshot_identifier = var.skip_final_snapshot ? null : local.final_snapshot_id
 
   # Performance Insights (CKV_AWS_354 compliance)
   performance_insights_enabled          = var.enable_performance_insights
