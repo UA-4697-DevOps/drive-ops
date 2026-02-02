@@ -2,6 +2,12 @@ name: Sync Database to RDS
 
 on:
   workflow_dispatch:
+    inputs:
+      upload_dumps:
+        description: 'Upload database dumps as artifacts (WARNING: May contain sensitive data)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   sync-database:
@@ -100,7 +106,10 @@ jobs:
 
           echo "All dumps created successfully"
 
+      # WARNING: Database dumps may contain sensitive data (passwords, PII, etc.)
+      # Only upload if explicitly requested via workflow input
       - name: Upload Dumps as Artifacts
+        if: github.event.inputs.upload_dumps == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: database-dumps-${{ github.run_number }}
