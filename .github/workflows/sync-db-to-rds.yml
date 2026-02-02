@@ -38,11 +38,11 @@ jobs:
           echo "Running migrations for all databases..."
 
           # Run trip-service migrations
-          echo "→ Running trip-service migrations..."
+          echo "Running trip-service migrations..."
           docker-compose up trip-migrations
 
           # Run driver-service migrations
-          echo "→ Running driver-service migrations..."
+          echo "Running driver-service migrations..."
           docker-compose up driver-migrations
 
           echo "All migrations completed"
@@ -58,7 +58,7 @@ jobs:
           echo "Creating database dumps..."
 
           # Dump trip database
-          echo "→ Dumping trip database..."
+          echo "Dumping trip database..."
           docker exec drive-ops-db pg_dump \
             -U ${DB_USER:-postgres} \
             -d ${TRIP_DB_NAME:-drive_ops_trip} \
@@ -69,10 +69,10 @@ jobs:
             > dumps/trip_db.sql
 
           TRIP_SIZE=$(du -h dumps/trip_db.sql | cut -f1)
-          echo "  ✓ Trip database dump created ($TRIP_SIZE)"
+          echo "Trip database dump created ($TRIP_SIZE)"
 
           # Dump driver database
-          echo "→ Dumping driver database..."
+          echo "Dumping driver database..."
           docker exec drive-ops-db pg_dump \
             -U ${DB_USER:-postgres} \
             -d ${DRIVER_DB_NAME:-drive_ops_driver} \
@@ -83,7 +83,7 @@ jobs:
             > dumps/driver_db.sql
 
           DRIVER_SIZE=$(du -h dumps/driver_db.sql | cut -f1)
-          echo "  ✓ Driver database dump created ($DRIVER_SIZE)"
+          echo "Driver database dump created ($DRIVER_SIZE)"
 
           echo "All dumps created successfully"
 
@@ -116,11 +116,11 @@ jobs:
           fi
 
           echo "DB_HOST=$DB_HOST" >> $GITHUB_OUTPUT
-          echo "  RDS endpoint: $DB_HOST"
+          echo "RDS endpoint: $DB_HOST"
 
           # Get credentials from Secrets Manager
           SECRET_ID="drive-ops/dev/rds/credentials"
-          echo "→ Fetching credentials from Secrets Manager..."
+          echo "Fetching credentials from Secrets Manager..."
 
           SECRET_JSON=$(aws secretsmanager get-secret-value \
             --secret-id "$SECRET_ID" \
@@ -138,7 +138,7 @@ jobs:
           echo "DB_USER=$DB_USER" >> $GITHUB_OUTPUT
           echo "::add-mask::$DB_PASS"
           echo "DB_PASS=$DB_PASS" >> $GITHUB_OUTPUT
-          echo "  ✓ Credentials retrieved"
+          echo "Credentials retrieved"
 
           echo "RDS connection info ready"
 
@@ -163,16 +163,6 @@ jobs:
             echo "Successfully connected to RDS"
           else
             echo "ERROR: Cannot connect to RDS"
-            echo ""
-            echo "Possible issues:"
-            echo "  1. RDS security group doesn't allow connections from GitHub Actions IPs"
-            echo "  2. RDS is in private subnet without public access"
-            echo "  3. RDS is not in 'available' state"
-            echo ""
-            echo "For dev environment, you may need to:"
-            echo "  - Set publicly_accessible = true in RDS Terragrunt config"
-            echo "  - Add 0.0.0.0/0 to security group ingress (dev only!)"
-            echo "  - Or run this workflow from an EC2 instance in the VPC"
             exit 1
           fi
 
@@ -199,13 +189,13 @@ jobs:
             echo "  → Database doesn't exist, creating..."
             psql -h "$DB_HOST" -U "$DB_USER" -d postgres -c \
               "CREATE DATABASE $DB_NAME"
-            echo "  ✓ Database created"
+            echo "Database created"
           else
-            echo "  ✓ Database exists"
+            echo "Database exists"
           fi
 
           # Restore dump
-          echo "→ Restoring dump to RDS..."
+          echo "Restoring dump to RDS..."
           psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" \
             -f dumps/trip_db.sql \
             --single-transaction \
@@ -217,7 +207,7 @@ jobs:
           # Verify data
           TABLES=$(psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -tAc \
             "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'")
-          echo "  → Tables in database: $TABLES"
+          echo "Tables in database: $TABLES"
 
       - name: Restore Driver Database to RDS
         env:
@@ -230,12 +220,12 @@ jobs:
           echo "Restoring driver database to RDS..."
 
           # Check if database exists, create if not
-          echo "→ Checking if database '$DB_NAME' exists..."
+          echo "Checking if database '$DB_NAME' exists..."
           DB_EXISTS=$(psql -h "$DB_HOST" -U "$DB_USER" -d postgres -tAc \
             "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'")
 
           if [ -z "$DB_EXISTS" ]; then
-            echo "  → Database doesn't exist, creating..."
+            echo "Database doesn't exist, creating..."
             psql -h "$DB_HOST" -U "$DB_USER" -d postgres -c \
               "CREATE DATABASE $DB_NAME"
             echo "  Database created"
@@ -244,7 +234,7 @@ jobs:
           fi
 
           # Restore dump
-          echo "→ Restoring dump to RDS..."
+          echo "Restoring dump to RDS..."
           psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" \
             -f dumps/driver_db.sql \
             --single-transaction \
@@ -256,7 +246,7 @@ jobs:
           # Verify data
           TABLES=$(psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -tAc \
             "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'")
-          echo "  → Tables in database: $TABLES"
+          echo "Tables in database: $TABLES"
 
       # ============================================================
       # Cleanup
@@ -278,39 +268,6 @@ jobs:
         run: |
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
           ## Database Sync Completed Successfully
-
-          ### Summary
-          - **Target:** RDS `drive-ops-dev-postgres`
-          - **Databases:** `drive_ops_dev_trip`, `drive_ops_dev_driver`
-
-          ### Actions Performed
-          1. Started local PostgreSQL container
-          2. Run migrations for trip-service
-          3. Run migrations for driver-service
-          4. Created database dumps
-          5. Connected to RDS instance
-          6. Restored trip database to RDS
-          7. Restored driver database to RDS
-
-          ### Next Steps
-          - Verify data in RDS using psql or database client
-          - Test application connectivity to RDS
-          - Run smoke tests on dev environment
-
-          ### Connecting to RDS
-          ```bash
-          # Get RDS endpoint
-          aws rds describe-db-instances \
-            --db-instance-identifier drive-ops-dev-postgres \
-            --query 'DBInstances[0].Endpoint.Address'
-
-          # Get credentials
-          aws secretsmanager get-secret-value \
-            --secret-id drive-ops/dev/rds/credentials \
-            --query SecretString --output text | jq
-          ```
-
-          ---
           *Triggered by: @${{ github.actor }}*
           *Run: #${{ github.run_number }}*
           EOF
@@ -320,43 +277,7 @@ jobs:
         run: |
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
           ## Database Sync Failed
-
           Please check the logs above for error details.
-
-          ### Common Issues
-
-          **1. RDS Connection Failed**
-          - RDS may be in private subnet without public access
-          - Security group may not allow GitHub Actions IPs
-          - Solution: Set `publicly_accessible = true` in dev RDS config
-
-          **2. RDS Instance Not Found**
-          - RDS instance may not be running
-          - Solution: `terragrunt apply` in `infra/terragrunt/envs/dev/rds/`
-
-          **3. Credentials Error**
-          - Secrets Manager secret may not exist
-          - Solution: `terragrunt apply` in `infra/terragrunt/envs/dev/secrets/`
-
-          **4. Migration Failed**
-          - Check migration files in service directories
-          - Verify docker-compose.yml configuration
-
-          ### Troubleshooting
-
-          ```bash
-          # Check RDS status
-          aws rds describe-db-instances \
-            --db-instance-identifier drive-ops-dev-postgres \
-            --query 'DBInstances[0].DBInstanceStatus'
-
-          # Check if RDS is publicly accessible
-          aws rds describe-db-instances \
-            --db-instance-identifier drive-ops-dev-postgres \
-            --query 'DBInstances[0].PubliclyAccessible'
-          ```
-
-          ---
           *Triggered by: @${{ github.actor }}*
           *Run: #${{ github.run_number }}*
           EOF
