@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 	"time"
+	"fmt"
 
 	"trip-service/internal/domain"
 	"trip-service/internal/repository"
@@ -86,41 +87,35 @@ func TestDatabaseMigrations(t *testing.T) {
 
 // TestTripRepository_Create tests creating a new trip
 func TestTripRepository_Create(t *testing.T) {
-	repo := repository.NewTripRepository(testDB)
-	ctx := context.Background()
+    repo := repository.NewTripRepository(testDB)
+    ctx := context.Background()
 
-	passengerID := uuid.New()
-	trip := CreateTestTrip(passengerID, "Kyiv, Khreshchatyk St", "Kyiv, Maidan Nezalezhnosti")
+    // 1. Arrange: Prepare test data
+    passengerID := uuid.New()
+    trip := CreateTestTrip(passengerID, "Kyiv, Khreshchatyk St", "Kyiv, Maidan Nezalezhnosti")
 
-	// Clean up after test
-	t.Cleanup(func() {
-		testDB.Exec("DELETE FROM trips WHERE id = ?", trip.ID)
-	})
+    // 2. Clean up: Ensure the trip is removed regardless of test outcome
+    t.Cleanup(func() {
+        testDB.Exec("DELETE FROM trips WHERE id = ?", trip.ID)
+    })
 
-	// Create trip
-	err := repo.Create(ctx, trip)
-	if err != nil {
-		t.Fatalf("Failed to create trip: %v", err)
-	}
+    // 3. Act: Execute the repository method
+    err := repo.Create(ctx, trip)
+    if err != nil {
+        t.Fatalf("Failed to create trip: %v", err)
+    }
 
-	// Verify trip was created
-	var createdTrip domain.Trip
-	if err := testDB.First(&createdTrip, "id = ?", trip.ID).Error; err != nil {
-		t.Fatalf("Failed to find created trip: %v", err)
-	}
+    // 4. Assert: Verify the data in the database matches our expectations
+    var createdTrip domain.Trip
+    if err := testDB.First(&createdTrip, "id = ?", trip.ID).Error; err != nil {
+        t.Fatalf("Failed to find created trip in database: %v", err)
+    }
 
-	// Verify fields
-	if createdTrip.PassengerID != passengerID {
-		t.Errorf("Expected passenger_id %v, got %v", passengerID, createdTrip.PassengerID)
-	}
-	if createdTrip.Pickup != "Kyiv, Khreshchatyk St" {
-		t.Errorf("Expected pickup 'Kyiv, Khreshchatyk St', got '%s'", createdTrip.Pickup)
-	}
-	if createdTrip.Status != "PENDING" {
-		t.Errorf("Expected status 'PENDING', got '%s'", createdTrip.Status)
-	}
+    // Use the optimized helper to check all fields (Status, UUIDs, Casing)
+    // This is more robust than manual if-checks for every field.
+    AssertTripEqual(t, trip, &createdTrip)
 
-	t.Log("Successfully created trip")
+    t.Log("Successfully created trip and verified all fields match")
 }
 
 // TestTripRepository_GetByID tests retrieving a trip by ID
@@ -159,49 +154,44 @@ func TestTripRepository_GetByID(t *testing.T) {
 
 // TestTripRepository_Update tests updating a trip
 func TestTripRepository_Update(t *testing.T) {
-	repo := repository.NewTripRepository(testDB)
-	ctx := context.Background()
+    repo := repository.NewTripRepository(testDB)
+    ctx := context.Background()
 
-	passengerID := uuid.New()
-	driverID := uuid.New()
-	trip := CreateTestTrip(passengerID, "Odesa, Deribasivska St", "Odesa, Arcadia Beach")
+    passengerID := uuid.New()
+    driverID := uuid.New()
+    // Using the helper to create a PENDING trip first
+    trip := CreateTestTrip(passengerID, "Odesa, Deribasivska St", "Odesa, Arcadia Beach")
 
-	// Create test trip
-	if err := testDB.Create(trip).Error; err != nil {
-		t.Fatalf("Failed to create test trip: %v", err)
-	}
+    // Create initial state in DB
+    if err := testDB.Create(trip).Error; err != nil {
+        t.Fatalf("Failed to create test trip: %v", err)
+    }
 
-	// Clean up after test
-	t.Cleanup(func() {
-		testDB.Exec("DELETE FROM trips WHERE id = ?", trip.ID)
-	})
+    t.Cleanup(func() {
+        testDB.Exec("DELETE FROM trips WHERE id = ?", trip.ID)
+    })
 
-	// Update trip
-	trip.DriverID = &driverID
-	trip.Status = "ACTIVE"
-	trip.UpdatedAt = time.Now()
+    // Update trip fields
+    trip.DriverID = &driverID
+    trip.Status = domain.TripStatusActive // Use domain constant for safety
+    trip.UpdatedAt = time.Now()
 
-	err := repo.Update(ctx, trip)
-	if err != nil {
-		t.Fatalf("Failed to update trip: %v", err)
-	}
+    // Act
+    err := repo.Update(ctx, trip)
+    if err != nil {
+        t.Fatalf("Failed to update trip: %v", err)
+    }
 
-	// Verify update
-	var updated domain.Trip
-	if err := testDB.First(&updated, "id = ?", trip.ID).Error; err != nil {
-		t.Fatalf("Failed to find updated trip: %v", err)
-	}
+    // Verify
+    var updated domain.Trip
+    if err := testDB.First(&updated, "id = ?", trip.ID).Error; err != nil {
+        t.Fatalf("Failed to find updated trip: %v", err)
+    }
 
-	if updated.Status != "ACTIVE" {
-		t.Errorf("Expected status 'ACTIVE', got '%s'", updated.Status)
-	}
-	if updated.DriverID == nil {
-		t.Error("Expected driver_id to be set, got nil")
-	} else if *updated.DriverID != driverID {
-		t.Errorf("Expected driver_id %v, got %v", driverID, *updated.DriverID)
-	}
+    // Comprehensive assertion including pointer-to-uuid and status
+    AssertTripEqual(t, trip, &updated)
 
-	t.Log("Successfully updated trip")
+    t.Log("Successfully updated trip status and assigned driver")
 }
 
 // TestTripRepository_Delete tests deleting a trip
@@ -235,34 +225,43 @@ func TestTripRepository_Delete(t *testing.T) {
 
 // TestHealthEndpoint tests the health check endpoint
 func TestHealthEndpoint(t *testing.T) {
-	//t.Skip("Skipping health endpoint test - HTTP server not yet implemented")
+    // 1. Dynamic URL: Respect the SERVICE_URL from CI or fallback to localhost
+    baseURL := getEnv("SERVICE_URL", "http://localhost:8081")
+    healthURL := fmt.Sprintf("%s/health", baseURL)
 
-	resp, err := MakeHTTPRequest("GET", "http://localhost:8081/health")
-	if err != nil {
-		t.Fatalf("Failed to make health check request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+    // 2. Resilience: Use the MakeHTTPRequest helper with built-in retries
+    resp, err := MakeHTTPRequest("GET", healthURL)
+    if err != nil {
+        t.Fatalf("Failed to reach health endpoint at %s: %v", healthURL, err)
+    }
+    defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
-	}
+    // 3. Status Validation
+    if resp.StatusCode != http.StatusOK {
+        t.Errorf("Expected status 200, got %d", resp.StatusCode)
+    }
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("Failed to read response body: %v", err)
-	}
+    // 4. Body Verification
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        t.Fatalf("Failed to read response body: %v", err)
+    }
 
-	// Parse and verify response body
-	var health map[string]interface{}
-	if err := json.Unmarshal(body, &health); err != nil {
-		t.Fatalf("Failed to decode response: %v. Body was: %s", err, string(body))
-	}
+    var health map[string]interface{}
+    if err := json.Unmarshal(body, &health); err != nil {
+        t.Fatalf("Failed to decode JSON: %v. Body was: %s", err, string(body))
+    }
 
-	if status, ok := health["status"]; !ok || status != "ok" {
-		t.Errorf("Expected status 'ok', got %v", status)
-	}
+    // 5. Mock Mode Confirmation
+    // If 'status' is 'ok', it confirms the Mock SQS and Postgres initialized correctly.
+    status, ok := health["status"]
+    if !ok || status != "ok" {
+        t.Errorf("Health status check failed. Expected 'ok', got '%v'. Body: %s", status, string(body))
+    }
 
-	t.Log("Health endpoint returned 200 OK")
+    if detail, ok := health["detail"]; ok {
+        t.Logf("Health Details: %v", detail)
+    }
 
+    t.Logf("Health endpoint check successful for %s", healthURL)
 }

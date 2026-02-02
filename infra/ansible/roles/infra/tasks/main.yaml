@@ -1,5 +1,5 @@
 ---
-# Main tasks for Shared Infrastructure (Database, Message Broker, and Configs)
+# Main tasks for Shared Infrastructure (Database and Configs)
 
 - name: Create symlink for project root
   # Links the entire project from host to /opt/drive-ops for instant sync
@@ -11,26 +11,26 @@
   tags: infra
 
 - name: Set permissions for .env file
-  # Set to 644 per colleague's request to ensure container access
+  # Set to 644 to ensure container access
   ansible.builtin.file:
     path: "/opt/drive-ops/.env"
     mode: '0644'
   tags: infra
 
 - name: Start shared infrastructure services
-  # Launches core services using the live docker-compose.yml
+  # [FINALIZED] Launches only the DB service. RabbitMQ (mq) is decommissioned.
   community.docker.docker_compose_v2:
     project_src: "/opt/drive-ops"
     state: present
-    services: ["db", "mq"]
+    services: ["db"]
   tags: infra
 
-- name: Wait for infrastructure readiness
+- name: Wait for database readiness
+  # [FINALIZED] Removed port 5672 to prevent timeout failures in CI/CD.
   ansible.builtin.wait_for:
     host: localhost
-    port: "{{ item }}"
+    port: 5432
     state: started
     delay: 5
     timeout: 60
-  loop: [ 5432, 5672 ]
   tags: infra

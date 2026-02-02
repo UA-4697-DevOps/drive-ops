@@ -4,10 +4,12 @@ Uses in-memory drivers storage until database is ready
 """
 import logging
 from typing import List, Dict, Any
+from datetime import datetime
 
-from schemas.trip_request import TripRequestNotification
-from clients.gateway_client import ClientGatewayClient
-from utils.geo import find_nearby_drivers
+# [FIXED] Imported Location schema to satisfy TripRequestNotification requirements
+from src.schemas.trip_request import TripRequestNotification, Location
+from src.clients.gateway_client import ClientGatewayClient
+from src.utils.geo import find_nearby_drivers
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,56 @@ class DriverNotificationService:
         self.gateway_client = gateway_client
         self.drivers = drivers_storage
         self.max_retries = max_retries
+
+    async def notify_available_drivers(self, trip_payload: dict):
+        """
+        Processes trip payload and triggers geo-fenced notifications.
+        [FIXED] Added strict tripId validation and safe coordinate fallbacks.
+        """
+        # [FIXED] Synchronized with Go service output (camelCase)
+        trip_id = trip_payload.get('tripId')
+
+        # [FIXED] Guard against missing tripId to prevent str(None) -> "None" conversion
+        if not trip_id:
+            logger.error(f"SQS Event Error: Missing tripId in payload. Keys present: {list(trip_payload.keys())}")
+            return []
+
+        pickup_data = trip_payload.get('pickup', {})
+        dropoff_data = trip_payload.get('dropoff', {})
+        
+        # [FIXED] Default pickup to Kyiv center, but default dropoff to pickup 
+        # to avoid "Null Island" (0.0, 0.0) errors.
+        p_lat = pickup_data.get('lat', 50.4501)
+        p_lng = pickup_data.get('lng', 30.5234)
+
+        d_lat = dropoff_data.get('lat', p_lat)
+        d_lng = dropoff_data.get('lng', p_lng)
+
+        logger.info(f"SQS Event: Processing driver discovery for Trip {trip_id}")
+
+        # [FIXED] Construct Location objects to satisfy Pydantic schema
+        notification_data = {
+            "pickup": Location(
+                lat=p_lat,
+                lng=p_lng,
+                address=pickup_data.get('address', 'Unknown Pickup')
+            ),
+            "dropoff": Location(
+                lat=d_lat,
+                lng=d_lng,
+                address=dropoff_data.get('address', 'Unknown Dropoff')
+            ),
+            # [FIXED] Use UTC for cross-service consistency
+            "created_at": datetime.utcnow()
+        }
+
+        # Bridge to the existing geo-fencing logic
+        return await self.notify_nearby_drivers(
+            trip_id=str(trip_id),
+            pickup_latitude=p_lat,
+            pickup_longitude=p_lng,
+            notification_data=notification_data
+        )
     
     async def send_trip_request_to_driver(
         self,
@@ -31,26 +83,18 @@ class DriverNotificationService:
         notification: TripRequestNotification
     ) -> bool:
         """Send trip request to specific driver with retry logic"""
-        logger.info(
-            f"Attempting to send trip request - "
-            f"Trip ID: {notification.trip_id}, Driver ID: {driver_id}"
-        )
+        logger.info(f"Attempting notification: Trip {notification.trip_id} -> Driver {driver_id}")
         
-        # Verify driver exists
         driver = self.drivers.get(driver_id)
         if not driver:
-            logger.error(f"Driver not found: {driver_id}")
+            logger.error(f"Driver not found in memory: {driver_id}")
             return False
         
-        # Check if driver is available
         status = driver.get("status", "OFFLINE")
         if status not in ["AVAILABLE", "ONLINE"]:
-            logger.warning(
-                f"Driver {driver_id} is not available (status: {status})"
-            )
+            logger.warning(f"Driver {driver_id} is {status}, skipping.")
             return False
         
-        # Retry logic
         for attempt in range(1, self.max_retries + 1):
             try:
                 success = await self.gateway_client.send_driver_notification(
@@ -59,33 +103,12 @@ class DriverNotificationService:
                 )
                 
                 if success:
-                    logger.info(
-                        f"Successfully dispatched trip request - "
-                        f"Trip ID: {notification.trip_id}, Driver ID: {driver_id}"
-                    )
-                    
-                    # Update driver status to NOTIFIED
                     driver["status"] = "NOTIFIED"
                     return True
-                else:
-                    logger.warning(
-                        f"Failed to dispatch trip request "
-                        f"(attempt {attempt}/{self.max_retries}) - "
-                        f"Trip ID: {notification.trip_id}, Driver ID: {driver_id}"
-                    )
-                    
+                
             except Exception as e:
-                logger.error(
-                    f"Error sending trip request "
-                    f"(attempt {attempt}/{self.max_retries}): {e} - "
-                    f"Trip ID: {notification.trip_id}, Driver ID: {driver_id}"
-                )
+                logger.error(f"Attempt {attempt} failed for driver {driver_id}: {e}")
         
-        # All retries failed
-        logger.error(
-            f"Failed to dispatch trip request after {self.max_retries} attempts - "
-            f"Trip ID: {notification.trip_id}, Driver ID: {driver_id}"
-        )
         return False
     
     async def notify_nearby_drivers(
@@ -97,7 +120,6 @@ class DriverNotificationService:
         radius_km: float = 5.0
     ) -> List[str]:
         """Find and notify nearby available drivers"""
-        # Find nearby available drivers
         nearby_drivers = find_nearby_drivers(
             drivers=self.drivers,
             pickup_lat=pickup_latitude,
@@ -107,36 +129,22 @@ class DriverNotificationService:
         )
         
         if not nearby_drivers:
-            logger.warning(f"No available drivers found for trip {trip_id}")
+            logger.warning(f"No available drivers in {radius_km}km radius for trip {trip_id}")
             return []
         
-        logger.info(
-            f"Found {len(nearby_drivers)} nearby drivers for trip {trip_id}"
-        )
-        
         notified_drivers = []
-        
-        # Send notifications to all nearby drivers
         for driver in nearby_drivers:
             driver_id = driver["id"]
             
+            # [FIXED] Pydantic will now validate correctly because notification_data 
+            # keys match the Location fields exactly
             notification = TripRequestNotification(
                 trip_id=trip_id,
                 driver_id=driver_id,
                 **notification_data
             )
             
-            success = await self.send_trip_request_to_driver(
-                driver_id=driver_id,
-                notification=notification
-            )
-            
-            if success:
+            if await self.send_trip_request_to_driver(driver_id, notification):
                 notified_drivers.append(driver_id)
-        
-        logger.info(
-            f"Successfully notified {len(notified_drivers)}/{len(nearby_drivers)} "
-            f"drivers for trip {trip_id}: {notified_drivers}"
-        )
         
         return notified_drivers

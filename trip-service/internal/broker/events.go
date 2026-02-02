@@ -9,37 +9,28 @@ import (
 
 // simpleGeocode provides basic geocoding for Kyiv addresses (MVP/demo)
 func simpleGeocode(address string) (lat, lng float64) {
-	// Default to Khreshchatyk center if no match
+	// Kyiv city center defaults
 	defaultLat, defaultLng := 50.4501, 30.5234
-
-	// Simple pattern matching for demo purposes
-	// In production, use a proper geocoding service
-	if len(address) > 0 {
-		// All addresses in Kyiv center area (Khreshchatyk)
-		return defaultLat, defaultLng
-	}
-
 	return defaultLat, defaultLng
 }
 
-// BuildTripCreatedEvent constructs a TripCreatedEvent from a Trip
+// BuildTripCreatedEvent constructs a TripCreatedEvent from a Trip.
+// Standardizes the envelope fields for SQS FIFO delivery.
 func BuildTripCreatedEvent(trip *domain.Trip, correlationID string) *domain.TripCreatedEvent {
 	event := &domain.TripCreatedEvent{}
 
-	// Set base event metadata
+	// Envelope Fields - Standardized for cross-service compatibility
 	event.EventID = uuid.New().String()
-	event.EventType = "trip.event.created"
+	event.EventType = "trip.created" 
 	event.EventVersion = "1.0"
 	event.CorrelationID = correlationID
-	event.Timestamp = time.Now()
+	event.Timestamp = time.Now().UTC()
 
-	// Set payload
+	// Payload Mapping
 	event.Payload.TripID = trip.ID.String()
 	event.Payload.PassengerID = trip.PassengerID.String()
 	event.Payload.CreatedAt = trip.CreatedAt
 
-	// MVP: Use simple geocoding for demo (Kyiv coordinates)
-	// TODO: Integrate proper geocoding service (Google Maps, etc.)
 	pickupLat, pickupLng := simpleGeocode(trip.Pickup)
 	dropoffLat, dropoffLng := simpleGeocode(trip.Dropoff)
 

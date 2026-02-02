@@ -1,6 +1,8 @@
 package integration
 
 import (
+	"fmt"
+	"log"
 	"net/http"
 	"testing"
 	"time"
@@ -58,16 +60,56 @@ func ClearTestData(db *gorm.DB) error {
 	return db.Exec("TRUNCATE TABLE trips CASCADE").Error
 }
 
-// MakeHTTPRequest makes an HTTP request for testing endpoints
+// MakeHTTPRequest makes an HTTP request with a retry mechanism for container boot time
 func MakeHTTPRequest(method, url string) (*http.Response, error) {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
+    client := &http.Client{
+        Timeout: 5 * time.Second,
+    }
 
-	req, err := http.NewRequest(method, url, nil)
-	if err != nil {
-		return nil, err
-	}
+    var resp *http.Response
+    var lastErr error 
+    
+    const maxAttempts = 25 
 
-	return client.Do(req)
+    for i := 0; i < maxAttempts; i++ {
+        req, err := http.NewRequest(method, url, nil)
+        if err != nil {
+            return nil, err
+        }
+
+        resp, lastErr = client.Do(req) 
+        if lastErr == nil {
+            // Check for 503 which happens if the proxy is up but the app isn't
+            if resp.StatusCode == http.StatusServiceUnavailable {
+                _ = resp.Body.Close()
+                
+                // 1. Set lastErr so the final return knows WHY it failed
+                lastErr = fmt.Errorf("service returned 503 Service Unavailable")
+                
+                log.Printf("Attempt %d: Service at %s returned 503, retrying...", i+1, url)
+                
+                // 2. Skip sleep on the very last attempt
+                if i < maxAttempts-1 {
+                    time.Sleep(2 * time.Second)
+                }
+                continue
+            }
+            return resp, nil
+        }
+
+        if resp != nil && resp.Body != nil {
+            _ = resp.Body.Close()
+        }
+
+        log.Printf("Attempt %d: Service at %s not ready yet, retrying: %v", i+1, url, lastErr)
+        
+        // 3. Keep the error branch sleep aligned too
+        if i < maxAttempts-1 {
+            time.Sleep(2 * time.Second)
+        }
+    }
+
+    // Now if it fails after 25 attempts, lastErr will correctly say "returned 503" 
+    // instead of "connection refused" if the last attempt was a 503.
+    return nil, fmt.Errorf("service at %s failed after %d attempts: %w", url, maxAttempts, lastErr)
 }

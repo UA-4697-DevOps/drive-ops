@@ -6,11 +6,11 @@ import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from schemas.driver_response import (
-    DriverResponseEvent,
-    DriverAssignedPayload
-)
-from clients.rabbitmq_publisher import RabbitMQPublisher
+from schemas.driver_response import DriverResponseEvent
+# We keep DriverResponseEvent for the input, but we don't need DriverAssignedPayload 
+# because the SQS Publisher now handles the outgoing data structure.
+
+from clients.sqs_publisher import SQSPublisher
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class DriverResponseService:
     
     def __init__(
         self,
-        publisher: RabbitMQPublisher,
+        publisher: SQSPublisher,
         drivers_storage: Dict[str, Dict[str, Any]],
         trip_requests_storage: Dict[str, Dict[str, Any]]
     ):
@@ -52,9 +52,6 @@ class DriverResponseService:
     ) -> tuple[bool, Optional[str]]:
         """
         Validate driver response (only checks existence, not idempotency)
-        
-        Returns:
-            (is_valid, error_message)
         """
         # Check if driver exists
         if driver_id not in self.drivers:
@@ -64,7 +61,6 @@ class DriverResponseService:
         if trip_id not in self.trip_requests:
             return False, f"Trip request {trip_id} not found"
         
-        # FIXED: Don't check duplicates here - handle as success in handlers
         return True, None
     
     async def handle_driver_accept(
@@ -75,15 +71,12 @@ class DriverResponseService:
     ) -> bool:
         """
         Handle driver accepting trip request
-        
-        Returns:
-            True if processed successfully (including idempotent cases), False otherwise
         """
         logger.info(
             f"Processing driver accept - Driver: {driver_id}, Trip: {trip_id}"
         )
         
-        # Validate response (existence only)
+        # 1. Validate response (existence only)
         is_valid, error_msg = self._validate_response(driver_id, trip_id)
         if not is_valid:
             logger.error(
@@ -92,7 +85,7 @@ class DriverResponseService:
             )
             return False  # Genuine error - will retry
         
-        # FIXED: Handle idempotent cases as success (no retry)
+        # 2. Handle idempotent cases as success (no retry)
         if self._is_duplicate_response(trip_id, driver_id):
             logger.info(
                 f"Duplicate accept ignored (idempotent) - Driver: {driver_id}, Trip: {trip_id}"
@@ -105,19 +98,24 @@ class DriverResponseService:
             )
             return True  # ACK without processing
         
-        # Publish event FIRST before updating state
-        payload = DriverAssignedPayload(
+        # --- Prepare Data for SQS ---
+        driver_data = self.drivers.get(driver_id, {})
+        
+        vehicle_info = {
+            "make": driver_data.get("vehicle_make", "Unknown"),
+            "model": driver_data.get("vehicle_model", "Unknown"),
+            "licensePlate": driver_data.get("license_plate", "UNKNOWN")
+        }
+        driver_name = driver_data.get("name", "Unknown Driver")
+        
+        # 3. Publish event FIRST before updating state
+        # We pass raw data to SQSPublisher, which handles formatting
+        success = await asyncio.to_thread(
+            self.publisher.publish_driver_assigned,
             trip_id=trip_id,
             driver_id=driver_id,
-            assigned_at=timestamp
-        )
-        
-        # Use asyncio.to_thread to avoid blocking event loop
-        success = await asyncio.to_thread(
-            self.publisher.publish_event,
-            event_type="trip.event.driver_assigned",
-            payload=payload.model_dump(mode='json'),
-            routing_key="trip.event.driver_assigned"
+            driver_name=driver_name,
+            vehicle_info=vehicle_info
         )
         
         if not success:
@@ -127,7 +125,7 @@ class DriverResponseService:
             )
             return False  # Will retry
         
-        # Only update state AFTER successful publish
+        # 4. Only update state AFTER successful publish
         trip_data = self.trip_requests[trip_id]
         trip_data["status"] = "assigned"
         trip_data["assigned_driver_id"] = driver_id
@@ -139,9 +137,9 @@ class DriverResponseService:
         trip_data["responses"][driver_id] = "accept"
         
         # Update driver status
-        driver = self.drivers.get(driver_id)
-        if driver:
-            driver["status"] = "ON_TRIP"
+        if driver_id in self.drivers:
+            self.drivers[driver_id]["status"] = "ON_TRIP"
+            logger.info(f"Driver {driver_id} status updated to ON_TRIP locally")
         
         logger.info(
             f"Successfully processed driver accept and published assignment - "
@@ -157,16 +155,14 @@ class DriverResponseService:
         timestamp: datetime
     ) -> bool:
         """
-        Handle driver rejecting trip request
-        
-        Returns:
-            True if processed successfully (including idempotent cases), False otherwise
+        Handle driver rejecting trip request.
+        Updates local state and releases driver back to AVAILABLE status.
         """
         logger.info(
             f"Processing driver reject - Driver: {driver_id}, Trip: {trip_id}"
         )
         
-        # Validate response (existence only)
+        # 1. Validate response existence
         is_valid, error_msg = self._validate_response(driver_id, trip_id)
         if not is_valid:
             logger.error(
@@ -175,7 +171,7 @@ class DriverResponseService:
             )
             return False  # Genuine error - will retry
         
-        # FIXED: Handle idempotent cases as success (no retry)
+        # 2. Handle idempotent cases
         if self._is_duplicate_response(trip_id, driver_id):
             logger.info(
                 f"Duplicate reject ignored (idempotent) - Driver: {driver_id}, Trip: {trip_id}"
@@ -188,15 +184,15 @@ class DriverResponseService:
             )
             return True  # ACK without processing
         
-        # Update trip request state
+        # 3. Update local trip request state
         trip_data = self.trip_requests[trip_id]
         
-        # Record response
+        # Record the rejection response
         if "responses" not in trip_data:
             trip_data["responses"] = {}
         trip_data["responses"][driver_id] = "reject"
         
-        # Update driver status back to AVAILABLE
+        # 4. Update driver status back to AVAILABLE so they can receive other orders
         driver = self.drivers.get(driver_id)
         if driver:
             driver["status"] = "AVAILABLE"
@@ -205,20 +201,74 @@ class DriverResponseService:
             f"Driver rejection recorded - Driver: {driver_id}, Trip: {trip_id}"
         )
         
-        # MVP: Just log rejection
-        logger.warning(
-            f"Trip {trip_id} rejected by driver {driver_id}. "
-            f"Follow-up logic not yet implemented (MVP choice)."
-        )
-        
+        # NOTE: For MVP, we just log the rejection. 
+        # Future Phase: Implement matching logic to notify the next nearest driver.
         return True
     
+    async def handle_trip_completion(
+        self,
+        driver_id: str,
+        trip_id: str,
+        timestamp: datetime
+    ) -> bool:
+        """
+        Processes trip completion and publishes event to SQS.
+        Includes ownership and state validation guards.
+        """
+        logger.info(f"Processing trip completion - Driver: {driver_id}, Trip: {trip_id}")
+
+        # 1. Validate basic existence
+        is_valid, error_msg = self._validate_response(driver_id, trip_id)
+        if not is_valid:
+            logger.error(f"Invalid completion - Error: {error_msg}")
+            return False
+
+        # 2. Security & State Guard: Ensure the trip is active and owned by this driver
+        trip_data = self.trip_requests.get(trip_id)
+        
+        # Check status: must be 'assigned' (Active)
+        if trip_data.get("status") != "assigned":
+            logger.info(
+                f"Trip {trip_id} completion ignored: status is '{trip_data.get('status')}', "
+                f"expected 'assigned' (idempotent check)."
+            )
+            return True  # Successfully ignored
+
+        # Check Ownership: Compare as strings to prevent UUID object mismatches
+        if str(trip_data.get("assigned_driver_id")) != str(driver_id):
+            logger.error(
+                f"UNAUTHORIZED: Driver {driver_id} tried to complete trip {trip_id} "
+                f"assigned to {trip_data.get('assigned_driver_id')}"
+            )
+            return False
+
+        # 3. Prepare payload and publish to SQS via thread pool
+        success = await asyncio.to_thread(
+            self.publisher.publish_trip_completed,
+            trip_id=trip_id,
+            driver_id=driver_id,
+            timestamp=timestamp
+        )
+
+        if not success:
+            logger.error(f"Failed to publish trip_completed event for trip {trip_id}")
+            return False
+
+        # 4. Finalize local state update
+        trip_data["status"] = "completed"
+        trip_data["completed_at"] = timestamp
+        
+        # 5. Set driver back to ONLINE (Available) for new orders
+        if driver_id in self.drivers:
+            self.drivers[driver_id]["status"] = "ONLINE"
+            logger.info(f"Driver {driver_id} status updated to ONLINE locally after completion")
+
+        return True
+
     async def process_driver_response(self, event: DriverResponseEvent) -> bool:
         """
-        Process driver response event (accept or reject)
-        
-        Returns:
-            True if processed successfully, False otherwise
+        Main router for driver response events (accept or reject).
+        Used by the background RabbitMQ/SQS consumer.
         """
         payload = event.payload
         driver_id = payload.driver_id

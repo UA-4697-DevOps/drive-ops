@@ -11,7 +11,6 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${TRIP_DB_NAME}
     healthcheck:
-      # Use native postgres utility to check readiness
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
@@ -22,29 +21,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/postgres/init-db:/docker-entrypoint-initdb.d
-    networks:
-      - drive-ops-net
-
-  # RabbitMQ Message Broker
-  mq:
-    image: rabbitmq:3-management-alpine
-    container_name: drive-ops-mq
-    restart: always
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
-    healthcheck:
-      # Ensure RabbitMQ nodes are fully running
-      test: ["CMD-SHELL", "rabbitmq-diagnostics -q check_running"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - drive-ops-net
 
@@ -75,10 +51,16 @@ services:
     container_name: trip-service
     restart: always
     env_file: .env
+    environment:
+      - AWS_REGION=us-east-2
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - SQS_DRIVER_ASSIGNED_URL=${SQS_DRIVER_ASSIGNED_URL}
+      - SQS_TRIP_CREATED_URL=${SQS_TRIP_CREATED_URL}
+      - SQS_TRIP_COMPLETED_URL=${SQS_TRIP_COMPLETED_URL}
     ports:
       - "8081:8081"
     healthcheck:
-      # Linked to the /health endpoint in Go source code
       test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
       interval: 30s
       timeout: 5s
@@ -86,8 +68,6 @@ services:
       start_period: 15s
     depends_on:
       db:
-        condition: service_healthy
-      mq:
         condition: service_healthy
       trip-migrations:
         condition: service_completed_successfully
@@ -123,11 +103,16 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app/src
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:5432/${DRIVER_DB_NAME}
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:5432/${DRIVER_DB_NAME}
+      - AWS_REGION=us-east-2
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - SQS_TRIP_CREATED_URL=${SQS_TRIP_CREATED_URL}
+      - SQS_DRIVER_ASSIGNED_URL=${SQS_DRIVER_ASSIGNED_URL}
+      - SQS_TRIP_COMPLETED_URL=${SQS_TRIP_COMPLETED_URL}
     ports:
-      - "8082:8082" # Unified internal and external port
+      - "8082:8082" 
     healthcheck:
-      # Linked to the @app.get("/health") endpoint in FastAPI
       test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
       interval: 30s
       timeout: 5s
@@ -135,8 +120,6 @@ services:
       start_period: 15s
     depends_on:
       db:
-        condition: service_healthy
-      mq:
         condition: service_healthy
       driver-migrations:
         condition: service_completed_successfully
@@ -157,7 +140,6 @@ services:
       - "8080:8080"
     depends_on:
       trip-service:
-        # Ensures the bot only starts when the backend is ready to accept requests
         condition: service_healthy
     networks:
       - drive-ops-net
@@ -170,4 +152,3 @@ networks:
 
 volumes:
   postgres_data:
-  rabbitmq_data:

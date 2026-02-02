@@ -10,11 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+
+	api "trip-service/internal/api/http"
 	"trip-service/internal/broker"
 	"trip-service/internal/repository"
 	"trip-service/internal/service"
-
-	api "trip-service/internal/api/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
@@ -34,6 +35,10 @@ func main() {
 		log.Println("Note: .env file not found, using system env variables")
 	}
 
+	// Define a background context to manage the entire application lifecycle
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
+
 	// Helper for retry logic
 	connectWithRetry := func(desc string, fn func() error) error {
 		var err error
@@ -43,7 +48,7 @@ func main() {
 				return nil
 			}
 			log.Printf("Failed to connect to %s (attempt %d/10): %v", desc, i+1, err)
-			time.Sleep(time.Duration(i+1) * time.Second) // Exponential backoff: 1s, 2s, 3s... (actually linear here but sufficient)
+			time.Sleep(time.Duration(i+1) * time.Second)
 		}
 		return fmt.Errorf("failed to connect to %s after retries: %w", desc, err)
 	}
@@ -72,71 +77,79 @@ func main() {
 		log.Fatalf("Fatal: %v", err)
 	}
 
-	// 2. Initialize RabbitMQ publisher
+	// 2. Load Broker Config (Now filtered for SQS only)
 	brokerConfig, err := broker.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load broker config: %v", err)
 	}
 
-	var publisher *broker.RabbitMQPublisher
-	err = connectWithRetry("RabbitMQ Publisher", func() error {
-		var err error
-		publisher, err = broker.NewRabbitMQPublisher(brokerConfig)
-		return err
-	})
-	if err != nil {
-		log.Fatalf("Fatal: %v", err)
+	// Custom HTTP client for Long Polling (Timeout > 20s)
+	customHttpClient := &http.Client{
+		Timeout: 30 * time.Second,
 	}
 
-	// 3. Dependency Injection: Repository -> Service -> Handler
+	// 3. Initialize AWS Config
+	awsCfg, err := config.LoadDefaultConfig(appCtx,
+		config.WithRegion(brokerConfig.AWSRegion),
+		config.WithHTTPClient(customHttpClient),
+	)
+	if err != nil {
+		log.Fatalf("Failed to load AWS Config: %v", err)
+	}
+
+	// 4. Initialize Outbound Publisher (SQS)
+	publisher := broker.NewSQSPublisher(awsCfg, brokerConfig.SQS_TRIP_CREATED_URL)
+	log.Printf("Successfully initialized SQS Publisher on: %s", brokerConfig.SQS_TRIP_CREATED_URL)
+
+	// 5. Dependency Injection
 	repo := repository.NewTripRepository(db)
 	svc := service.NewTripService(repo, publisher)
 	handler := api.NewTripHandler(svc)
 
-	// Initialize RabbitMQ Consumer
-	var consumer *broker.RabbitMQConsumer
-	err = connectWithRetry("RabbitMQ Consumer", func() error {
-		var err error
-		consumer, err = broker.NewRabbitMQConsumer(brokerConfig, svc)
-		return err
-	})
-	if err != nil {
-		log.Fatalf("Fatal: %v", err)
+	// --- SQS Consumer Setup ---
+	consumerErrCh := make(chan error, 2)
+
+	startConsumer := func(name string, url string) {
+		if url == "" {
+			log.Printf("WARNING: %s URL is empty. Consumer skipped.", name)
+			return
+		}
+		
+		consumer := broker.NewSQSConsumer(awsCfg, url, svc)
+		go func() {
+			log.Printf("INFO: Starting %s SQS Consumer on: %s", name, url)
+			if err := consumer.Start(appCtx); err != nil {
+				if appCtx.Err() == nil {
+					log.Printf("ERROR: %s failed: %v", name, err)
+					consumerErrCh <- fmt.Errorf("%s failed: %w", name, err)
+				}
+			}
+		}()
 	}
 
-	// Create a cancellable context for consumer
-	consumerCtx, consumerCancel := context.WithCancel(context.Background())
+	// Start separate consumers for Assigned and Completed queues
+	startConsumer("DriverAssigned", brokerConfig.SQS_DRIVER_ASSIGNED_URL)
+	startConsumer("TripCompleted", brokerConfig.SQS_TRIP_COMPLETED_URL)
 
-	// Start consumer in background
-	if err := consumer.Start(consumerCtx); err != nil {
-		log.Fatalf("Failed to start consumer: %v", err)
-	}
-
-	// 4. Router setup
+	// 6. Router setup
 	r := chi.NewRouter()
-
 	r.Get("/health", handler.HealthCheck)
-
 	r.Route("/trips", func(r chi.Router) {
 		r.Post("/", handler.CreateTrip)
 		r.Get("/{id}", handler.GetTrip)
-
-		// New endpoint for driver assignment (integrated from feature branch)
 		r.Patch("/{id}/assign-driver", handler.AssignDriver)
 	})
 
-	// 5. Setup HTTP server with graceful shutdown (Preferred production way)
+	// 7. Setup HTTP server with graceful shutdown
 	serverPort := getEnv("TRIP_SERVICE_PORT", ":8081")
 	srv := &http.Server{
 		Addr:    serverPort,
 		Handler: r,
 	}
 
-	// Channel to listen for interrupt signals
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	// Start server in a goroutine
 	go func() {
 		log.Printf("Trip Service is running on %s...", serverPort)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -144,41 +157,24 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal
-	<-stop
-	log.Println("Shutting down server...")
+	select {
+	case sig := <-stop:
+		log.Printf("Received signal %v, shutting down...", sig)
+	case err := <-consumerErrCh:
+		log.Printf("CRITICAL CONSUMER ERROR: %v", err)
+	}
 
-	// 6. Graceful shutdown logic
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// 8. Graceful shutdown sequence
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("Server shutdown error: %v", err)
 	}
 
-	// Cancel consumer context to signal shutdown
-	consumerCancel()
-
-	// Give consumer time to finish in-flight messages
-	consumerShutdownDone := make(chan struct{})
-	go func() {
-		if err := consumer.Close(); err != nil {
-			log.Printf("Error closing consumer: %v", err)
-		}
-		close(consumerShutdownDone)
-	}()
-
-	select {
-	case <-consumerShutdownDone:
-		log.Println("Consumer closed gracefully")
-	case <-time.After(10 * time.Second):
-		log.Println("Consumer close timed out")
-	}
-
-	// Close publisher last - both HTTP handlers and consumer may use it
-	if err := publisher.Close(); err != nil {
-		log.Printf("Error closing publisher: %v", err)
-	}
-
+	log.Println("Stopping SQS Consumers...")
+	appCancel() 
+	
+	time.Sleep(500 * time.Millisecond)
 	log.Println("Server stopped gracefully")
 }

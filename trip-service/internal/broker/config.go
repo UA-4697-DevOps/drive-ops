@@ -1,83 +1,42 @@
 package broker
 
 import (
-	"fmt"
-	"net/url"
+	"errors"
 	"os"
 )
 
-// Config holds RabbitMQ connection configuration
+// Config holds Broker (Modern SQS FIFO) configuration
 type Config struct {
-	URL          string
-	ExchangeName string
-	ExchangeType string
+	// SQS FIFO Queue URLs (Production)
+	SQS_TRIP_CREATED_URL    string
+	SQS_DRIVER_ASSIGNED_URL string
+	SQS_TRIP_COMPLETED_URL  string
+
+	AWSRegion string
 }
 
 // LoadConfig loads broker configuration from environment variables
 func LoadConfig() (*Config, error) {
-	// Support both RABBITMQ_URL (Docker/single string) and individual env vars (local dev)
-	var connURL string
-	if rabbitmqURL := os.Getenv("RABBITMQ_URL"); rabbitmqURL != "" {
-		// Validate RABBITMQ_URL
-		parsedURL, err := url.Parse(rabbitmqURL)
-		if err != nil {
-			return nil, fmt.Errorf("invalid RABBITMQ_URL: failed to parse: %w", err)
-		}
+	// 1. SQS Configuration (Unified Cloud-Native Path)
+	sqsCreatedURL := os.Getenv("SQS_TRIP_CREATED_URL")
+	sqsAssignedURL := os.Getenv("SQS_DRIVER_ASSIGNED_URL")
+	sqsCompletedURL := os.Getenv("SQS_TRIP_COMPLETED_URL")
+	awsRegion := getEnv("AWS_REGION", "us-east-2")
 
-		// Check scheme
-		if parsedURL.Scheme != "amqp" && parsedURL.Scheme != "amqps" {
-			return nil, fmt.Errorf("invalid RABBITMQ_URL: scheme must be 'amqp' or 'amqps', got '%s'", parsedURL.Scheme)
-		}
-
-		// Check credentials are present
-		if parsedURL.User == nil {
-			return nil, fmt.Errorf("invalid RABBITMQ_URL: credentials are required")
-		}
-
-		username := parsedURL.User.Username()
-		password, _ := parsedURL.User.Password()
-
-		// Validate credentials are not empty
-		if username == "" {
-			return nil, fmt.Errorf("invalid RABBITMQ_URL: username cannot be empty")
-		}
-		if password == "" {
-			return nil, fmt.Errorf("invalid RABBITMQ_URL: password cannot be empty")
-		}
-
-		connURL = rabbitmqURL
-	} else {
-		// Build URL from individual components
-		host := getEnv("RABBITMQ_HOST", "localhost")
-		port := getEnv("RABBITMQ_PORT", "5672")
-		user := os.Getenv("RABBITMQ_USER")
-		password := os.Getenv("RABBITMQ_PASSWORD")
-
-		// Validate required credentials
-		if user == "" {
-			return nil, fmt.Errorf("RABBITMQ_USER environment variable is required")
-		}
-		if password == "" {
-			return nil, fmt.Errorf("RABBITMQ_PASSWORD environment variable is required")
-		}
-
-		// URL-encode credentials to handle special characters
-		encodedUser := url.QueryEscape(user)
-		encodedPassword := url.QueryEscape(password)
-
-		connURL = fmt.Sprintf("amqp://%s:%s@%s:%s/", encodedUser, encodedPassword, host, port)
+	// Strict Validation: Fail fast if SQS URLs are missing in Production
+	if sqsCreatedURL == "" || sqsAssignedURL == "" || sqsCompletedURL == "" {
+		return nil, errors.New("missing required SQS Queue URLs; check SQS_TRIP_CREATED_URL, SQS_DRIVER_ASSIGNED_URL, and SQS_TRIP_COMPLETED_URL")
 	}
 
-	exchangeName := getEnv("RABBITMQ_EXCHANGE", "trip_events")
-	exchangeType := getEnv("RABBITMQ_EXCHANGE_TYPE", "topic")
-
 	return &Config{
-		URL:          connURL,
-		ExchangeName: exchangeName,
-		ExchangeType: exchangeType,
+		SQS_TRIP_CREATED_URL:    sqsCreatedURL,
+		SQS_DRIVER_ASSIGNED_URL: sqsAssignedURL,
+		SQS_TRIP_COMPLETED_URL:  sqsCompletedURL,
+		AWSRegion:               awsRegion,
 	}, nil
 }
 
+// getEnv is a helper to provide default values for non-critical environment variables
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value

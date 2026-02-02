@@ -38,12 +38,11 @@ Mandatory variables:
 
 * DB_USER / DB_PASSWORD — Credentials for the PostgreSQL database.
 
-* RABBITMQ_USER / RABBITMQ_PASSWORD — Credentials for the RabbitMQ message broker.
 
 ### 🏷 Using Tags
 
 * **`app`** — Application Stack Tag. Orchestrates all microservices at once (Trip Service, Driver Service, and Client Gateway). This is the primary tag for day-to-day code updates across the entire project.
-* **`infra`** — Shared Infrastructure Tag. Manages the foundation of the platform: PostgreSQL, RabbitMQ, and centralized configuration files like .env and docker-compose.yml.
+* **`infra`** — Shared Infrastructure Tag. Manages the foundation of the platform: PostgreSQL and centralized configuration files like .env and docker-compose.yml.
 * **`docker`** — System Engine Tag. Installs the Docker Engine, manages GPG keys, and handles dynamic user permissions (adding the current user to the docker group).
 * **`trip` / `gateway` / `driver`** — Service-Specific Tags. Allow for targeted deployment of a single microservice without touching the rest of the stack.
 * **`always`** — Tasks that execute during every run, such as updating the apt cache and printing the final infrastructure status report.
@@ -54,8 +53,6 @@ Mandatory variables:
 The playbook orchestrates 5 key components within a dedicated Docker network:
 
 * PostgreSQL (db): The primary database engine hosting isolated schemas for trip_db and driver_db. It utilizes a custom initialization script to ensure multi-service data support on first boot.
-
-* RabbitMQ (mq): The message broker facilitating asynchronous, event-driven communication (e.g., trip.event.created) between the Go and Python microservices.
 
 * Database Migrations: Automated standalone containers for both Go (golang-migrate) and Python (Alembic) that apply schema updates before services launch.
 
@@ -85,7 +82,7 @@ docker logs trip-migrations
 Follow these steps to completely remove the deployed infrastructure and reclaim system resources. This procedure ensures a "clean slate" for testing deployments from scratch.
 
 ### 1. Stop Services and Wipe Data
-This command stops all containers and **permanently deletes** persistent volumes (resetting database and message broker state).
+This command stops all containers and **permanently deletes** persistent volumes (resetting database).
 ```bash
 sudo docker compose -f /opt/drive-ops/docker-compose.yml down -v
 ```
