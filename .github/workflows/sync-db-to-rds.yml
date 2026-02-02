@@ -25,7 +25,7 @@ jobs:
       - name: Start Local PostgreSQL
         run: |
           echo "Starting PostgreSQL container..."
-          docker-compose up -d db
+          docker compose up -d db
 
           # Wait for PostgreSQL to be ready
           echo "Waiting for PostgreSQL to be ready..."
@@ -39,11 +39,11 @@ jobs:
 
           # Run trip-service migrations
           echo "Running trip-service migrations..."
-          docker-compose up trip-migrations
+          docker compose up --exit-code-from trip-migrations trip-migrations
 
           # Run driver-service migrations
           echo "Running driver-service migrations..."
-          docker-compose up driver-migrations
+          docker compose up --exit-code-from driver-migrations driver-migrations
 
           echo "All migrations completed"
 
@@ -53,6 +53,7 @@ jobs:
 
       - name: Create Database Dumps
         run: |
+          set -euo pipefail
           mkdir -p dumps
 
           echo "Creating database dumps..."
@@ -67,6 +68,12 @@ jobs:
             --clean \
             --if-exists \
             > dumps/trip_db.sql
+          
+           # Verify dump is not empty
+          if [ ! -s dumps/trip_db.sql ]; then
+            echo "ERROR: Trip database dump is empty"
+            exit 1
+          fi
 
           TRIP_SIZE=$(du -h dumps/trip_db.sql | cut -f1)
           echo "Trip database dump created ($TRIP_SIZE)"
@@ -82,6 +89,12 @@ jobs:
             --if-exists \
             > dumps/driver_db.sql
 
+          # Verify dump is not empty
+          if [ ! -s dumps/driver_db.sql ]; then
+            echo "ERROR: Driver database dump is empty"
+            exit 1
+          fi
+          
           DRIVER_SIZE=$(du -h dumps/driver_db.sql | cut -f1)
           echo "Driver database dump created ($DRIVER_SIZE)"
 
@@ -181,12 +194,12 @@ jobs:
           echo "Restoring trip database to RDS..."
 
           # Check if database exists, create if not
-          echo "→ Checking if database '$DB_NAME' exists..."
+          echo "Checking if database '$DB_NAME' exists..."
           DB_EXISTS=$(psql -h "$DB_HOST" -U "$DB_USER" -d postgres -tAc \
             "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'")
 
           if [ -z "$DB_EXISTS" ]; then
-            echo "  → Database doesn't exist, creating..."
+            echo "Database doesn't exist, creating..."
             psql -h "$DB_HOST" -U "$DB_USER" -d postgres -c \
               "CREATE DATABASE $DB_NAME"
             echo "Database created"
@@ -200,7 +213,13 @@ jobs:
             -f dumps/trip_db.sql \
             --single-transaction \
             --set ON_ERROR_STOP=on \
-            2>&1 | grep -v "NOTICE" || true
+            2>&1 | grep -v "NOTICE"
+
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            echo "ERROR: psql failed with exit code $rc"
+            exit "$rc"
+          fi
 
           echo "Trip database restored successfully"
 
@@ -239,7 +258,13 @@ jobs:
             -f dumps/driver_db.sql \
             --single-transaction \
             --set ON_ERROR_STOP=on \
-            2>&1 | grep -v "NOTICE" || true
+            2>&1 | grep -v "NOTICE"
+
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            echo "ERROR: psql failed with exit code $rc"
+            exit "$rc"
+          fi
 
           echo "Driver database restored successfully"
 
