@@ -68,7 +68,12 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    
+
+    outputs:
+      image_uri: ${{ steps.login-ecr.outputs.registry }}/drive-ops/driver-service
+      image_tag: ${{ steps.meta.outputs.version }}
+      image_digest: ${{ steps.build-and-push.outputs.digest }}
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v6
@@ -101,6 +106,7 @@ jobs:
       uses: docker/setup-buildx-action@v3
     
     - name: Build and push
+      id: build-and-push
       uses: docker/build-push-action@v6
       with:
         context: driver-service
@@ -110,3 +116,24 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha,scope=driver-service
         cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=driver-service' || '' }}
+
+    - name: Export build metadata
+      if: ${{ env.SHOULD_PUSH_IMAGE == 'true' }}
+      run: |
+        mkdir -p build-artifacts
+        echo "image_uri=${{ steps.login-ecr.outputs.registry }}/drive-ops/driver-service" > build-artifacts/metadata.env
+        echo "image_tag=${{ steps.meta.outputs.version }}" >> build-artifacts/metadata.env
+        echo "image_digest=${{ steps.build-and-push.outputs.digest }}" >> build-artifacts/metadata.env
+        
+        jq -n \
+          --arg uri "${{ steps.login-ecr.outputs.registry }}/drive-ops/driver-service" \
+          --arg tag "${{ steps.meta.outputs.version }}" \
+          --arg digest "${{ steps.build-and-push.outputs.digest }}" \
+          '{uri: $uri, tag: $tag, digest: $digest}' > build-artifacts/metadata.json
+
+    - name: Upload build metadata
+      if: ${{ env.SHOULD_PUSH_IMAGE == 'true' }}
+      uses: actions/upload-artifact@v6
+      with:
+        name: driver-service-metadata
+        path: build-artifacts/
