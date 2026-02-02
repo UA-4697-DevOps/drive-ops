@@ -22,6 +22,7 @@ on:
   workflow_dispatch:
 
 env:
+  ECR_REPOSITORY: drive-ops/driver-service
   SHOULD_PUSH_IMAGE: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
 
 permissions:
@@ -70,7 +71,7 @@ jobs:
       id-token: write
 
     outputs:
-      image_uri: ${{ steps.login-ecr.outputs.registry }}/drive-ops/driver-service
+      image_uri: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
       image_tag: ${{ steps.meta.outputs.version }}
       image_digest: ${{ steps.build-and-push.outputs.digest }}
 
@@ -95,7 +96,7 @@ jobs:
       uses: docker/metadata-action@v5
       with:
         images: | 
-          ${{ steps.login-ecr.outputs.registry }}/drive-ops/driver-service
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
         tags: | 
           type=sha
           type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
@@ -121,14 +122,19 @@ jobs:
       if: ${{ env.SHOULD_PUSH_IMAGE == 'true' }}
       run: |
         mkdir -p build-artifacts
-        echo "image_uri=${{ steps.login-ecr.outputs.registry }}/drive-ops/driver-service" > build-artifacts/metadata.env
-        echo "image_tag=${{ steps.meta.outputs.version }}" >> build-artifacts/metadata.env
-        echo "image_digest=${{ steps.build-and-push.outputs.digest }}" >> build-artifacts/metadata.env
+
+        URI="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
+        TAG="${{ steps.meta.outputs.version }}"
+        DIGEST="${{ steps.build-and-push.outputs.digest }}"
+        
+        echo "image_uri=$URI" > build-artifacts/metadata.env
+        echo "image_tag=$TAG" >> build-artifacts/metadata.env
+        echo "image_digest=$DIGEST" >> build-artifacts/metadata.env        
         
         jq -n \
-          --arg uri "${{ steps.login-ecr.outputs.registry }}/drive-ops/driver-service" \
-          --arg tag "${{ steps.meta.outputs.version }}" \
-          --arg digest "${{ steps.build-and-push.outputs.digest }}" \
+          --arg uri "$URI" \
+          --arg tag "$TAG" \
+          --arg digest "$DIGEST" \
           '{uri: $uri, tag: $tag, digest: $digest}' > build-artifacts/metadata.json
 
     - name: Upload build metadata
