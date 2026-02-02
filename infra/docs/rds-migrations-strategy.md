@@ -426,13 +426,43 @@ SELECT pg_advisory_unlock(123456789);  -- Release lock
 **For Alembic (Python):**
 ```python
 # env.py
-from sqlalchemy import event
+from alembic import context
+from sqlalchemy import engine_from_config, pool, text
+from logging.config import fileConfig
 
-@event.listens_for(target, "before_cursor_execute")
-def receive_before_cursor_execute(conn, cursor, statement, params, context, executemany):
-    if "CREATE TABLE" in statement or "ALTER TABLE" in statement:
-        # Use PostgreSQL advisory lock
-        cursor.execute("SELECT pg_advisory_lock(123456789)")
+# ... other imports and config ...
+
+def run_migrations_online():
+    """Run migrations in 'online' mode with advisory lock."""
+    connectable = engine_from_config(
+        config.get_section(config.config_ini_section),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
+
+    with connectable.connect() as connection:
+        # Acquire advisory lock before running migrations
+        # Use a unique ID for your project (e.g., hash of project name)
+        lock_id = 123456789
+
+        try:
+            print(f"Acquiring advisory lock {lock_id}...")
+            connection.execute(text("SELECT pg_advisory_lock(:lock_id)"), {"lock_id": lock_id})
+            print("Advisory lock acquired")
+
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata
+            )
+
+            with context.begin_transaction():
+                context.run_migrations()
+
+        finally:
+            # Always release the lock
+            print(f"Releasing advisory lock {lock_id}...")
+            connection.execute(text("SELECT pg_advisory_unlock(:lock_id)"), {"lock_id": lock_id})
+            print("Advisory lock released")
 ```
 
 ### 3. Test Migrations Before Production
