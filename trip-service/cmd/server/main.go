@@ -19,9 +19,34 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
+	httpSwagger "github.com/swaggo/http-swagger"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	_ "trip-service/docs" // Import generated docs
 )
+
+// @title           Trip Service API
+// @version         1.0
+// @description     REST API for managing ride trips in Drive-Ops platform
+// @description     Handles trip creation, retrieval, driver assignment, and trip lifecycle management
+//
+// @contact.name    Drive-Ops Team
+// @contact.email   support@drive-ops.example.com
+//
+// @license.name    Apache 2.0
+// @license.url     http://www.apache.org/licenses/LICENSE-2.0.html
+//
+// @host            localhost:8081
+// @BasePath        /
+//
+// @schemes         http https
+//
+// @tag.name        trips
+// @tag.description Operations related to trip management
+//
+// @tag.name        health
+// @tag.description Service health and readiness checks
 
 func getEnv(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
@@ -139,6 +164,18 @@ func main() {
 		r.Get("/{id}", handler.GetTrip)
 		r.Patch("/{id}/assign-driver", handler.AssignDriver)
 	})
+
+	// Swagger UI - only enabled in non-production environments
+	enableSwagger := getEnv("ENABLE_SWAGGER", "false")
+	if enableSwagger == "true" {
+		log.Println("Swagger UI enabled at /swagger/")
+		r.Get("/swagger/*", httpSwagger.WrapHandler)
+		r.Get("/openapi.json", func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w, r, "./docs/swagger.json")
+		})
+	} else {
+		log.Println("Swagger UI disabled (set ENABLE_SWAGGER=true to enable)")
+	}
 
 	// 7. Setup HTTP server with graceful shutdown
 	serverPort := getEnv("TRIP_SERVICE_PORT", ":8081")

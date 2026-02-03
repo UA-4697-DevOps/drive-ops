@@ -17,9 +17,10 @@ RUN apk add --no-cache curl
 
 WORKDIR /app
 
-# Copy the binary and migrations first (as requested by mentor)
+# Copy the binary, migrations, and swagger docs first (as requested by mentor)
 COPY --from=builder /app/trip-service .
 COPY --from=builder /app/db/migrations ./migrations
+COPY --from=builder /app/docs ./docs
 
 # Create non-root user after COPY to follow mentor's instructions
 # Note: This layer's cache will be invalidated whenever the binary changes
