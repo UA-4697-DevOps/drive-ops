@@ -6,8 +6,16 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code and build the application
+# Install swag for generating OpenAPI docs
+RUN go install github.com/swaggo/swag/cmd/swag@latest
+
+# Copy source code
 COPY . .
+
+# Generate Swagger documentation
+RUN swag init -g cmd/server/main.go -o docs
+
+# Build the application
 RUN go build -o /app/trip-service ./cmd/server/main.go
 
 # Final stage

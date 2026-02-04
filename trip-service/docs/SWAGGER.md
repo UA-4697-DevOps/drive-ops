@@ -116,7 +116,11 @@ The following endpoints are documented in the OpenAPI spec:
 
 ## Regenerating Documentation
 
-If you modify API handlers or add new endpoints, regenerate the OpenAPI spec:
+The OpenAPI spec is **automatically generated during Docker build**, so you don't need to manually regenerate it for production deployments.
+
+### For Local Development
+
+If you want to test Swagger UI locally without Docker:
 
 ```bash
 # Install swag if not already installed
@@ -125,32 +129,27 @@ go install github.com/swaggo/swag/cmd/swag@latest
 # Generate docs
 swag init -g cmd/server/main.go -o docs
 
-# Verify generation
-ls -lh docs/
+# Run the service
+go run cmd/server/main.go
 ```
 
-Files generated:
+Files generated (not committed to git):
 - `docs/docs.go` - Go package with embedded spec
 - `docs/swagger.json` - OpenAPI spec in JSON format
 - `docs/swagger.yaml` - OpenAPI spec in YAML format
 
-**IMPORTANT**: Always commit the generated files to git so they're available in Docker containers.
+**Note**: Generated files are in `.gitignore` and are created automatically during Docker build using `swag init`.
 
 ## CI/CD Integration
 
 The CI pipeline automatically:
 
-1. Validates that `swagger.json` is syntactically correct
-2. Checks that all required endpoints are documented
-3. Verifies the committed spec matches the code
-4. Fails the build if docs are out of sync
+1. Generates fresh OpenAPI spec from code annotations
+2. Validates that `swagger.json` is syntactically correct
+3. Checks that all required endpoints are documented
+4. Verifies all critical API paths are present
 
-If CI fails with "swagger.json differs from committed version":
-```bash
-swag init -g cmd/server/main.go -o docs
-git add docs/
-git commit -m "Update OpenAPI spec"
-```
+The spec is always generated from code during CI, ensuring it stays in sync.
 
 ## Testing with Swagger UI
 
