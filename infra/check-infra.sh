@@ -15,19 +15,23 @@ echo "✅ Validating Terraform bootstrap..."
 terraform -chdir=infra/terraform/bootstrap init -backend=false
 terraform -chdir=infra/terraform/bootstrap validate
 
-# 3. Dev Environment Validation (Loop Method)
-# This iterates through every folder in 'dev' (vpc, state-backend, etc.)
-# and runs validation individually. This is more stable than 'run-all'.
+# 3. Dev Environment Validation
 echo "✅ Validating Terragrunt modules in Dev..."
 
 for dir in infra/terragrunt/envs/dev/*/; do
-    # Check if the folder contains a terragrunt configuration
     if [ -f "$dir/terragrunt.hcl" ]; then
         module_name=$(basename "$dir")
-        echo "   👉 Validating module: $module_name..."
         
-        # Enter directory and run validation (suppress unnecessary logs)
-        (cd "$dir" && terragrunt validate > /dev/null)
+        # Check if the file actually has a source defined.
+        # This prevents the "Did not find any Terraform files" error on empty modules.
+        if grep -q "source =" "$dir/terragrunt.hcl"; then
+            echo "   👉 Validating module: $module_name..."
+            # We use '|| true' or a specific check if you want the script 
+            # to keep going even if a teammate's module (like RDS) is broken.
+            (cd "$dir" && terragrunt validate > /dev/null)
+        else
+            echo "   ⏩ Skipping uninitialized module: $module_name"
+        fi
     fi
 done
 
