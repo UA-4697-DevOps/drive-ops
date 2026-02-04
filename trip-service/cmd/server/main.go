@@ -55,6 +55,32 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+// parseIntEnv reads an integer value from the environment and falls back to a default on error.
+func parseIntEnv(key string, defaultVal int) int {
+	if raw, ok := os.LookupEnv(key); ok {
+		var v int
+		if _, err := fmt.Sscanf(raw, "%d", &v); err != nil {
+			log.Printf("Invalid value for %s=%q, using default %d: %v", key, raw, defaultVal, err)
+			return defaultVal
+		}
+		return v
+	}
+	return defaultVal
+}
+
+// parseDurationEnv reads a duration value (e.g. 30m, 5m) from the environment and falls back to a default on error.
+func parseDurationEnv(key string, defaultVal time.Duration) time.Duration {
+	if raw, ok := os.LookupEnv(key); ok {
+		d, err := time.ParseDuration(raw)
+		if err != nil {
+			log.Printf("Invalid duration for %s=%q, using default %s: %v", key, raw, defaultVal.String(), err)
+			return defaultVal
+		}
+		return d
+	}
+	return defaultVal
+}
+
 func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("Note: .env file not found, using system env variables")
@@ -78,18 +104,12 @@ func main() {
 		return fmt.Errorf("failed to connect to %s after retries: %w", desc, err)
 	}
 
-	// 1. Database Connection setup
+	// 1. Database Connection setup (RDS / cloud-first via URL)
 	var dsn string
 	if dbURL := os.Getenv("DB_URL"); dbURL != "" {
 		dsn = dbURL
 	} else {
-		dsn = fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
-			getEnv("DB_HOST", "localhost"),
-			getEnv("DB_USER", "postgres"),
-			getEnv("DB_PASSWORD", "postgres"),
-			getEnv("TRIP_DB_NAME", "trip_db"),
-			getEnv("DB_PORT", "5432"),
-		)
+		log.Fatal("Database configuration error: DB_URL must be set")
 	}
 
 	var db *gorm.DB
@@ -101,6 +121,22 @@ func main() {
 	if err != nil {
 		log.Fatalf("Fatal: %v", err)
 	}
+
+	// Configure sql.DB connection pool for Postgres/RDS
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("Failed to get underlying sql.DB from gorm: %v", err)
+	}
+
+	maxOpenConns := parseIntEnv("DB_MAX_OPEN_CONNS", 25)
+	maxIdleConns := parseIntEnv("DB_MAX_IDLE_CONNS", 10)
+	connMaxLifetime := parseDurationEnv("DB_CONN_MAX_LIFETIME", 30*time.Minute)
+	connMaxIdleTime := parseDurationEnv("DB_CONN_MAX_IDLE_TIME", 5*time.Minute)
+
+	sqlDB.SetMaxOpenConns(maxOpenConns)
+	sqlDB.SetMaxIdleConns(maxIdleConns)
+	sqlDB.SetConnMaxLifetime(connMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(connMaxIdleTime)
 
 	// 2. Load Broker Config (Now filtered for SQS only)
 	brokerConfig, err := broker.LoadConfig()
@@ -139,7 +175,7 @@ func main() {
 			log.Printf("WARNING: %s URL is empty. Consumer skipped.", name)
 			return
 		}
-		
+
 		consumer := broker.NewSQSConsumer(awsCfg, url, svc)
 		go func() {
 			log.Printf("INFO: Starting %s SQS Consumer on: %s", name, url)
@@ -210,8 +246,8 @@ func main() {
 	}
 
 	log.Println("Stopping SQS Consumers...")
-	appCancel() 
-	
+	appCancel()
+
 	time.Sleep(500 * time.Millisecond)
 	log.Println("Server stopped gracefully")
 }
