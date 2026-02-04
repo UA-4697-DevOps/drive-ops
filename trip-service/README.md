@@ -184,7 +184,7 @@ When you modify API endpoints or add new ones, regenerate the OpenAPI spec:
 
 ```bash
 # Install swag
-go install github.com/swaggo/swag/cmd/swag@latest
+go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
 # Generate documentation
 swag init -g cmd/server/main.go -o docs

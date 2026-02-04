@@ -124,7 +124,7 @@ If you want to test Swagger UI locally without Docker:
 
 ```bash
 # Install swag if not already installed
-go install github.com/swaggo/swag/cmd/swag@latest
+go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
 # Generate docs
 swag init -g cmd/server/main.go -o docs
