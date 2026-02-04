@@ -56,21 +56,30 @@ func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
 	trip.ID = uuid.New()
 	trip.Status = domain.TripStatusPending
 
-	// 1. Persist to Database
-	if err := s.repo.Create(ctx, trip); err != nil {
+	var event *domain.TripCreatedEvent
+
+	// Wrap "insert trip + publish event" in a single DB transaction.
+	if err := s.repo.WithTransaction(ctx, func(txRepo *repository.TripRepository) error {
+		// 1. Persist to Database
+		if err := txRepo.Create(ctx, trip); err != nil {
+			return err
+		}
+
+		// 2. Notify Driver Service via SQS
+		event = broker.BuildTripCreatedEvent(trip, trip.ID.String())
+
+		// Use the generic publisher interface
+		if err := s.publisher.PublishTripCreated(ctx, event); err != nil {
+			log.Printf("ERROR: Failed to publish trip.created for trip_id=%s correlation_id=%s: %v", trip.ID, event.CorrelationID, err)
+			return fmt.Errorf("failed to notify drivers via SQS: %w", err)
+		}
+
+		log.Printf("INFO: Successfully published trip.created for trip_id=%s correlation_id=%s", trip.ID, event.CorrelationID)
+		return nil
+	}); err != nil {
 		return err
 	}
 
-	// 2. Notify Driver Service via SQS
-	event := broker.BuildTripCreatedEvent(trip, trip.ID.String())
-	
-	// Use the generic publisher interface
-	if err := s.publisher.PublishTripCreated(ctx, event); err != nil {
-		log.Printf("ERROR: Failed to publish trip.created for trip_id=%s: %v", trip.ID, err)
-		return fmt.Errorf("failed to notify drivers via SQS: %w", err)
-	}
-
-	log.Printf("INFO: Successfully published trip.created for trip_id=%s", trip.ID)
 	return nil
 }
 
