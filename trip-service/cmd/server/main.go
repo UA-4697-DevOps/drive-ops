@@ -19,7 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
-	httpSwagger "github.com/swaggo/http-swagger"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 

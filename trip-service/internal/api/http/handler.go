@@ -21,6 +21,15 @@ func NewTripHandler(svc service.TripServiceInterface) *TripHandler {
 	return &TripHandler{svc: svc}
 }
 
+// jsonError writes a JSON-formatted error response
+func jsonError(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(map[string]string{"error": message}); err != nil {
+		log.Printf("Failed to encode error response: %v", err)
+	}
+}
+
 // CreateTrip handles POST /trips
 // @Summary      Create a new trip
 // @Description  Creates a new trip request with pickup and dropoff locations
@@ -35,19 +44,19 @@ func NewTripHandler(svc service.TripServiceInterface) *TripHandler {
 func (h *TripHandler) CreateTrip(w http.ResponseWriter, r *http.Request) {
 	var trip domain.Trip
 	if err := json.NewDecoder(r.Body).Decode(&trip); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		jsonError(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	if err := h.svc.CreateTrip(r.Context(), &trip); err != nil {
 		// FIX: Changed from ErrInvalidTripData to ErrInvalidCreateTripData
 		if errors.Is(err, domain.ErrInvalidCreateTripData) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			jsonError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		log.Printf("Failed to create trip: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		jsonError(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -74,19 +83,19 @@ func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, "Invalid UUID format", http.StatusBadRequest)
+		jsonError(w, "Invalid UUID format", http.StatusBadRequest)
 		return
 	}
 
 	trip, err := h.svc.GetTrip(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, domain.ErrTripNotFound) {
-			http.Error(w, "Trip not found", http.StatusNotFound)
+			jsonError(w, "Trip not found", http.StatusNotFound)
 			return
 		}
-		
+
 		log.Printf("Failed to get trip %s: %v", id, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		jsonError(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -114,13 +123,13 @@ func (h *TripHandler) AssignDriver(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	tripID, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, "Invalid Trip UUID format", http.StatusBadRequest)
+		jsonError(w, "Invalid Trip UUID format", http.StatusBadRequest)
 		return
 	}
 
 	var req domain.AssignDriverRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		jsonError(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
@@ -129,14 +138,14 @@ func (h *TripHandler) AssignDriver(w http.ResponseWriter, r *http.Request) {
 		switch {
 		// FIX: Changed from ErrInvalidTripData to ErrInvalidID
 		case errors.Is(err, domain.ErrInvalidID):
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			jsonError(w, err.Error(), http.StatusBadRequest)
 		case errors.Is(err, domain.ErrTripNotFound):
-			http.Error(w, "Trip not found", http.StatusNotFound)
+			jsonError(w, "Trip not found", http.StatusNotFound)
 		case errors.Is(err, domain.ErrInvalidTripStatus):
-			http.Error(w, err.Error(), http.StatusConflict)
+			jsonError(w, err.Error(), http.StatusConflict)
 		default:
 			log.Printf("Failed to assign driver: %v", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			jsonError(w, "Internal server error", http.StatusInternalServerError)
 		}
 		return
 	}

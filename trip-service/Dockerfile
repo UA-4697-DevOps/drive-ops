@@ -2,12 +2,15 @@
 FROM golang:1.25.5-alpine AS builder
 WORKDIR /app
 
+# Install git (required for go install)
+RUN apk add --no-cache git
+
 # Optimize caching by copying dependency files first
 COPY go.mod go.sum ./
 RUN go mod download
 
 # Install swag for generating OpenAPI docs
-RUN go install github.com/swaggo/swag/cmd/swag@latest
+RUN go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
 # Copy source code
 COPY . .

@@ -39,6 +39,12 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: trip-service/go.sum
 
+      - name: Generate Swagger docs
+        run: |
+          go install github.com/swaggo/swag/cmd/swag@v1.16.6
+          swag init -g cmd/server/main.go -o docs
+          echo "Swagger documentation generated"
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
@@ -63,7 +69,7 @@ jobs:
           cache-dependency-path: trip-service/go.sum
 
       - name: Install swag
-        run: go install github.com/swaggo/swag/cmd/swag@latest
+        run: go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
       - name: Generate Swagger docs
         run: swag init -g cmd/server/main.go -o docs
@@ -138,6 +144,11 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: trip-service/go.sum
+
+      - name: Generate Swagger docs
+        run: |
+          go install github.com/swaggo/swag/cmd/swag@v1.16.6
+          swag init -g cmd/server/main.go -o docs
 
       - name: Run unit tests
         run: |
