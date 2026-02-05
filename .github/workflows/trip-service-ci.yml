@@ -142,12 +142,8 @@ jobs:
     name: Build & Push to ECR
     runs-on: ubuntu-latest
     needs: [unit-test, integration-test]
-    # UPDATED: Added feat/trip-ci so your current work triggers the push
-    if: |
-      github.event_name == 'push' && 
-      (github.ref == 'refs/heads/main' || 
-       github.ref == 'refs/heads/trip-service' || 
-       github.ref == 'refs/heads/feat/trip-ci')
+    # UPDATED: Restricted to ONLY the main branch to match the AWS OIDC Trust Policy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     permissions:
       id-token: write
@@ -155,12 +151,13 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4 # Reverted to stable v4
+        uses: actions/checkout@v4
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::969283154407:role/trip-service-github-actions-role
+          # This role now only accepts tokens from the 'main' branch
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/trip-service-github-actions-role
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
@@ -174,12 +171,11 @@ jobs:
           ECR_REPOSITORY: trip-service
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Build context is scoped to the service directory
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./trip-service
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          # Quoted variables prevent word-splitting and satisfy ShellCheck
+          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" ./trip-service
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           
-          # Set the output for the next step
-          echo "image_uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "image_uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Generate Build Metadata
         run: |
