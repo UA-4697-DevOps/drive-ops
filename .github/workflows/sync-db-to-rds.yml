@@ -61,8 +61,8 @@ jobs:
           # Dump trip database
           echo "Dumping trip database..."
           docker exec drive-ops-db pg_dump \
-            -U ${DB_USER:-postgres} \
-            -d ${TRIP_DB_NAME:-drive_ops_trip} \
+            -U "${DB_USER:-postgres}" \
+            -d "${TRIP_DB_NAME:-drive_ops_trip}" \
             --no-owner \
             --no-acl \
             --clean \
@@ -81,8 +81,8 @@ jobs:
           # Dump driver database
           echo "Dumping driver database..."
           docker exec drive-ops-db pg_dump \
-            -U ${DB_USER:-postgres} \
-            -d ${DRIVER_DB_NAME:-drive_ops_driver} \
+            -U "${DB_USER:-postgres}" \
+            -d "${DRIVER_DB_NAME:-drive_ops_driver}" \
             --no-owner \
             --no-acl \
             --clean \
@@ -125,7 +125,7 @@ jobs:
             exit 1
           fi
 
-          echo "DB_HOST=$DB_HOST" >> $GITHUB_OUTPUT
+          echo "DB_HOST=$DB_HOST" >> "$GITHUB_OUTPUT"
           echo "RDS endpoint: $DB_HOST"
 
           # Get credentials from Secrets Manager
@@ -150,9 +150,9 @@ jobs:
             exit 1
           fi
 
-          echo "DB_USER=$DB_USER" >> $GITHUB_OUTPUT
+          echo "DB_USER=$DB_USER" >> "$GITHUB_OUTPUT"
           echo "::add-mask::$DB_PASS"
-          echo "DB_PASS=$DB_PASS" >> $GITHUB_OUTPUT
+          echo "DB_PASS=$DB_PASS" >> "$GITHUB_OUTPUT"
           echo "Credentials retrieved"
 
           echo "RDS connection info ready"
@@ -293,7 +293,7 @@ jobs:
       - name: Job Summary
         if: success()
         run: |
-          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          cat >> "$GITHUB_STEP_SUMMARY" << 'EOF'
           ## Database Sync Completed Successfully
           *Triggered by: @${{ github.actor }}*
           *Run: #${{ github.run_number }}*
@@ -302,7 +302,7 @@ jobs:
       - name: Failure Summary
         if: failure()
         run: |
-          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          cat >> "$GITHUB_STEP_SUMMARY" << 'EOF'
           ## Database Sync Failed
           Please check the logs above for error details.
           *Triggered by: @${{ github.actor }}*
