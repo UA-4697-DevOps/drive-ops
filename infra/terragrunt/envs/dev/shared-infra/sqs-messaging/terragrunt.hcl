@@ -1,4 +1,4 @@
-# envs/dev/sqs-messaging/terragrunt.hcl
++# envs/dev/shared-infra/sqs-messaging/terragrunt.hcl
 
 include "root" {
   path = find_in_parent_folders("root.hcl")
