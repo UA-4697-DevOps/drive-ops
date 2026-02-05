@@ -5,7 +5,7 @@ include "root" {
 }
 
 terraform {
-  source = "../../../../terraform/modules//sqs-messaging"
+  source = "../../../../../terraform/modules//sqs-messaging"
 }
 
 # Load common variables
