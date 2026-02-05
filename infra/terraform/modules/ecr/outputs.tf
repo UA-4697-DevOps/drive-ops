@@ -1,5 +1,5 @@
 output "repository_url" {
-  value = aws_ecr_repository.this.repository_url
+  value = aws_ecr_repository.service_repository.repository_url
 }
 
 output "role_arn" {
