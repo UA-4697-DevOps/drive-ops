@@ -7,6 +7,17 @@ This directory contains the IaC (Infrastructure as Code) baseline for the **driv
 - AWS CLI configured with valid credentials (`aws configure` or `aws sso login`)
 - Terraform >= 1.0
 - Terragrunt >= 0.45.0
+- **Environment Variables**: You must have `AWS_ACCOUNT_ID` set in your active terminal.
+
+1. **Create a `.env` file** in your project root (this file is ignored by Git):
+```bash
+   export AWS_ACCOUNT_ID="your_account_id_here"
+   export AWS_REGION="us-east-2"
+```
+or
+```bash
+    source .env
+```
 
 Our remote state:
 - S3 bucket: `drive-ops-dev-terraform-state`
@@ -28,23 +39,22 @@ terraform apply
 
 ### 1. Initialization
 ```bash
-cd infra/terragrunt/envs/dev
-terragrunt run-all init
+terragrunt init
 ```
 
 ### 2. Planning
 ```bash
-terragrunt run-all plan
+terragrunt plan
 ```
 
 ### 3. Applying Changes
 ```bash
-terragrunt run-all apply
+terragrunt apply
 ```
 
 ### 4. Destroying Resources
 ```bash
-terragrunt run-all destroy
+terragrunt destroy
 ```
 
 ---
@@ -65,19 +75,16 @@ If you need to run specific checks individually:
 
 ### Format Terraform files
 ```bash
-cd infra/terraform/modules/state-backend
 terraform fmt -recursive
 ```
 
 ### Format Terragrunt files
 ```bash
-cd infra/terragrunt
-terragrunt hclfmt
+terragrunt hcl fmt
 ```
 
 ### Validate Terraform configuration
 ```bash
-cd infra/terraform/bootstrap
 terraform validate
 ```
 

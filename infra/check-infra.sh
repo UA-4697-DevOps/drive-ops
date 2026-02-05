@@ -10,6 +10,10 @@ echo "🔍 Running Infrastructure Checks for drive-ops..."
 echo "🎨 Formatting Terraform code..."
 terraform fmt -recursive infra/
 
+# NEW: Formatting Terragrunt files
+echo "🛠️ Formatting Terragrunt configuration..."
+terragrunt hcl fmt
+
 # 2. Bootstrap Validation
 echo "✅ Validating Terraform bootstrap..."
 terraform -chdir=infra/terraform/bootstrap init -backend=false
