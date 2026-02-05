@@ -100,7 +100,11 @@ echo ""
 
 echo -e "${BLUE}Creating Trip Service Database...${NC}"
 
-TRIP_DB="drive_ops_${ENV}_trip"
+# Normalize ENV for database names (replace hyphens with underscores)
+# PostgreSQL identifiers cannot contain unescaped hyphens
+ENV_NORMALIZED="${ENV//-/_}"
+
+TRIP_DB="drive_ops_${ENV_NORMALIZED}_trip"
 
 psql -v ON_ERROR_STOP=1 -h "$DB_HOST" -U "$DB_USER" -d postgres <<EOF
 -- Create database if not exists
@@ -146,7 +150,7 @@ echo ""
 
 echo -e "${BLUE}Creating Driver Service Database...${NC}"
 
-DRIVER_DB="drive_ops_${ENV}_driver"
+DRIVER_DB="drive_ops_${ENV_NORMALIZED}_driver"
 
 psql -v ON_ERROR_STOP=1 -h "$DB_HOST" -U "$DB_USER" -d postgres <<EOF
 -- Create database if not exists

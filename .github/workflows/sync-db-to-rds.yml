@@ -140,8 +140,13 @@ jobs:
           DB_USER=$(echo "$SECRET_JSON" | jq -r '.username')
           DB_PASS=$(echo "$SECRET_JSON" | jq -r '.password')
 
-          if [ -z "$DB_USER" ] || [ -z "$DB_PASS" ]; then
-            echo "ERROR: Failed to retrieve RDS credentials from $SECRET_ID"
+          if [ -z "$DB_USER" ] || [ "$DB_USER" == "null" ]; then
+            echo "ERROR: Failed to retrieve username from $SECRET_ID"
+            exit 1
+          fi
+
+          if [ -z "$DB_PASS" ] || [ "$DB_PASS" == "null" ]; then
+            echo "ERROR: Failed to retrieve password from $SECRET_ID"
             exit 1
           fi
 
