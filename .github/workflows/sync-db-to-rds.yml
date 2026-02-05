@@ -278,7 +278,7 @@ jobs:
         if: always()
         run: |
           echo "Cleaning up..."
-          docker-compose down || true
+          docker compose down || true
           echo "Cleanup completed"
 
       # ============================================================

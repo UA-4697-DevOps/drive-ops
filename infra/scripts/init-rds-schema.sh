@@ -20,7 +20,20 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-ENV="${1:-dev}"
+# Validate and sanitize environment variable
+ENV_RAW="${1:-dev}"
+
+# Check if ENV contains only allowed characters (lowercase letters, digits, hyphens, underscores)
+if [[ ! "$ENV_RAW" =~ ^[a-z0-9_-]+$ ]]; then
+    echo -e "${RED}✗ ERROR: Invalid environment name: '$ENV_RAW'${NC}"
+    echo -e "${YELLOW}Environment name must contain only lowercase letters, digits, hyphens, and underscores${NC}"
+    echo ""
+    echo "Valid examples: dev, staging, prod, dev-eu, test_1"
+    exit 1
+fi
+
+# Use sanitized environment variable
+ENV="$ENV_RAW"
 RDS_INSTANCE="drive-ops-${ENV}-postgres"
 SECRET_ID="drive-ops/${ENV}/rds/credentials"
 AWS_REGION="${AWS_REGION:-us-east-2}"
@@ -46,8 +59,35 @@ SECRET_JSON=$(aws secretsmanager get-secret-value \
     --query SecretString \
     --output text)
 
+# Validate SECRET_JSON is not empty
+if [ -z "$SECRET_JSON" ] || [ "$SECRET_JSON" == "null" ]; then
+    echo -e "${RED}ERROR: Failed to retrieve secret from Secrets Manager${NC}"
+    echo -e "${YELLOW}Secret ID: $SECRET_ID${NC}"
+    echo "Please ensure:"
+    echo "  1. The secret exists in AWS Secrets Manager"
+    echo "  2. You have proper IAM permissions to read it"
+    echo "  3. AWS_REGION is set correctly (current: $AWS_REGION)"
+    exit 1
+fi
+
 DB_USER=$(echo "$SECRET_JSON" | jq -r '.username')
 DB_PASS=$(echo "$SECRET_JSON" | jq -r '.password')
+
+# Validate DB_USER is not empty or null
+if [ -z "$DB_USER" ] || [ "$DB_USER" == "null" ]; then
+    echo -e "${RED}✗ ERROR: Username not found in secret${NC}"
+    echo -e "${YELLOW}Secret ID: $SECRET_ID${NC}"
+    echo "The secret must contain a 'username' field"
+    exit 1
+fi
+
+# Validate DB_PASS is not empty or null
+if [ -z "$DB_PASS" ] || [ "$DB_PASS" == "null" ]; then
+    echo -e "${RED}✗ ERROR: Password not found in secret${NC}"
+    echo -e "${YELLOW}Secret ID: $SECRET_ID${NC}"
+    echo "The secret must contain a 'password' field"
+    exit 1
+fi
 
 export PGPASSWORD="$DB_PASS"
 
@@ -62,7 +102,7 @@ echo -e "${BLUE}Creating Trip Service Database...${NC}"
 
 TRIP_DB="drive_ops_${ENV}_trip"
 
-psql -h "$DB_HOST" -U "$DB_USER" -d postgres <<EOF
+psql -v ON_ERROR_STOP=1 -h "$DB_HOST" -U "$DB_USER" -d postgres <<EOF
 -- Create database if not exists
 SELECT 'CREATE DATABASE ${TRIP_DB}'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${TRIP_DB}')\gexec
@@ -108,7 +148,7 @@ echo -e "${BLUE}Creating Driver Service Database...${NC}"
 
 DRIVER_DB="drive_ops_${ENV}_driver"
 
-psql -h "$DB_HOST" -U "$DB_USER" -d postgres <<EOF
+psql -v ON_ERROR_STOP=1 -h "$DB_HOST" -U "$DB_USER" -d postgres <<EOF
 -- Create database if not exists
 SELECT 'CREATE DATABASE ${DRIVER_DB}'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DRIVER_DB}')\gexec
