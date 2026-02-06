@@ -19,8 +19,11 @@ on:
     tags:
       - 'driver-service/v*'
 
+  workflow_dispatch:
+
 env:
-  SHOULD_PUSH_IMAGE: ${{ github.event_name == 'push' }}
+  ECR_REPOSITORY: drive-ops/driver-service
+  SHOULD_PUSH_IMAGE: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
 
 permissions:
   contents: read
@@ -65,36 +68,46 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      packages: write
-    
+      id-token: write
+
+    outputs:
+      image_uri: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
+      image_tag: ${{ steps.meta.outputs.version }}
+      image_digest: ${{ steps.build-and-push.outputs.digest }}
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v6
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v5
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/Training-GitHub-ECR-Push
+        aws-region: us-east-2
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+      with:
+        registries: ${{ secrets.AWS_ACCOUNT_ID }}
 
     - name: Docker meta
       id: meta
       uses: docker/metadata-action@v5
       with:
         images: | 
-          ghcr.io/${{ github.repository_owner }}/driver-service
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
         tags: | 
           type=sha
           type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
           type=raw,value=dev,enable=${{ github.ref == 'refs/heads/driver-service' }}
           type=match,pattern=driver-service/v(.*),group=1
 
-    - name: Login to GHCR
-      if: ${{ env.SHOULD_PUSH_IMAGE == 'true' }}
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
     
     - name: Build and push
+      id: build-and-push
       uses: docker/build-push-action@v6
       with:
         context: driver-service
@@ -104,3 +117,29 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha,scope=driver-service
         cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=driver-service' || '' }}
+
+    - name: Export build metadata
+      if: ${{ env.SHOULD_PUSH_IMAGE == 'true' }}
+      run: |
+        mkdir -p build-artifacts
+
+        URI="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}"
+        TAG="${{ steps.meta.outputs.version }}"
+        DIGEST="${{ steps.build-and-push.outputs.digest }}"
+        
+        echo "image_uri=$URI" > build-artifacts/metadata.env
+        echo "image_tag=$TAG" >> build-artifacts/metadata.env
+        echo "image_digest=$DIGEST" >> build-artifacts/metadata.env        
+        
+        jq -n \
+          --arg uri "$URI" \
+          --arg tag "$TAG" \
+          --arg digest "$DIGEST" \
+          '{uri: $uri, tag: $tag, digest: $digest}' > build-artifacts/metadata.json
+
+    - name: Upload build metadata
+      if: ${{ env.SHOULD_PUSH_IMAGE == 'true' }}
+      uses: actions/upload-artifact@v6
+      with:
+        name: driver-service-metadata
+        path: build-artifacts/
