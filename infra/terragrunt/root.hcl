@@ -13,6 +13,9 @@ locals {
   env          = local.env_vars.env
   aws_region   = try(local.env_vars.aws_region, local.common_vars.aws_region)
 
+  # NEW: "Feed" the account ID from an environment variable
+  aws_account_id = local.env_vars.account_id
+
   # Merge common and environment-specific tags
   tags = merge(
     local.common_vars.common_tags,
@@ -63,6 +66,7 @@ inputs = {
   project_name = local.project_name
   env          = local.env
   aws_region   = local.aws_region
+  account_id   = local.aws_account_id
   tags         = local.tags
   enable_ha    = try(local.env_vars.enable_ha, false)
   cost_center  = local.common_vars.cost_center
