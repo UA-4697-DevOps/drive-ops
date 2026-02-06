@@ -74,3 +74,26 @@ resource "aws_iam_role_policy_attachment" "ecr_policy" {
   role       = aws_iam_role.github_actions.name
   policy_arn = aws_iam_policy.ecr_push_policy.arn
 }
+
+# 3. Lifecycle Policy to manage costs (Free Tier protection)
+# This automatically deletes old images, keeping only the last 5.
+resource "aws_ecr_lifecycle_policy" "cleanup_policy" {
+  repository = aws_ecr_repository.service_repository.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep only last 5 images to stay within Free Tier"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 5
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
