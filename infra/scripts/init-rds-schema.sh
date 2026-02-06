@@ -36,7 +36,7 @@ fi
 ENV="$ENV_RAW"
 RDS_INSTANCE="drive-ops-${ENV}-postgres"
 SECRET_ID="drive-ops/${ENV}/rds/credentials"
-AWS_REGION="${AWS_REGION:-us-east-2}"
+export AWS_REGION="${AWS_REGION:-us-east-2}"
 
 echo -e "${BLUE}Initializing RDS Schema for ${ENV}...${NC}"
 echo ""
