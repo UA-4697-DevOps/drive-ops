@@ -142,44 +142,52 @@ jobs:
     name: Build & Push to ECR
     runs-on: ubuntu-latest
     needs: [unit-test, integration-test]
-    # UPDATED: Restricted to ONLY the main branch to match the AWS OIDC Trust Policy
+    # Only run on push to main (matches AWS OIDC Trust Policy)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     permissions:
-      id-token: write
+      id-token: write # Required for AWS OIDC authentication
       contents: read
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # 1. Set up Docker Buildx (The engine required for caching)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 2. Login to AWS via OIDC (Secure, Keyless!)
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          # This role now only accepts tokens from the 'main' branch
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/trip-service-github-actions-role
           aws-region: ${{ env.AWS_REGION }}
 
+      # 3. Authorize Docker client in ECR
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, Tag, and Push Image
+      # 4. Build, Push, and CACHE (The hybrid optimized step)
+      - name: Build and Push Image
         id: build-image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: trip-service
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          # Quoted variables prevent word-splitting and satisfy ShellCheck
-          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" ./trip-service
-          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          
-          echo "image_uri=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+        uses: docker/build-push-action@v5
+        with:
+          context: ./trip-service
+          push: true
+          # Add SHA tag (for uniqueness) and latest tag (for convenience)
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/trip-service:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/trip-service:latest
+          # Free GitHub Actions Caching!
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Generate Build Metadata
         run: |
-          echo "IMAGE_URI: ${{ steps.build-image.outputs.image_uri }}" > build-metadata.txt
+          # Note: Using the registry output ensures reliability
+          echo "IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/trip-service:${{ github.sha }}" > build-metadata.txt
           echo "COMMIT_SHA: ${{ github.sha }}" >> build-metadata.txt
           echo "BUILD_TIME: $(date -u)" >> build-metadata.txt
 
