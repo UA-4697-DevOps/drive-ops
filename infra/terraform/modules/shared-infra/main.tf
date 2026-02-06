@@ -1,6 +1,4 @@
 # terraform/modules/shared-infra/main.tf
-# Composition module that combines VPC and SQS
-
 module "vpc" {
   source = "../vpc"
 
@@ -10,20 +8,65 @@ module "vpc" {
   availability_zones = var.availability_zones
 }
 
-module "sqs_messaging" {
-  source = "../sqs-messaging"
+# Trip Created Queue
+module "trip_created" {
+  source = "../sqs"
 
   project_name = var.project_name
   env          = var.env
   cost_center  = var.cost_center
   enable_ha    = var.enable_ha
 
-  message_retention = var.message_retention
-  max_receive_count = var.max_receive_count
+  queue_name          = "trip-created"
+  visibility_timeout  = var.trip_created_visibility_timeout
+  message_retention   = var.message_retention
+  max_receive_count   = var.max_receive_count
 
-  trip_created_visibility_timeout    = var.trip_created_visibility_timeout
-  driver_assigned_visibility_timeout = var.driver_assigned_visibility_timeout
-  trip_completed_visibility_timeout  = var.trip_completed_visibility_timeout
+  tags = merge(var.common_tags, {
+    Component = "sqs-trip-created"
+    Queue     = "trip.created"
+    EventType = "trip.event.created"
+  })
+}
 
-  common_tags = var.common_tags
+# Driver Assigned Queue
+module "driver_assigned" {
+  source = "../sqs"
+
+  project_name = var.project_name
+  env          = var.env
+  cost_center  = var.cost_center
+  enable_ha    = var.enable_ha
+
+  queue_name          = "driver-assigned"
+  visibility_timeout  = var.driver_assigned_visibility_timeout
+  message_retention   = var.message_retention
+  max_receive_count   = var.max_receive_count
+
+  tags = merge(var.common_tags, {
+    Component = "sqs-driver-assigned"
+    Queue     = "driver.assigned"
+    EventType = "trip.event.driver_assigned"
+  })
+}
+
+# Trip Completed Queue
+module "trip_completed" {
+  source = "../sqs"
+
+  project_name = var.project_name
+  env          = var.env
+  cost_center  = var.cost_center
+  enable_ha    = var.enable_ha
+
+  queue_name          = "trip-completed"
+  visibility_timeout  = var.trip_completed_visibility_timeout
+  message_retention   = var.message_retention
+  max_receive_count   = var.max_receive_count
+
+  tags = merge(var.common_tags, {
+    Component = "sqs-trip-completed"
+    Queue     = "trip.completed"
+    EventType = "trip.event.completed"
+  })
 }

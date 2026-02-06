@@ -29,60 +29,72 @@ output "sg_db_id" {
 # --- SQS Outputs ---
 output "all_queue_urls" {
   description = "Map of all queue URLs"
-  value       = module.sqs_messaging.all_queue_urls
+  value = {
+    trip_created    = module.trip_created.queue_url
+    driver_assigned = module.driver_assigned.queue_url
+    trip_completed  = module.trip_completed.queue_url
+  }
 }
 
 output "all_queue_arns" {
   description = "Map of all queue ARNs"
-  value       = module.sqs_messaging.all_queue_arns
+  value = {
+    trip_created    = module.trip_created.queue_arn
+    driver_assigned = module.driver_assigned.queue_arn
+    trip_completed  = module.trip_completed.queue_arn
+  }
 }
 
 output "all_dlq_arns" {
   description = "Map of all DLQ ARNs"
-  value       = module.sqs_messaging.all_dlq_arns
+  value = {
+    trip_created    = module.trip_created.dlq_arn
+    driver_assigned = module.driver_assigned.dlq_arn
+    trip_completed  = module.trip_completed.dlq_arn
+  }
 }
 
 output "trip_created_queue_url" {
   description = "URL of trip-created queue"
-  value       = module.sqs_messaging.trip_created_queue_url
+  value       = module.trip_created.queue_url
 }
 
 output "driver_assigned_queue_url" {
   description = "URL of driver-assigned queue"
-  value       = module.sqs_messaging.driver_assigned_queue_url
+  value       = module.driver_assigned.queue_url
 }
 
 output "trip_completed_queue_url" {
   description = "URL of trip-completed queue"
-  value       = module.sqs_messaging.trip_completed_queue_url
+  value       = module.trip_completed.queue_url
 }
 
 output "trip_created_consumer_policy_arn" {
   description = "ARN of trip-created consumer policy"
-  value       = module.sqs_messaging.trip_created_consumer_policy_arn
+  value       = module.trip_created.consumer_policy_arn
 }
 
 output "trip_created_publisher_policy_arn" {
   description = "ARN of trip-created publisher policy"
-  value       = module.sqs_messaging.trip_created_publisher_policy_arn
+  value       = module.trip_created.publisher_policy_arn
 }
 
 output "driver_assigned_consumer_policy_arn" {
   description = "ARN of driver-assigned consumer policy"
-  value       = module.sqs_messaging.driver_assigned_consumer_policy_arn
+  value       = module.driver_assigned.consumer_policy_arn
 }
 
 output "driver_assigned_publisher_policy_arn" {
   description = "ARN of driver-assigned publisher policy"
-  value       = module.sqs_messaging.driver_assigned_publisher_policy_arn
+  value       = module.driver_assigned.publisher_policy_arn
 }
 
 output "trip_completed_consumer_policy_arn" {
   description = "ARN of trip-completed consumer policy"
-  value       = module.sqs_messaging.trip_completed_consumer_policy_arn
+  value       = module.trip_completed.consumer_policy_arn
 }
 
 output "trip_completed_publisher_policy_arn" {
   description = "ARN of trip-completed publisher policy"
-  value       = module.sqs_messaging.trip_completed_publisher_policy_arn
+  value       = module.trip_completed.publisher_policy_arn
 }
