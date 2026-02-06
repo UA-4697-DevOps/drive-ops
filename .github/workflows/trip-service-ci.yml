@@ -2,7 +2,7 @@ name: Trip Service CI
 
 on:
   push:
-    branches: [main, trip-service]
+    branches: [main]
     paths:
       - 'trip-service/**'
       - '.github/workflows/trip-service-ci.yml'
@@ -138,52 +138,59 @@ jobs:
         if: always()
         run: docker compose -f trip-service/tests/integration/docker-compose.test.yml down -v
 
-  docker-build:
-    name: Docker Build
+  publish-to-ecr:
+    name: Build & Push to ECR
     runs-on: ubuntu-latest
-    # Build only starts if both test suites pass successfully
     needs: [unit-test, integration-test]
+    # Only run on push to main (matches AWS OIDC Trust Policy)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     permissions:
+      id-token: write # Required for AWS OIDC authentication
       contents: read
-      packages: write
 
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout Code
+        uses: actions/checkout@v6
 
+      # 1. Set up Docker Buildx (The engine required for caching)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
-        # Skips login for PRs from forks for security unless you explicitly allow it
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+      # 2. Login to AWS via OIDC (Secure, Keyless!)
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/trip-service-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          # Targets your specific ghcr.io repository for the trip-service
-          images: ghcr.io/${{ github.repository_owner }}/trip-service
-          tags: |
-            type=ref,event=pr
-            type=ref,event=branch
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+      # 3. Authorize Docker client in ECR
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and Push Docker image
-        uses: docker/build-push-action@v5
+      # 4. Build, Push, and CACHE (The hybrid optimized step)
+      - name: Build and Push Image
+        id: build-image
+        uses: docker/build-push-action@v6
         with:
-          # Context set to the service directory as per project structure
           context: ./trip-service
-          # Enable push only for non-PR events to the main or trip-service branches
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # Optimized GHA caching to speed up subsequent CI runs
+          push: true
+          # Add SHA tag (for uniqueness)
+          tags: ${{ steps.login-ecr.outputs.registry }}/trip-service:${{ github.sha }}
+          # Free GitHub Actions Caching!
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Generate Build Metadata
+        run: |
+          # Note: Using the registry output ensures reliability
+          echo "IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/trip-service:${{ github.sha }}" > build-metadata.txt
+          echo "COMMIT_SHA: ${{ github.sha }}" >> build-metadata.txt
+          echo "BUILD_TIME: $(date -u)" >> build-metadata.txt
+
+      - name: Upload Metadata Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trip-service-metadata
+          path: build-metadata.txt
