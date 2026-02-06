@@ -2,7 +2,7 @@ name: Trip Service CI
 
 on:
   push:
-    branches: [main, trip-service]
+    branches: [main]
     paths:
       - 'trip-service/**'
       - '.github/workflows/trip-service-ci.yml'
