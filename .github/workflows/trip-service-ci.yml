@@ -151,7 +151,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # 1. Set up Docker Buildx (The engine required for caching)
       - name: Set up Docker Buildx
@@ -159,7 +159,7 @@ jobs:
 
       # 2. Login to AWS via OIDC (Secure, Keyless!)
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/trip-service-github-actions-role
           aws-region: ${{ env.AWS_REGION }}
@@ -172,7 +172,7 @@ jobs:
       # 4. Build, Push, and CACHE (The hybrid optimized step)
       - name: Build and Push Image
         id: build-image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./trip-service
           push: true
