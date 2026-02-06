@@ -176,10 +176,8 @@ jobs:
         with:
           context: ./trip-service
           push: true
-          # Add SHA tag (for uniqueness) and latest tag (for convenience)
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/trip-service:${{ github.sha }}
-            ${{ steps.login-ecr.outputs.registry }}/trip-service:latest
+          # Add SHA tag (for uniqueness)
+          tags: ${{ steps.login-ecr.outputs.registry }}/trip-service:${{ github.sha }}
           # Free GitHub Actions Caching!
           cache-from: type=gha
           cache-to: type=gha,mode=max
