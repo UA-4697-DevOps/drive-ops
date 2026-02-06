@@ -14,7 +14,7 @@ locals {
   aws_region   = try(local.env_vars.aws_region, local.common_vars.aws_region)
 
   # NEW: "Feed" the account ID from an environment variable
-  aws_account_id = get_env("AWS_ACCOUNT_ID")
+  aws_account_id = local.env_vars.account_id
 
   # Merge common and environment-specific tags
   tags = merge(
