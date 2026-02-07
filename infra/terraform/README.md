@@ -28,23 +28,22 @@ terraform apply
 
 ### 1. Initialization
 ```bash
-cd infra/terragrunt/envs/dev
-terragrunt run-all init
+terragrunt init
 ```
 
 ### 2. Planning
 ```bash
-terragrunt run-all plan
+terragrunt plan
 ```
 
 ### 3. Applying Changes
 ```bash
-terragrunt run-all apply
+terragrunt apply
 ```
 
 ### 4. Destroying Resources
 ```bash
-terragrunt run-all destroy
+terragrunt destroy
 ```
 
 ---
@@ -65,19 +64,16 @@ If you need to run specific checks individually:
 
 ### Format Terraform files
 ```bash
-cd infra/terraform/modules/state-backend
 terraform fmt -recursive
 ```
 
 ### Format Terragrunt files
 ```bash
-cd infra/terragrunt
-terragrunt hclfmt
+terragrunt hcl fmt
 ```
 
 ### Validate Terraform configuration
 ```bash
-cd infra/terraform/bootstrap
 terraform validate
 ```
 

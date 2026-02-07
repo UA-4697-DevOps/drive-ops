@@ -3,8 +3,8 @@ include "root" {
 }
 
 terraform {
-  # Points to the module logic you created earlier
-  source = "../../../../terraform/modules/vpc"
+  # Points to the network infrastructure module
+  source = "../../../../terraform/modules//vpc"
 }
 
 inputs = {

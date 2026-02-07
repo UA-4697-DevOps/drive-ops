@@ -1,5 +1,6 @@
 # Development environment-specific variables
 env: "dev"
+account_id: "969283154407"
 
 # Override AWS region for dev if needed (inherits from common_vars.yaml by default)
 # aws_region: "us-east-1"
