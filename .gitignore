@@ -53,6 +53,22 @@ yarn-error.log*
 .next/
 .nuxt/
 
+# === Go ===
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+go.work
+
+# Swagger generated files
+**/docs/docs.go
+**/docs/swagger.json
+**/docs/swagger.yaml
+
 # === Critical ===
 .env
 .env.local
