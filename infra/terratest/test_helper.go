@@ -10,7 +10,7 @@ import (
 
 const (
 	// DefaultAWSRegion is the default region for tests
-	DefaultAWSRegion = "eu-central-1"
+	DefaultAWSRegion = "us-east-2"
 
 	// TerraformModulesPath is the relative path to Terraform modules
 	TerraformModulesPath = "../terraform/modules"
