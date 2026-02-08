@@ -153,11 +153,10 @@ func TestSQSIAMPolicies(t *testing.T) {
 
 				// Verify policy type tag
 				tags, ok := values["tags"].(map[string]interface{})
-				if ok {
-					policyType, hasType := tags["PolicyType"].(string)
-					assert.True(t, hasType, "Consumer policy should have PolicyType tag")
-					assert.Equal(t, "consumer", policyType, "PolicyType should be 'consumer'")
-				}
+				require.True(t, ok, "expected tags map on policy resource")
+				policyType, hasType := tags["PolicyType"].(string)
+				require.True(t, hasType, "Consumer policy should have PolicyType tag")
+				assert.Equal(t, "consumer", policyType, "PolicyType should be 'consumer'")
 
 			case "publisher_policy":
 				publisherPolicyFound = true
@@ -173,11 +172,10 @@ func TestSQSIAMPolicies(t *testing.T) {
 
 				// Verify policy type tag
 				tags, ok := values["tags"].(map[string]interface{})
-				if ok {
-					policyType, hasType := tags["PolicyType"].(string)
-					assert.True(t, hasType, "Publisher policy should have PolicyType tag")
-					assert.Equal(t, "publisher", policyType, "PolicyType should be 'publisher'")
-				}
+				require.True(t, ok, "expected tags map on policy resource")
+				policyType, hasType := tags["PolicyType"].(string)
+				require.True(t, hasType, "Publisher policy should have PolicyType tag")
+				assert.Equal(t, "publisher", policyType, "PolicyType should be 'publisher'")
 			}
 		}
 	}
