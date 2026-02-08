@@ -54,7 +54,7 @@ For integration testing with real infrastructure:
 # Set your AWS credentials
 export AWS_ACCESS_KEY_ID=your-key
 export AWS_SECRET_ACCESS_KEY=your-secret
-export AWS_DEFAULT_REGION=eu-central-1
+export AWS_DEFAULT_REGION=us-east-2
 
 # Run with a specific timeout
 go test -v -timeout 30m ./...
