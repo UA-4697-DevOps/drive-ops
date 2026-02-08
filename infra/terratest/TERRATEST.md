@@ -69,7 +69,7 @@ func TestMyModule(t *testing.T) {
     t.Parallel()
 
     modulePath := GetModulePath(t, "my-module")
-    terraformOptions := DefaultTerraformOptions(t, modulePath, map[string]interface{}{
+    terraformOptions := CreateTerraformOptions(t, modulePath, map[string]interface{}{
         "my_var": "value",
     })
 
