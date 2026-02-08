@@ -157,7 +157,8 @@ func TestRDSNetworkIsolation(t *testing.T) {
 						routeMap, ok := route.(map[string]interface{})
 						if ok {
 							// Check if route goes to internet gateway
-							if _, hasGateway := routeMap["gateway_id"]; hasGateway {
+							// Ensure gateway_id is a non-empty string (not just present in the map)
+							if gatewayVal, ok := routeMap["gateway_id"].(string); ok && gatewayVal != "" {
 								cidr, hasCIDR := routeMap["cidr_block"].(string)
 								if hasCIDR && cidr == "0.0.0.0/0" {
 									privateRouteTableHasIGWRoute = true
