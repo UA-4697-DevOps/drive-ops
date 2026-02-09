@@ -1198,8 +1198,12 @@ async def health_check():
         "version": "1.0.0"
     }
 
+# Global reference to uvicorn.Server for shutdown handling
+uvicorn_server = None
+
 async def run_fastapi():
     """Run FastAPI server for health checks."""
+    global uvicorn_server
     config = uvicorn.Config(
         app,
         host="0.0.0.0",
@@ -1207,9 +1211,9 @@ async def run_fastapi():
         log_level="info",
         access_log=False  # Disable access logs to reduce noise
     )
-    server = uvicorn.Server(config)
+    uvicorn_server = uvicorn.Server(config)
     logger.info("Starting FastAPI health server on port 8080", extra={'correlationId': 'STARTUP'})
-    await server.serve()
+    await uvicorn_server.serve()
 
 async def run_telegram_bot():
     """Run Telegram bot with polling and graceful shutdown handling."""
@@ -1233,52 +1237,97 @@ async def run_telegram_bot():
     # Create shutdown event for signal handling
     shutdown_event = asyncio.Event()
     
-    # Signal handler coroutine
-    async def signal_handler(signum, frame):
+    # Signal handler - synchronous function
+    def signal_handler(sig):
         """Handle SIGINT/SIGTERM signals for graceful shutdown."""
-        signal_name = signal.Signals(signum).name
-        logger.info(f"Received {signal_name}, initiating graceful shutdown...", extra={'correlationId': 'SHUTDOWN'})
+        signal_name = signal.Signals(sig).name
+        logger.info("Received %s, initiating graceful shutdown...", signal_name, extra={'correlationId': 'SHUTDOWN'})
         shutdown_event.set()
+        # Signal uvicorn server to exit
+        if uvicorn_server:
+            uvicorn_server.should_exit = True
     
-    # Register signal handlers
-    loop = asyncio.get_event_loop()
+    # Register signal handlers with platform compatibility
+    loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(signal_handler(s, None)))
+        try:
+            loop.add_signal_handler(sig, signal_handler, sig)
+        except NotImplementedError:
+            # Windows doesn't support signal.signal for SIGTERM in asyncio
+            logger.warning("Signal %s not supported on this platform", signal.Signals(sig).name, extra={'correlationId': 'STARTUP'})
     
-    # Initialize the application
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-    
-    logger.info("Bot is running and listening for messages", extra={'correlationId': 'STARTUP'})
-    
-    # Wait for shutdown signal
-    await shutdown_event.wait()
-    
-    # Perform graceful shutdown
-    logger.info("Stopping bot updater...", extra={'correlationId': 'SHUTDOWN'})
-    await application.updater.stop()
-    
-    # Allow any in-flight tasks to complete
-    logger.info("Waiting for in-flight tasks to complete...", extra={'correlationId': 'SHUTDOWN'})
-    await asyncio.sleep(0.1)  # Brief delay for task completion
-    
-    logger.info("Stopping application...", extra={'correlationId': 'SHUTDOWN'})
-    await application.stop()
-    
-    logger.info("Shutting down application...", extra={'correlationId': 'SHUTDOWN'})
-    await application.shutdown()
-    
-    logger.info("Bot shutdown complete", extra={'correlationId': 'SHUTDOWN'})
+    # Initialize the application with proper error handling and cleanup
+    try:
+        logger.info("Initializing Telegram bot application...", extra={'correlationId': 'STARTUP'})
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        
+        logger.info("Bot is running and listening for messages", extra={'correlationId': 'STARTUP'})
+        
+        # Wait for shutdown signal
+        await shutdown_event.wait()
+    except Exception as e:
+        logger.error("Error during bot startup or execution: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
+        shutdown_event.set()
+    finally:
+        # Perform graceful shutdown - always cleanup even on errors
+        logger.info("Stopping bot updater...", extra={'correlationId': 'SHUTDOWN'})
+        try:
+            await application.updater.stop_polling()
+        except Exception as e:
+            logger.warning("Error stopping polling: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
+        
+        try:
+            await application.updater.stop()
+        except Exception as e:
+            logger.warning("Error stopping updater: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
+        
+        # Allow any in-flight tasks to complete
+        logger.info("Waiting for in-flight tasks to complete...", extra={'correlationId': 'SHUTDOWN'})
+        await asyncio.sleep(0.1)  # Brief delay for task completion
+        
+        logger.info("Stopping application...", extra={'correlationId': 'SHUTDOWN'})
+        try:
+            await application.stop()
+        except Exception as e:
+            logger.warning("Error stopping application: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
+        
+        logger.info("Shutting down application...", extra={'correlationId': 'SHUTDOWN'})
+        try:
+            await application.shutdown()
+        except Exception as e:
+            logger.warning("Error during shutdown: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
+        
+        logger.info("Bot shutdown complete", extra={'correlationId': 'SHUTDOWN'})
 
 async def main_async():
     """
     Async main that runs both FastAPI health server and Telegram bot concurrently.
+    Properly handles shutdown by triggering graceful shutdown before canceling tasks.
     """
-    await asyncio.gather(
-        run_fastapi(),
-        run_telegram_bot()
+    # Create tasks for both services
+    fastapi_task = asyncio.create_task(run_fastapi())
+    telegram_task = asyncio.create_task(run_telegram_bot())
+    
+    # Wait for either task to complete (bot shutdown)
+    done, pending = await asyncio.wait(
+        [fastapi_task, telegram_task],
+        return_when=asyncio.FIRST_COMPLETED
     )
+    
+    # Before canceling, allow graceful shutdown to complete
+    logger.info("First service completed, initiating graceful shutdown...", extra={'correlationId': 'SHUTDOWN'})
+    
+    # Cancel the remaining task(s)
+    for task in pending:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            logger.info("Task cancelled during shutdown", extra={'correlationId': 'SHUTDOWN'})
+    
+    logger.info("All services have shut down", extra={'correlationId': 'SHUTDOWN'})
 
 def main():
     """
