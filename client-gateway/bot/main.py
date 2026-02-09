@@ -6,9 +6,12 @@ import uuid
 import httpx
 import hashlib
 import warnings
+import asyncio
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from dotenv import load_dotenv
+from fastapi import FastAPI
+import uvicorn
 from . import passenger
 from . import driver
 from .logger_utils import create_trip_request_logger, generate_correlation_id
@@ -23,8 +26,8 @@ DRIVER_SERVICE_URL = os.getenv('DRIVER_SERVICE_URL', 'http://localhost:8082')
 
 DEBUGGING = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
 
-logger.info("DEBUG env var: %s", os.getenv('DEBUG'))
-logger.info("DEBUGGING mode: %s", DEBUGGING)
+logger.info("DEBUG env var: %s", os.getenv('DEBUG'), extra={'correlationId': 'STARTUP'})
+logger.info("DEBUGGING mode: %s", DEBUGGING, extra={'correlationId': 'STARTUP'})
 
 
 def ensure_bot_token():
@@ -1179,7 +1182,36 @@ async def change_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=role_selection_menu()
     )
 
-def main():
+# Create FastAPI app for health endpoint
+app = FastAPI(title="Client Gateway Health API", version="1.0.0")
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint for container orchestration and monitoring.
+    Returns 200 OK if the service is running.
+    """
+    return {
+        "status": "ok",
+        "service": "client-gateway",
+        "version": "1.0.0"
+    }
+
+async def run_fastapi():
+    """Run FastAPI server for health checks."""
+    config = uvicorn.Config(
+        app,
+        host="0.0.0.0",
+        port=8080,
+        log_level="info",
+        access_log=False  # Disable access logs to reduce noise
+    )
+    server = uvicorn.Server(config)
+    logger.info("Starting FastAPI health server on port 8080", extra={'correlationId': 'STARTUP'})
+    await server.serve()
+
+async def run_telegram_bot():
+    """Run Telegram bot with polling."""
     ensure_bot_token()
     # Suppress PTBUserWarning about mixing CallbackQueryHandler entry points
     warnings.filterwarnings(
@@ -1194,10 +1226,36 @@ def main():
     passenger.register_handlers(application, user_orders, user_roles, BUTTONS, KEYBOARDS, HELPERS)
     driver.register_handlers(application, user_orders, user_roles, BUTTONS, KEYBOARDS, HELPERS, DEBUGGING=DEBUGGING)
     
-    print("Бот запущений...")
-    print("Модулі завантажено: passenger, driver")
+    logger.info("Telegram bot starting...", extra={'correlationId': 'STARTUP'})
+    logger.info("Modules loaded: passenger, driver", extra={'correlationId': 'STARTUP'})
     
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Initialize the application
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+    
+    # Keep the bot running
+    await asyncio.Event().wait()
+
+async def main_async():
+    """
+    Async main that runs both FastAPI health server and Telegram bot concurrently.
+    """
+    await asyncio.gather(
+        run_fastapi(),
+        run_telegram_bot()
+    )
+
+def main():
+    """
+    Main entry point that runs both FastAPI health server and Telegram bot concurrently.
+    """
+    print("Starting client-gateway service...")
+    print("- FastAPI health endpoint on port 8080")
+    print("- Telegram bot with polling")
+    
+    # Run both services concurrently
+    asyncio.run(main_async())
 
 if __name__ == "__main__":
     main()
