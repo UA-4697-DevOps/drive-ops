@@ -76,3 +76,4 @@ go.work
 .env.test.local
 .env.production.local
 *.pem
+*.bak
