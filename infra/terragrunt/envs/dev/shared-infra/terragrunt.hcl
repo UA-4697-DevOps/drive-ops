@@ -19,6 +19,7 @@ inputs = {
   project_name = local.common_vars.project_name
   env          = "dev"
   cost_center  = local.common_vars.cost_center
+  account_id   = get_aws_account_id()
 
   # VPC settings
   vpc_cidr           = "10.0.0.0/16"
