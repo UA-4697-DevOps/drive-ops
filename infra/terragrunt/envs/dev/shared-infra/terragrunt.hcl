@@ -5,13 +5,8 @@ include "root" {
 }
 
 terraform {
-  source = "../../../../terraform/modules//shared-infra"
-}
-
-# Load common variables
-locals {
-  common_vars = yamldecode(file(find_in_parent_folders("common_vars.yaml")))
-  env_vars    = yamldecode(file(find_in_parent_folders("env_vars.yaml")))
+  # Points to the network infrastructure module
+  source = "../../../../terraform/modules//vpc"
 }
 
 inputs = {
