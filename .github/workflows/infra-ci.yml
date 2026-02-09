@@ -98,7 +98,7 @@ jobs:
             if [ -d "$dir" ]; then
               echo "Validating $dir..."
               cd "$dir"
-              terragrunt validate --terragrunt-non-interactive
+              terragrunt validate --terragrunt-non-interactive --terragrunt-init-flag="-backend=false"
               cd - > /dev/null
             fi
           done
