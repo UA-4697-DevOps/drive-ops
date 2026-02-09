@@ -28,6 +28,33 @@ locals {
 
   # Skip AWS credential validation in CI (set TG_SKIP_AWS_VALIDATION=true)
   skip_aws_validation = get_env("TG_SKIP_AWS_VALIDATION", "false") == "true"
+
+  # Provider content for CI (skips credential validation)
+  provider_content_ci = <<EOF
+provider "aws" {
+  region = "${local.aws_region}"
+
+  # Skip credential validation for CI (no real AWS access needed for validate)
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+
+  default_tags {
+    tags = ${jsonencode(local.tags)}
+  }
+}
+EOF
+
+  # Provider content for normal use
+  provider_content_normal = <<EOF
+provider "aws" {
+  region = "${local.aws_region}"
+
+  default_tags {
+    tags = ${jsonencode(local.tags)}
+  }
+}
+EOF
 }
 
 # Configure remote state backend
@@ -53,29 +80,7 @@ EOF
 generate "provider" {
   path      = "provider.tf"
   if_exists = "overwrite_terragrunt"
-  contents  = local.skip_aws_validation ? <<EOF
-provider "aws" {
-  region = "${local.aws_region}"
-
-  # Skip credential validation for CI (no real AWS access needed for validate)
-  skip_credentials_validation = true
-  skip_metadata_api_check     = true
-  skip_requesting_account_id  = true
-
-  default_tags {
-    tags = ${jsonencode(local.tags)}
-  }
-}
-EOF
-  : <<EOF
-provider "aws" {
-  region = "${local.aws_region}"
-
-  default_tags {
-    tags = ${jsonencode(local.tags)}
-  }
-}
-EOF
+  contents  = local.skip_aws_validation ? local.provider_content_ci : local.provider_content_normal
 }
 
 # Common inputs to pass to all Terraform modules
