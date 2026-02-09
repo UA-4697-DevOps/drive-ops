@@ -7,6 +7,7 @@ import httpx
 import hashlib
 import warnings
 import asyncio
+import signal
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from dotenv import load_dotenv
@@ -1211,7 +1212,7 @@ async def run_fastapi():
     await server.serve()
 
 async def run_telegram_bot():
-    """Run Telegram bot with polling."""
+    """Run Telegram bot with polling and graceful shutdown handling."""
     ensure_bot_token()
     # Suppress PTBUserWarning about mixing CallbackQueryHandler entry points
     warnings.filterwarnings(
@@ -1229,13 +1230,46 @@ async def run_telegram_bot():
     logger.info("Telegram bot starting...", extra={'correlationId': 'STARTUP'})
     logger.info("Modules loaded: passenger, driver", extra={'correlationId': 'STARTUP'})
     
+    # Create shutdown event for signal handling
+    shutdown_event = asyncio.Event()
+    
+    # Signal handler coroutine
+    async def signal_handler(signum, frame):
+        """Handle SIGINT/SIGTERM signals for graceful shutdown."""
+        signal_name = signal.Signals(signum).name
+        logger.info(f"Received {signal_name}, initiating graceful shutdown...", extra={'correlationId': 'SHUTDOWN'})
+        shutdown_event.set()
+    
+    # Register signal handlers
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(signal_handler(s, None)))
+    
     # Initialize the application
     await application.initialize()
     await application.start()
     await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
     
-    # Keep the bot running
-    await asyncio.Event().wait()
+    logger.info("Bot is running and listening for messages", extra={'correlationId': 'STARTUP'})
+    
+    # Wait for shutdown signal
+    await shutdown_event.wait()
+    
+    # Perform graceful shutdown
+    logger.info("Stopping bot updater...", extra={'correlationId': 'SHUTDOWN'})
+    await application.updater.stop()
+    
+    # Allow any in-flight tasks to complete
+    logger.info("Waiting for in-flight tasks to complete...", extra={'correlationId': 'SHUTDOWN'})
+    await asyncio.sleep(0.1)  # Brief delay for task completion
+    
+    logger.info("Stopping application...", extra={'correlationId': 'SHUTDOWN'})
+    await application.stop()
+    
+    logger.info("Shutting down application...", extra={'correlationId': 'SHUTDOWN'})
+    await application.shutdown()
+    
+    logger.info("Bot shutdown complete", extra={'correlationId': 'SHUTDOWN'})
 
 async def main_async():
     """
