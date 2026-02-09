@@ -1,0 +1,238 @@
+name: Deploy Driver Service to ECS
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to deploy'
+        required: true
+        default: 'latest'
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+
+env:
+  AWS_REGION: us-east-2
+  ECS_CLUSTER: drive-ops-dev-cluster
+  ECS_SERVICE: drive-ops-dev-driver-service
+  ECR_REPOSITORY: drive-ops/driver-service
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy to ECS
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/Training-GitHub-ECR-Push
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registries: ${{ secrets.AWS_ACCOUNT_ID }}
+
+      - name: Verify image exists in ECR
+        run: |
+          IMAGE_URI="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.event.inputs.image_tag }}"
+          
+          echo "Checking if image exists: $IMAGE_URI"
+          
+          if aws ecr describe-images \
+            --repository-name ${{ env.ECR_REPOSITORY }} \
+            --image-ids imageTag=${{ github.event.inputs.image_tag }} \
+            --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
+            echo "Image found in ECR"
+            echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+          else
+            echo "ERROR: Image tag '${{ github.event.inputs.image_tag }}' not found in ECR"
+            echo "Available tags:"
+            aws ecr list-images --repository-name ${{ env.ECR_REPOSITORY }} --region ${{ env.AWS_REGION }}
+            exit 1
+          fi
+
+      - name: Get current task definition
+        id: current-task-def
+        run: |
+          TASK_DEF_ARN=$(aws ecs describe-services \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }} \
+            --query 'services[0].taskDefinition' \
+            --output text)
+          
+          echo "Current task definition: $TASK_DEF_ARN"
+          echo "PREVIOUS_TASK_DEF=$TASK_DEF_ARN" >> $GITHUB_ENV
+          
+          aws ecs describe-task-definition \
+            --task-definition $TASK_DEF_ARN \
+            --query 'taskDefinition' \
+            > task-definition.json
+
+      - name: Update task definition with new image
+        id: update-task-def
+        run: |
+          NEW_TASK_DEF=$(jq --arg IMAGE "${{ env.IMAGE_URI }}" \
+            '.containerDefinitions[0].image = $IMAGE | 
+             del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
+            task-definition.json)
+          
+          echo "$NEW_TASK_DEF" > new-task-definition.json
+          
+          cat new-task-definition.json | jq .
+
+      - name: Register new task definition
+        id: register-task-def
+        run: |
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://new-task-definition.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          
+          echo "New task definition registered: $NEW_TASK_DEF_ARN"
+          echo "NEW_TASK_DEF_ARN=$NEW_TASK_DEF_ARN" >> $GITHUB_ENV
+
+      - name: Update ECS service
+        run: |
+          echo "Updating ECS service to use new task definition"
+          
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --task-definition ${{ env.NEW_TASK_DEF_ARN }} \
+            --force-new-deployment
+          
+          echo "Service update initiated"
+
+      - name: Wait for deployment to stabilize
+        id: wait-for-deployment
+        run: |
+          echo "Waiting for service to become stable (timeout: 10 minutes)"
+          
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }} \
+            --region ${{ env.AWS_REGION }} \
+            --cli-read-timeout 600 \
+            --cli-connect-timeout 600
+          
+          echo "Service is stable"
+
+      - name: Get service status
+        if: always()
+        run: |
+          echo "Getting current service status"
+          
+          aws ecs describe-services \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }} \
+            --query 'services[0].{Status:status,Running:runningCount,Desired:desiredCount,Deployments:deployments}' \
+            --output json | jq .
+
+      - name: Post-deploy health check
+        id: health-check
+        run: |
+          echo "Running post-deployment health checks"
+          
+          TASK_ARN=$(aws ecs list-tasks \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service-name ${{ env.ECS_SERVICE }} \
+            --desired-status RUNNING \
+            --query 'taskArns[0]' \
+            --output text)
+          
+          if [ "$TASK_ARN" = "None" ] || [ -z "$TASK_ARN" ]; then
+            echo "ERROR: No running tasks found"
+            exit 1
+          fi
+          
+          echo "Task ARN: $TASK_ARN"
+          
+          TASK_HEALTH=$(aws ecs describe-tasks \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].healthStatus' \
+            --output text)
+          
+          echo "Task health status: $TASK_HEALTH"
+          
+          if [ "$TASK_HEALTH" = "HEALTHY" ]; then
+            echo "Health check passed"
+          else
+            echo "WARNING: Health status is $TASK_HEALTH"
+          fi
+
+      - name: Verify SQS access
+        id: sqs-check
+        run: |
+          echo "Verifying SQS queue access"
+          
+          SQS_QUEUE_URL="https://sqs.${{ env.AWS_REGION }}.amazonaws.com/${{ secrets.AWS_ACCOUNT_ID }}/trip-created-dev.fifo"
+          
+          aws sqs get-queue-attributes \
+            --queue-url $SQS_QUEUE_URL \
+            --attribute-names QueueArn \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "SQS access verified"
+
+      - name: Check CloudWatch logs
+        if: always()
+        run: |
+          echo "Checking recent CloudWatch logs"
+          
+          LOG_GROUP="/ecs/drive-ops-dev/driver-service"
+          
+          if aws logs describe-log-groups --log-group-name-prefix $LOG_GROUP --region ${{ env.AWS_REGION }} | grep -q $LOG_GROUP; then
+            aws logs tail $LOG_GROUP \
+              --since 5m \
+              --format short \
+              --region ${{ env.AWS_REGION }} || echo "No recent logs available"
+          else
+            echo "Log group not found"
+          fi
+
+      - name: Rollback on failure
+        if: failure() && steps.wait-for-deployment.outcome == 'failure'
+        run: |
+          echo "Deployment failed, initiating rollback to previous task definition"
+          echo "Previous task definition: ${{ env.PREVIOUS_TASK_DEF }}"
+          
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --task-definition ${{ env.PREVIOUS_TASK_DEF }} \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "Rollback initiated"
+          
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }} \
+            --region ${{ env.AWS_REGION }}
+          
+          echo "Rollback completed"
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "Deployment Summary"
+          echo "Image: ${{ env.IMAGE_URI }}"
+          echo "Cluster: ${{ env.ECS_CLUSTER }}"
+          echo "Service: ${{ env.ECS_SERVICE }}"
+          echo "Status: ${{ job.status }}"
