@@ -1,6 +1,12 @@
 # terraform/modules/shared-infra/variables.tf
 
 # --- Global Variables ---
+
+variable "account_id" {
+  type        = string
+  description = "AWS Account ID passed from Terragrunt"
+}
+
 variable "project_name" {
   description = "Project name used for resource naming"
   type        = string
@@ -33,6 +39,18 @@ variable "availability_zones" {
   description = "Fixed list of AZs to prevent infrastructure shuffling"
   type        = list(string)
   default     = ["us-east-2a", "us-east-2b"]
+}
+
+variable "enable_flow_logs" {
+  description = "Whether to enable VPC Flow Logs"
+  type        = bool
+  default     = false
+}
+
+variable "flow_log_retention_in_days" {
+  description = "Number of days to retain VPC Flow Logs in CloudWatch"
+  type        = number
+  default     = 7
 }
 
 # --- SQS Variables ---

@@ -2,10 +2,13 @@
 module "vpc" {
   source = "../vpc"
 
-  project_name       = var.project_name
-  env                = var.env
-  vpc_cidr           = var.vpc_cidr
-  availability_zones = var.availability_zones
+  project_name               = var.project_name
+  account_id                 = var.account_id
+  env                        = var.env
+  vpc_cidr                   = var.vpc_cidr
+  availability_zones         = var.availability_zones
+  enable_flow_logs           = var.enable_flow_logs
+  flow_log_retention_in_days = var.flow_log_retention_in_days
 }
 
 # Trip Created Queue
