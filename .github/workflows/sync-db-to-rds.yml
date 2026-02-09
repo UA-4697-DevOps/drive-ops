@@ -1,0 +1,310 @@
+name: Sync Database to RDS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sync-database:
+    name: Sync Local Database to RDS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-2
+
+      # ============================================================
+      # Step 1: Start local PostgreSQL and run migrations
+      # ============================================================
+
+      - name: Start Local PostgreSQL
+        run: |
+          echo "Starting PostgreSQL container..."
+          docker compose up -d db
+
+          # Wait for PostgreSQL to be ready
+          echo "Waiting for PostgreSQL to be ready..."
+          timeout 60 bash -c 'until docker exec drive-ops-db pg_isready -U ${DB_USER:-postgres}; do sleep 2; done'
+
+          echo "PostgreSQL is ready"
+
+      - name: Run All Migrations
+        run: |
+          echo "Running migrations for all databases..."
+
+          # Run trip-service migrations
+          echo "Running trip-service migrations..."
+          docker compose up --exit-code-from trip-migrations trip-migrations
+
+          # Run driver-service migrations
+          echo "Running driver-service migrations..."
+          docker compose up --exit-code-from driver-migrations driver-migrations
+
+          echo "All migrations completed"
+
+      # ============================================================
+      # Step 2: Create database dumps
+      # ============================================================
+
+      - name: Create Database Dumps
+        run: |
+          set -euo pipefail
+          mkdir -p dumps
+
+          echo "Creating database dumps..."
+
+          # Dump trip database
+          echo "Dumping trip database..."
+          docker exec drive-ops-db pg_dump \
+            -U "${DB_USER:-postgres}" \
+            -d "${TRIP_DB_NAME:-drive_ops_trip}" \
+            --no-owner \
+            --no-acl \
+            --clean \
+            --if-exists \
+            > dumps/trip_db.sql
+          
+           # Verify dump is not empty
+          if [ ! -s dumps/trip_db.sql ]; then
+            echo "ERROR: Trip database dump is empty"
+            exit 1
+          fi
+
+          TRIP_SIZE=$(du -h dumps/trip_db.sql | cut -f1)
+          echo "Trip database dump created ($TRIP_SIZE)"
+
+          # Dump driver database
+          echo "Dumping driver database..."
+          docker exec drive-ops-db pg_dump \
+            -U "${DB_USER:-postgres}" \
+            -d "${DRIVER_DB_NAME:-drive_ops_driver}" \
+            --no-owner \
+            --no-acl \
+            --clean \
+            --if-exists \
+            > dumps/driver_db.sql
+
+          # Verify dump is not empty
+          if [ ! -s dumps/driver_db.sql ]; then
+            echo "ERROR: Driver database dump is empty"
+            exit 1
+          fi
+          
+          DRIVER_SIZE=$(du -h dumps/driver_db.sql | cut -f1)
+          echo "Driver database dump created ($DRIVER_SIZE)"
+
+          echo "All dumps created successfully"
+
+      # NOTE: Database dumps are NOT uploaded to artifacts for security reasons.
+      # Dumps may contain sensitive data (passwords, PII, credentials).
+      # For backups, use AWS RDS automated snapshots or AWS Backup instead.
+
+      # ============================================================
+      # Step 3: Get RDS connection info
+      # ============================================================
+
+      - name: Get RDS Connection Info
+        id: rds
+        run: |
+          echo "Fetching RDS connection information..."
+
+          # Get RDS endpoint
+          DB_HOST=$(aws rds describe-db-instances \
+            --db-instance-identifier drive-ops-dev-postgres \
+            --query 'DBInstances[0].Endpoint.Address' \
+            --output text)
+
+          if [ -z "$DB_HOST" ] || [ "$DB_HOST" == "None" ]; then
+            echo "ERROR: RDS instance 'drive-ops-dev-postgres' not found"
+            echo "Make sure the RDS instance is running"
+            exit 1
+          fi
+
+          echo "DB_HOST=$DB_HOST" >> "$GITHUB_OUTPUT"
+          echo "RDS endpoint: $DB_HOST"
+
+          # Get credentials from Secrets Manager
+          SECRET_ID="drive-ops/dev/rds/credentials"
+          echo "Fetching credentials from Secrets Manager..."
+
+          SECRET_JSON=$(aws secretsmanager get-secret-value \
+            --secret-id "$SECRET_ID" \
+            --query SecretString \
+            --output text)
+
+          DB_USER=$(echo "$SECRET_JSON" | jq -r '.username')
+          DB_PASS=$(echo "$SECRET_JSON" | jq -r '.password')
+
+          if [ -z "$DB_USER" ] || [ "$DB_USER" == "null" ]; then
+            echo "ERROR: Failed to retrieve username from $SECRET_ID"
+            exit 1
+          fi
+
+          if [ -z "$DB_PASS" ] || [ "$DB_PASS" == "null" ]; then
+            echo "ERROR: Failed to retrieve password from $SECRET_ID"
+            exit 1
+          fi
+
+          echo "DB_USER=$DB_USER" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$DB_PASS"
+          echo "DB_PASS=$DB_PASS" >> "$GITHUB_OUTPUT"
+          echo "Credentials retrieved"
+
+          echo "RDS connection info ready"
+
+      # ============================================================
+      # Step 4: Test RDS connectivity
+      # ============================================================
+
+      - name: Test RDS Connectivity
+        env:
+          PGPASSWORD: ${{ steps.rds.outputs.DB_PASS }}
+          DB_USER: ${{ steps.rds.outputs.DB_USER }}
+          DB_HOST: ${{ steps.rds.outputs.DB_HOST }}
+        run: |
+          echo "Testing connection to RDS..."
+
+          # Install PostgreSQL client
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+          # Test connection
+          if psql -h "$DB_HOST" -U "$DB_USER" -d postgres -c "SELECT version();" > /dev/null 2>&1; then
+            echo "Successfully connected to RDS"
+          else
+            echo "ERROR: Cannot connect to RDS"
+            exit 1
+          fi
+
+      # ============================================================
+      # Step 5: Restore dumps to RDS
+      # ============================================================
+
+      - name: Restore Trip Database to RDS
+        env:
+          PGPASSWORD: ${{ steps.rds.outputs.DB_PASS }}
+          DB_USER: ${{ steps.rds.outputs.DB_USER }}
+          DB_HOST: ${{ steps.rds.outputs.DB_HOST }}
+        run: |
+          DB_NAME="drive_ops_dev_trip"
+
+          echo "Restoring trip database to RDS..."
+
+          # Check if database exists, create if not
+          echo "Checking if database '$DB_NAME' exists..."
+          DB_EXISTS=$(psql -h "$DB_HOST" -U "$DB_USER" -d postgres -tAc \
+            "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'")
+
+          if [ -z "$DB_EXISTS" ]; then
+            echo "Database doesn't exist, creating..."
+            psql -h "$DB_HOST" -U "$DB_USER" -d postgres -c \
+              "CREATE DATABASE $DB_NAME"
+            echo "Database created"
+          else
+            echo "Database exists"
+          fi
+
+          # Restore dump
+          echo "Restoring dump to RDS..."
+          psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" \
+            -f dumps/trip_db.sql \
+            --single-transaction \
+            --set ON_ERROR_STOP=on \
+            2>&1 | grep -v "NOTICE"
+
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            echo "ERROR: psql failed with exit code $rc"
+            exit "$rc"
+          fi
+
+          echo "Trip database restored successfully"
+
+          # Verify data
+          TABLES=$(psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -tAc \
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'")
+          echo "Tables in database: $TABLES"
+
+      - name: Restore Driver Database to RDS
+        env:
+          PGPASSWORD: ${{ steps.rds.outputs.DB_PASS }}
+          DB_USER: ${{ steps.rds.outputs.DB_USER }}
+          DB_HOST: ${{ steps.rds.outputs.DB_HOST }}
+        run: |
+          DB_NAME="drive_ops_dev_driver"
+
+          echo "Restoring driver database to RDS..."
+
+          # Check if database exists, create if not
+          echo "Checking if database '$DB_NAME' exists..."
+          DB_EXISTS=$(psql -h "$DB_HOST" -U "$DB_USER" -d postgres -tAc \
+            "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'")
+
+          if [ -z "$DB_EXISTS" ]; then
+            echo "Database doesn't exist, creating..."
+            psql -h "$DB_HOST" -U "$DB_USER" -d postgres -c \
+              "CREATE DATABASE $DB_NAME"
+            echo "  Database created"
+          else
+            echo "  Database exists"
+          fi
+
+          # Restore dump
+          echo "Restoring dump to RDS..."
+          psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" \
+            -f dumps/driver_db.sql \
+            --single-transaction \
+            --set ON_ERROR_STOP=on \
+            2>&1 | grep -v "NOTICE"
+
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            echo "ERROR: psql failed with exit code $rc"
+            exit "$rc"
+          fi
+
+          echo "Driver database restored successfully"
+
+          # Verify data
+          TABLES=$(psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -tAc \
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'")
+          echo "Tables in database: $TABLES"
+
+      # ============================================================
+      # Cleanup
+      # ============================================================
+
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "Cleaning up..."
+          docker compose down || true
+          echo "Cleanup completed"
+
+      # ============================================================
+      # Summary
+      # ============================================================
+
+      - name: Job Summary
+        if: success()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" << 'EOF'
+          ## Database Sync Completed Successfully
+          *Triggered by: @${{ github.actor }}*
+          *Run: #${{ github.run_number }}*
+          EOF
+
+      - name: Failure Summary
+        if: failure()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" << 'EOF'
+          ## Database Sync Failed
+          Please check the logs above for error details.
+          *Triggered by: @${{ github.actor }}*
+          *Run: #${{ github.run_number }}*
+          EOF
