@@ -17,10 +17,10 @@ module "trip_created" {
   cost_center  = var.cost_center
   enable_ha    = var.enable_ha
 
-  queue_name          = "trip-created"
-  visibility_timeout  = var.trip_created_visibility_timeout
-  message_retention   = var.message_retention
-  max_receive_count   = var.max_receive_count
+  queue_name         = "trip-created"
+  visibility_timeout = var.trip_created_visibility_timeout
+  message_retention  = var.message_retention
+  max_receive_count  = var.max_receive_count
 
   tags = merge(var.common_tags, {
     Component = "sqs-trip-created"
@@ -38,10 +38,10 @@ module "driver_assigned" {
   cost_center  = var.cost_center
   enable_ha    = var.enable_ha
 
-  queue_name          = "driver-assigned"
-  visibility_timeout  = var.driver_assigned_visibility_timeout
-  message_retention   = var.message_retention
-  max_receive_count   = var.max_receive_count
+  queue_name         = "driver-assigned"
+  visibility_timeout = var.driver_assigned_visibility_timeout
+  message_retention  = var.message_retention
+  max_receive_count  = var.max_receive_count
 
   tags = merge(var.common_tags, {
     Component = "sqs-driver-assigned"
@@ -59,10 +59,10 @@ module "trip_completed" {
   cost_center  = var.cost_center
   enable_ha    = var.enable_ha
 
-  queue_name          = "trip-completed"
-  visibility_timeout  = var.trip_completed_visibility_timeout
-  message_retention   = var.message_retention
-  max_receive_count   = var.max_receive_count
+  queue_name         = "trip-completed"
+  visibility_timeout = var.trip_completed_visibility_timeout
+  message_retention  = var.message_retention
+  max_receive_count  = var.max_receive_count
 
   tags = merge(var.common_tags, {
     Component = "sqs-trip-completed"
