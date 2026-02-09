@@ -77,6 +77,17 @@ resource "aws_instance" "docker_host" {
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
   key_name               = var.key_name
 
+
+metadata_options {
+http_endpoint               = "enabled"
+http_tokens                 = "required"
+http_put_response_hop_limit = 1
+}
+
+root_block_device {
+  encrypted = true
+} 
+
   user_data = templatefile("${path.module}/user-data.sh", {
     service_name = var.service_name
     aws_region   = var.aws_region
