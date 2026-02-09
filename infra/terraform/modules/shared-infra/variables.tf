@@ -35,6 +35,18 @@ variable "availability_zones" {
   default     = ["us-east-2a", "us-east-2b"]
 }
 
+variable "enable_flow_logs" {
+  description = "Whether to enable VPC Flow Logs"
+  type        = bool
+  default     = false
+}
+
+variable "flow_log_retention_in_days" {
+  description = "Number of days to retain VPC Flow Logs in CloudWatch"
+  type        = number
+  default     = 7
+}
+
 # --- SQS Variables ---
 variable "enable_ha" {
   description = "Toggle for High Availability features across all queues"
