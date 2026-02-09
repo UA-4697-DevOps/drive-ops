@@ -88,7 +88,7 @@ jobs:
           sudo mv terragrunt /usr/local/bin/
 
       - name: Terragrunt HCL Format Check
-        run: terragrunt hclfmt --terragrunt-check
+        run: terragrunt hclfmt --check
         working-directory: infra/terragrunt
 
       - name: Terragrunt Validate All
