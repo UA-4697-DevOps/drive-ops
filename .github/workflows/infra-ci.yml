@@ -108,3 +108,6 @@ jobs:
           AWS_ACCESS_KEY_ID: dummy
           AWS_SECRET_ACCESS_KEY: dummy
           AWS_DEFAULT_REGION: eu-central-1
+          # Skip AWS credential validation in provider (read by root.hcl)
+          TG_SKIP_AWS_VALIDATION: "true"
+

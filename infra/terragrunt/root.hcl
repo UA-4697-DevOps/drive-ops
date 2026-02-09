@@ -22,6 +22,9 @@ locals {
   # Check if current path is in "envs/local" directory (for local testing)
   # If true, skip S3 backend generation and use local state instead
   is_local_env = can(regex(".*/envs/local/.*", get_terragrunt_dir()))
+
+  # Skip AWS credential validation in CI (set TG_SKIP_AWS_VALIDATION=true)
+  skip_aws_validation = get_env("TG_SKIP_AWS_VALIDATION", "false") == "true"
 }
 
 # Configure remote state backend
@@ -47,7 +50,21 @@ EOF
 generate "provider" {
   path      = "provider.tf"
   if_exists = "overwrite_terragrunt"
-  contents  = <<EOF
+  contents  = local.skip_aws_validation ? <<EOF
+provider "aws" {
+  region = "${local.aws_region}"
+
+  # Skip credential validation for CI (no real AWS access needed for validate)
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+
+  default_tags {
+    tags = ${jsonencode(local.tags)}
+  }
+}
+EOF
+  : <<EOF
 provider "aws" {
   region = "${local.aws_region}"
 
