@@ -1,6 +1,12 @@
 # terraform/modules/shared-infra/variables.tf
 
 # --- Global Variables ---
+
+variable "account_id" {
+  type        = string
+  description = "AWS Account ID passed from Terragrunt"
+}
+
 variable "project_name" {
   description = "Project name used for resource naming"
   type        = string

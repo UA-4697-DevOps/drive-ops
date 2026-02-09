@@ -19,7 +19,7 @@ inputs = {
   project_name = local.common_vars.project_name
   env          = "dev"
   cost_center  = local.common_vars.cost_center
-  
+
   # VPC settings
   vpc_cidr           = "10.0.0.0/16"
   availability_zones = ["us-east-2a", "us-east-2b"]
@@ -27,12 +27,12 @@ inputs = {
   # VPC Flow Logs (Added for Task: Enable VPC Flow Logs)
   enable_flow_logs           = true
   flow_log_retention_in_days = 3 # Minimal retention for low cost (Dev env)
-  
+
   # SQS settings
   enable_ha         = false
-  message_retention = 345600  # 4 days
+  message_retention = 345600 # 4 days
   max_receive_count = 3
-  
+
   trip_created_visibility_timeout    = 60
   driver_assigned_visibility_timeout = 60
   trip_completed_visibility_timeout  = 60

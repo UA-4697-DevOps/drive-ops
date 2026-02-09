@@ -36,3 +36,8 @@ variable "flow_log_retention_in_days" {
   type        = number
   default     = 7
 }
+
+variable "account_id" {
+  description = "The AWS Account ID"
+  type        = string
+}

@@ -108,7 +108,7 @@ resource "aws_default_security_group" "default" {
   }
 }
 
-# --- VPC Flow Logs (Cost-Optimized) ---
+# --- VPC Flow Logs (Cost-Optimized & Boundary-Compliant) ---
 
 resource "aws_cloudwatch_log_group" "flow_log" {
   count             = var.enable_flow_logs ? 1 : 0
@@ -118,8 +118,9 @@ resource "aws_cloudwatch_log_group" "flow_log" {
 }
 
 resource "aws_iam_role" "flow_log_role" {
-  count = var.enable_flow_logs ? 1 : 0
-  name  = "${var.project_name}-${var.env}-vpc-flow-log-role"
+  count                = var.enable_flow_logs ? 1 : 0
+  name                 = "Training-${var.project_name}-${var.env}-vpc-flow-log-role"
+  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -134,12 +135,12 @@ resource "aws_iam_role" "flow_log_role" {
     ]
   })
 
-  tags = { Name = "${var.project_name}-${var.env}-vpc-flow-log-role" }
+  tags = { Name = "Training-${var.project_name}-${var.env}-vpc-flow-log-role" }
 }
 
 resource "aws_iam_role_policy" "flow_log_policy" {
   count = var.enable_flow_logs ? 1 : 0
-  name  = "${var.project_name}-${var.env}-vpc-flow-log-policy"
+  name  = "Training-${var.project_name}-${var.env}-vpc-flow-log-policy"
   role  = aws_iam_role.flow_log_role[0].id
 
   policy = jsonencode({
@@ -147,14 +148,12 @@ resource "aws_iam_role_policy" "flow_log_policy" {
     Statement = [
       {
         Action = [
-          "logs:CreateLogGroup",
           "logs:CreateLogStream",
           "logs:PutLogEvents",
-          "logs:DescribeLogGroups",
           "logs:DescribeLogStreams"
         ]
         Effect   = "Allow"
-        Resource = "*"
+        Resource = "${aws_cloudwatch_log_group.flow_log[0].arn}:*"
       }
     ]
   })
@@ -166,6 +165,6 @@ resource "aws_flow_log" "main" {
   log_destination = aws_cloudwatch_log_group.flow_log[0].arn
   traffic_type    = "ALL"
   vpc_id          = aws_vpc.main.id
-  
+
   tags = { Name = "${var.project_name}-${var.env}-flow-log" }
 }
