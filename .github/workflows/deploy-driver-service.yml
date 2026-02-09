@@ -30,7 +30,7 @@ on:
 env:
   AWS_REGION: us-east-2
   ECR_REPOSITORY: drive-ops/driver-service
-  SSM_DOCUMENT_NAME: drive-ops-dev-driver-service-deploy
+  SSM_DOCUMENT_NAME: drive-ops-${{ inputs.environment }}-driver-service-deploy
 
 permissions:
   contents: read
@@ -72,7 +72,7 @@ jobs:
 
       - name: Get EC2 instance ID
         run: |
-          INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=drive-ops-dev-driver-service-host" "Name=instance-state-name,Values=running" --query 'Reservations[0].Instances[0].InstanceId' --output text --region ${{ env.AWS_REGION }})
+          INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=drive-ops-${{ inputs.environment }}-driver-service-host" ...
           if [ "$INSTANCE_ID" = "None" ] || [ -z "$INSTANCE_ID" ]; then
             echo "ERROR: No running EC2 instance found"
             exit 1
@@ -92,7 +92,10 @@ jobs:
             --output text \
             --query 'Command.CommandId')
           
-          sleep 5
+          aws ssm wait command-executed \
+            --command-id $CURRENT_TAG \
+            --instance-id ${{ env.INSTANCE_ID }} \
+            --region ${{ env.AWS_REGION }}
           
           PREVIOUS_TAG=$(aws ssm get-command-invocation \
             --command-id $CURRENT_TAG \
