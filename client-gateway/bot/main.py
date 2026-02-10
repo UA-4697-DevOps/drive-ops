@@ -6,9 +6,13 @@ import uuid
 import httpx
 import hashlib
 import warnings
+import asyncio
+import signal
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from dotenv import load_dotenv
+from fastapi import FastAPI
+import uvicorn
 from . import passenger
 from . import driver
 from .logger_utils import create_trip_request_logger, generate_correlation_id
@@ -23,8 +27,8 @@ DRIVER_SERVICE_URL = os.getenv('DRIVER_SERVICE_URL', 'http://localhost:8082')
 
 DEBUGGING = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
 
-logger.info("DEBUG env var: %s", os.getenv('DEBUG'))
-logger.info("DEBUGGING mode: %s", DEBUGGING)
+logger.info("DEBUG env var: %s", os.getenv('DEBUG'), extra={'correlationId': 'STARTUP'})
+logger.info("DEBUGGING mode: %s", DEBUGGING, extra={'correlationId': 'STARTUP'})
 
 
 def ensure_bot_token():
@@ -1179,7 +1183,40 @@ async def change_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=role_selection_menu()
     )
 
-def main():
+# Create FastAPI app for health endpoint
+app = FastAPI(title="Client Gateway Health API", version="1.0.0")
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint for container orchestration and monitoring.
+    Returns 200 OK if the service is running.
+    """
+    return {
+        "status": "ok",
+        "service": "client-gateway",
+        "version": "1.0.0"
+    }
+
+# Global reference to uvicorn.Server for shutdown handling
+uvicorn_server = None
+
+async def run_fastapi():
+    """Run FastAPI server for health checks."""
+    global uvicorn_server
+    config = uvicorn.Config(
+        app,
+        host="0.0.0.0",
+        port=8080,
+        log_level="info",
+        access_log=False  # Disable access logs to reduce noise
+    )
+    uvicorn_server = uvicorn.Server(config)
+    logger.info("Starting FastAPI health server on port 8080", extra={'correlationId': 'STARTUP'})
+    await uvicorn_server.serve()
+
+async def run_telegram_bot():
+    """Run Telegram bot with polling and graceful shutdown handling."""
     ensure_bot_token()
     # Suppress PTBUserWarning about mixing CallbackQueryHandler entry points
     warnings.filterwarnings(
@@ -1194,10 +1231,114 @@ def main():
     passenger.register_handlers(application, user_orders, user_roles, BUTTONS, KEYBOARDS, HELPERS)
     driver.register_handlers(application, user_orders, user_roles, BUTTONS, KEYBOARDS, HELPERS, DEBUGGING=DEBUGGING)
     
-    print("Бот запущений...")
-    print("Модулі завантажено: passenger, driver")
+    logger.info("Telegram bot starting...", extra={'correlationId': 'STARTUP'})
+    logger.info("Modules loaded: passenger, driver", extra={'correlationId': 'STARTUP'})
     
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Create shutdown event for signal handling
+    shutdown_event = asyncio.Event()
+    
+    # Signal handler - synchronous function
+    def signal_handler(sig):
+        """Handle SIGINT/SIGTERM signals for graceful shutdown."""
+        signal_name = signal.Signals(sig).name
+        logger.info("Received %s, initiating graceful shutdown...", signal_name, extra={'correlationId': 'SHUTDOWN'})
+        shutdown_event.set()
+        # Signal uvicorn server to exit
+        if uvicorn_server:
+            uvicorn_server.should_exit = True
+    
+    # Register signal handlers with platform compatibility
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, signal_handler, sig)
+        except NotImplementedError:
+            # Windows doesn't support signal.signal for SIGTERM in asyncio
+            logger.warning("Signal %s not supported on this platform", signal.Signals(sig).name, extra={'correlationId': 'STARTUP'})
+    
+    # Initialize the application with proper error handling and cleanup
+    try:
+        logger.info("Initializing Telegram bot application...", extra={'correlationId': 'STARTUP'})
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+        
+        logger.info("Bot is running and listening for messages", extra={'correlationId': 'STARTUP'})
+        
+        # Wait for shutdown signal
+        await shutdown_event.wait()
+    except Exception as e:
+        logger.error("Error during bot startup or execution: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
+        shutdown_event.set()
+    finally:
+        # Perform graceful shutdown - always cleanup even on errors
+        logger.info("Stopping bot updater...", extra={'correlationId': 'SHUTDOWN'})
+        try:
+            await application.updater.stop_polling()
+        except Exception as e:
+            logger.warning("Error stopping polling: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
+        
+        try:
+            await application.updater.stop()
+        except Exception as e:
+            logger.warning("Error stopping updater: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
+        
+        # Allow any in-flight tasks to complete
+        logger.info("Waiting for in-flight tasks to complete...", extra={'correlationId': 'SHUTDOWN'})
+        await asyncio.sleep(0.1)  # Brief delay for task completion
+        
+        logger.info("Stopping application...", extra={'correlationId': 'SHUTDOWN'})
+        try:
+            await application.stop()
+        except Exception as e:
+            logger.warning("Error stopping application: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
+        
+        logger.info("Shutting down application...", extra={'correlationId': 'SHUTDOWN'})
+        try:
+            await application.shutdown()
+        except Exception as e:
+            logger.warning("Error during shutdown: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
+        
+        logger.info("Bot shutdown complete", extra={'correlationId': 'SHUTDOWN'})
+
+async def main_async():
+    """
+    Async main that runs both FastAPI health server and Telegram bot concurrently.
+    Properly handles shutdown by triggering graceful shutdown before canceling tasks.
+    """
+    # Create tasks for both services
+    fastapi_task = asyncio.create_task(run_fastapi())
+    telegram_task = asyncio.create_task(run_telegram_bot())
+    
+    # Wait for either task to complete (bot shutdown)
+    done, pending = await asyncio.wait(
+        [fastapi_task, telegram_task],
+        return_when=asyncio.FIRST_COMPLETED
+    )
+    
+    # Before canceling, allow graceful shutdown to complete
+    logger.info("First service completed, initiating graceful shutdown...", extra={'correlationId': 'SHUTDOWN'})
+    
+    # Cancel the remaining task(s)
+    for task in pending:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            logger.info("Task cancelled during shutdown", extra={'correlationId': 'SHUTDOWN'})
+    
+    logger.info("All services have shut down", extra={'correlationId': 'SHUTDOWN'})
+
+def main():
+    """
+    Main entry point that runs both FastAPI health server and Telegram bot concurrently.
+    """
+    print("Starting client-gateway service...")
+    print("- FastAPI health endpoint on port 8080")
+    print("- Telegram bot with polling")
+    
+    # Run both services concurrently
+    asyncio.run(main_async())
 
 if __name__ == "__main__":
     main()
