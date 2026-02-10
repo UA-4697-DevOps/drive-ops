@@ -30,7 +30,7 @@ on:
 env:
   AWS_REGION: us-east-2
   ECR_REPOSITORY: drive-ops/driver-service
-  SSM_DOCUMENT_NAME: drive-ops-${{ inputs.environment }}-driver-service-deploy
+  SSM_DOCUMENT_NAME: drive-ops-dev-driver-service-deploy
 
 permissions:
   contents: read
@@ -72,7 +72,7 @@ jobs:
 
       - name: Get EC2 instance ID
         run: |
-          INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=drive-ops-${{ inputs.environment }}-driver-service-host" ...
+          INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=drive-ops-dev-driver-service-host" "Name=instance-state-name,Values=running" --query 'Reservations[0].Instances[0].InstanceId' --output text --region ${{ env.AWS_REGION }})
           if [ "$INSTANCE_ID" = "None" ] || [ -z "$INSTANCE_ID" ]; then
             echo "ERROR: No running EC2 instance found"
             exit 1
@@ -87,15 +87,12 @@ jobs:
           CURRENT_TAG=$(aws ssm send-command \
             --instance-ids ${{ env.INSTANCE_ID }} \
             --document-name "AWS-RunShellScript" \
-            --parameters 'commands=["docker inspect driver-service --format=\"{{.Config.Image}}\" | cut -d\":\" -f2"]' \
+            --parameters 'commands=["docker inspect driver-service --format=\"{{.Config.Image}}\" 2>/dev/null | cut -d\":\" -f2 || echo \"none\""]' \
             --region ${{ env.AWS_REGION }} \
             --output text \
             --query 'Command.CommandId')
           
-          aws ssm wait command-executed \
-            --command-id $CURRENT_TAG \
-            --instance-id ${{ env.INSTANCE_ID }} \
-            --region ${{ env.AWS_REGION }}
+          sleep 5
           
           PREVIOUS_TAG=$(aws ssm get-command-invocation \
             --command-id $CURRENT_TAG \
@@ -111,10 +108,14 @@ jobs:
         id: deploy
         run: |
           echo "Deploying driver-service with image tag: ${{ inputs.image_tag }}"
+          
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          REPO_URL="$REGISTRY/${{ env.ECR_REPOSITORY }}"
+          
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids ${{ env.INSTANCE_ID }} \
             --document-name ${{ env.SSM_DOCUMENT_NAME }} \
-            --parameters ImageTag=${{ inputs.image_tag }},EcrRepository=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }} \
+            --parameters ImageTag=${{ inputs.image_tag }},EcrRepository=$REPO_URL \
             --region ${{ env.AWS_REGION }} \
             --output text \
             --query 'Command.CommandId')
@@ -127,7 +128,18 @@ jobs:
             --instance-id ${{ env.INSTANCE_ID }} \
             --region ${{ env.AWS_REGION }}
           
-          echo "Command execution completed"
+          DEPLOY_STATUS=$(aws ssm get-command-invocation \
+            --command-id $COMMAND_ID \
+            --instance-id ${{ env.INSTANCE_ID }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Status' \
+            --output text)
+          
+          if [ "$DEPLOY_STATUS" != "Success" ]; then
+            echo "ERROR: SSM command failed with status: $DEPLOY_STATUS"
+            exit 1
+          fi
+          echo "Command execution completed successfully"
 
       - name: Verify service health
         id: health-check
@@ -192,17 +204,20 @@ jobs:
         run: |
           echo "Deployment failed, initiating rollback to previous image: ${{ env.PREVIOUS_TAG }}"
           
-          if [ -z "${{ env.PREVIOUS_TAG }}" ] || [ "${{ env.PREVIOUS_TAG }}" = "null" ]; then
+          if [ -z "${{ env.PREVIOUS_TAG }}" ] || [ "${{ env.PREVIOUS_TAG }}" = "null" ] || [ "${{ env.PREVIOUS_TAG }}" = "none" ]; then
             echo "No previous tag found, cannot rollback"
             exit 0
           fi
           
           echo "Rolling back to tag: ${{ env.PREVIOUS_TAG }}"
           
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          REPO_URL="$REGISTRY/${{ env.ECR_REPOSITORY }}"
+          
           ROLLBACK_COMMAND_ID=$(aws ssm send-command \
             --instance-ids ${{ env.INSTANCE_ID }} \
             --document-name ${{ env.SSM_DOCUMENT_NAME }} \
-            --parameters ImageTag=${{ env.PREVIOUS_TAG }},EcrRepository=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }} \
+            --parameters ImageTag=${{ env.PREVIOUS_TAG }},EcrRepository=$REPO_URL \
             --region ${{ env.AWS_REGION }} \
             --output text \
             --query 'Command.CommandId')

@@ -46,12 +46,18 @@ resource "aws_iam_policy" "ecr_pull" {
       {
         Effect = "Allow"
         Action = [
-          "ecr:GetAuthorizationToken",
+          "ecr:GetAuthorizationToken"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "ecr:BatchCheckLayerAvailability",
           "ecr:GetDownloadUrlForLayer",
           "ecr:BatchGetImage"
         ]
-        Resource = "*"
+        Resource = "arn:aws:ecr:${var.aws_region}:${var.account_id}:repository/${var.project_name}/${var.service_name}"
       }
     ]
   })
@@ -76,18 +82,12 @@ resource "aws_instance" "docker_host" {
   vpc_security_group_ids = [var.security_group_id]
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
   key_name               = var.key_name
-  metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required"
-    http_put_response_hop_limit = 1
-  }
-  root_block_device {
-    encrypted = true
-  }
+
   user_data = templatefile("${path.module}/user-data.sh", {
     service_name = var.service_name
     aws_region   = var.aws_region
   })
+
   tags = merge(var.tags, {
     Name = "${var.project_name}-${var.env}-${var.service_name}-host"
   })
@@ -108,7 +108,7 @@ parameters:
     default: latest
   EcrRepository:
     type: String
-    description: ECR repository URL
+    description: ECR repository URL (registry/repo format)
 mainSteps:
   - action: aws:runShellScript
     name: deployService
@@ -121,7 +121,10 @@ mainSteps:
           export IMAGE_TAG={{ ImageTag }}
           export ECR_REPOSITORY={{ EcrRepository }}
           
-          aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin {{ EcrRepository }}
+          # Extract registry host from full repo URL
+          REGISTRY=$(echo "{{ EcrRepository }}" | cut -d'/' -f1)
+          
+          aws ecr get-login-password --region ${var.aws_region} | docker login --username AWS --password-stdin $REGISTRY
           
           docker-compose pull
           docker-compose up -d
