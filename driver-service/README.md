@@ -379,3 +379,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 ## License
 
 Internal project - UA-4697-DevOps team
+
+# Deployment
+See .github/workflows/driver-service-ci.yml for CI/CD pipeline
