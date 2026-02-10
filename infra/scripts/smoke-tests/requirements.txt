@@ -1,0 +1,10 @@
+# Dependencies for smoke tests
+
+# HTTP client with retry support
+requests>=2.31.0
+
+# AWS SDK (for SQS flow tests)
+boto3>=1.34.0
+
+# PostgreSQL adapter (for RDS connectivity tests)
+psycopg2-binary>=2.9.9
