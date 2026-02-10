@@ -24,3 +24,20 @@ variable "availability_zones" {
     error_message = "The availability_zones variable must contain exactly 2 AZs to match the subnet configuration."
   }
 }
+
+variable "enable_flow_logs" {
+  description = "Whether to enable VPC Flow Logs"
+  type        = bool
+  default     = false
+}
+
+variable "flow_log_retention_in_days" {
+  description = "Number of days to retain VPC Flow Logs in CloudWatch"
+  type        = number
+  default     = 7
+}
+
+variable "account_id" {
+  description = "The AWS Account ID"
+  type        = string
+}

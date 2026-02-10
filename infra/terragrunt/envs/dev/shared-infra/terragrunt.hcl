@@ -2,6 +2,11 @@ include "root" {
   path = find_in_parent_folders("root.hcl")
 }
 
+locals {
+  common_vars = yamldecode(file(find_in_parent_folders("common_vars.yaml")))
+  env_vars    = yamldecode(file(find_in_parent_folders("env_vars.yaml")))
+}
+
 terraform {
   source = "../../../../terraform/modules//shared-infra"
 }
@@ -26,7 +31,7 @@ inputs = {
   enable_ha         = false
   message_retention = 345600
   max_receive_count = 3
-  
+
   trip_created_visibility_timeout    = 60
   driver_assigned_visibility_timeout = 60
   trip_completed_visibility_timeout  = 60

@@ -107,3 +107,64 @@ resource "aws_default_security_group" "default" {
     Name = "${var.project_name}-${var.env}-default-sg"
   }
 }
+
+# --- VPC Flow Logs (Cost-Optimized & Boundary-Compliant) ---
+
+resource "aws_cloudwatch_log_group" "flow_log" {
+  count             = var.enable_flow_logs ? 1 : 0
+  name              = "/aws/vpc-flow-log/${var.project_name}-${var.env}"
+  retention_in_days = var.flow_log_retention_in_days
+  tags              = { Name = "${var.project_name}-${var.env}-flow-log-group" }
+}
+
+resource "aws_iam_role" "flow_log_role" {
+  count                = var.enable_flow_logs ? 1 : 0
+  name                 = "Training-${var.project_name}-${var.env}-vpc-flow-log-role"
+  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "vpc-flow-logs.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = { Name = "Training-${var.project_name}-${var.env}-vpc-flow-log-role" }
+}
+
+resource "aws_iam_role_policy" "flow_log_policy" {
+  count = var.enable_flow_logs ? 1 : 0
+  name  = "Training-${var.project_name}-${var.env}-vpc-flow-log-policy"
+  role  = aws_iam_role.flow_log_role[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams"
+        ]
+        Effect   = "Allow"
+        Resource = "${aws_cloudwatch_log_group.flow_log[0].arn}:*"
+      }
+    ]
+  })
+}
+
+resource "aws_flow_log" "main" {
+  count           = var.enable_flow_logs ? 1 : 0
+  iam_role_arn    = aws_iam_role.flow_log_role[0].arn
+  log_destination = aws_cloudwatch_log_group.flow_log[0].arn
+  traffic_type    = "ALL"
+  vpc_id          = aws_vpc.main.id
+
+  tags = { Name = "${var.project_name}-${var.env}-flow-log" }
+}
