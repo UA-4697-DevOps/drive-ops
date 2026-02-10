@@ -6,9 +6,12 @@ import uuid
 import httpx
 import hashlib
 import warnings
+import threading
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from dotenv import load_dotenv
+from fastapi import FastAPI
+import uvicorn
 from . import passenger
 from . import driver
 from .logger_utils import create_trip_request_logger, generate_correlation_id
@@ -20,6 +23,14 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 TRIP_SERVICE_URL = os.getenv('TRIP_SERVICE_URL', 'http://localhost:8081')
 DRIVER_SERVICE_URL = os.getenv('DRIVER_SERVICE_URL', 'http://localhost:8082')
+HEALTH_CHECK_PORT = int(os.getenv('HEALTH_CHECK_PORT', '8080'))
+
+# FastAPI app for health check
+health_app = FastAPI()
+
+@health_app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 DEBUGGING = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
 
@@ -1179,6 +1190,11 @@ async def change_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=role_selection_menu()
     )
 
+def run_health_server():
+    """Run health check HTTP server in a separate thread."""
+    uvicorn.run(health_app, host="0.0.0.0", port=HEALTH_CHECK_PORT, log_level="warning")
+
+
 def main():
     ensure_bot_token()
     # Suppress PTBUserWarning about mixing CallbackQueryHandler entry points
@@ -1186,6 +1202,12 @@ def main():
         "ignore",
         message="If 'per_message=False', 'CallbackQueryHandler' will not be tracked for every message.*",
     )
+    
+    # Start health check server in background thread
+    health_thread = threading.Thread(target=run_health_server, daemon=True)
+    health_thread.start()
+    print(f"Health check server running on port {HEALTH_CHECK_PORT}...")
+    
     application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start_message))

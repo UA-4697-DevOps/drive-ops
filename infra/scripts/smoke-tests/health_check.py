@@ -168,10 +168,10 @@ def main():
             "type": "http"
         },
         "Client Gateway": {
-            "url_env": "BOT_TOKEN",  # Use token from .env
-            "endpoint": "/getMe",
+            "url_env": "SMOKE_CLIENT_GATEWAY_URL",
+            "endpoint": "/health",
             "validate_json": True,
-            "type": "telegram_bot"
+            "type": "http"
         }
     }
     
@@ -189,7 +189,7 @@ def main():
         print(f"\n{Colors.YELLOW}Example:{Colors.END}")
         print(f"  export SMOKE_TRIP_SERVICE_URL=http://trip-service.example.com:8081")
         print(f"  export SMOKE_DRIVER_SERVICE_URL=http://driver-service.example.com:8082")
-        print(f"  export BOT_TOKEN=your_telegram_bot_token")
+        print(f"  export SMOKE_CLIENT_GATEWAY_URL=http://client-gateway.example.com:8080")
         sys.exit(1)
     
     # Create session with retry logic
