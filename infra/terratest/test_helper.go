@@ -1,4 +1,3 @@
-// Package infratests provides test helpers and utilities for Terratest infrastructure tests.
 package infratests
 
 import (
@@ -9,17 +8,13 @@ import (
 )
 
 const (
-	// DefaultAWSRegion is the default region for tests
 	DefaultAWSRegion = "us-east-2"
 
-	// TerraformModulesPath is the relative path to Terraform modules
 	TerraformModulesPath = "../terraform/modules"
 
-	// TerragruntEnvsPath is the relative path to Terragrunt environments
 	TerragruntEnvsPath = "../terragrunt/envs"
 )
 
-// GetModulePath returns the absolute path to a Terraform module.
 func GetModulePath(t *testing.T, moduleName string) string {
 	t.Helper()
 	absPath, err := filepath.Abs(filepath.Join(TerraformModulesPath, moduleName))
@@ -29,7 +24,6 @@ func GetModulePath(t *testing.T, moduleName string) string {
 	return absPath
 }
 
-// GetTerragruntPath returns the absolute path to a Terragrunt environment.
 func GetTerragruntPath(t *testing.T, env, component string) string {
 	t.Helper()
 	absPath, err := filepath.Abs(filepath.Join(TerragruntEnvsPath, env, component))
@@ -39,8 +33,6 @@ func GetTerragruntPath(t *testing.T, env, component string) string {
 	return absPath
 }
 
-// CreateTerraformOptions creates Terraform options with the given variables.
-// This is a generic helper that only passes the variables you provide.
 func CreateTerraformOptions(t *testing.T, modulePath string, vars map[string]interface{}) *terraform.Options {
 	t.Helper()
 
@@ -55,8 +47,6 @@ func CreateTerraformOptions(t *testing.T, modulePath string, vars map[string]int
 	}
 }
 
-// VPCTestOptions returns Terraform options configured for VPC module tests.
-// Variables: project_name, env, vpc_cidr, availability_zones
 func VPCTestOptions(t *testing.T) *terraform.Options {
 	t.Helper()
 	modulePath := GetModulePath(t, "vpc")
@@ -72,8 +62,6 @@ func VPCTestOptions(t *testing.T) *terraform.Options {
 	})
 }
 
-// SQSTestOptions returns Terraform options configured for SQS module tests.
-// Variables: project_name, env, cost_center, queue_name, visibility_timeout, max_receive_count, tags
 func SQSTestOptions(t *testing.T, queueName string) *terraform.Options {
 	t.Helper()
 	modulePath := GetModulePath(t, "sqs")
@@ -89,5 +77,51 @@ func SQSTestOptions(t *testing.T, queueName string) *terraform.Options {
 		"tags": map[string]string{
 			"Component": "test-queue",
 		},
+	})
+}
+
+// SharedInfraTestOptions returns Terraform options configured for shared-infra module tests
+func SharedInfraTestOptions(t *testing.T) *terraform.Options {
+	t.Helper()
+	modulePath := GetModulePath(t, "shared-infra")
+
+	return CreateTerraformOptions(t, modulePath, map[string]interface{}{
+		"project_name": "drive-ops",
+		"env":          "test",
+		"cost_center":  "test",
+		"account_id":   "123456789012", // Dummy account ID for testing
+
+		"vpc_cidr":           "10.0.0.0/16",
+		"availability_zones": []string{"us-east-2a", "us-east-2b"},
+
+		// VPC Flow Logs
+		"enable_flow_logs":           false, // Disabled for tests
+		"flow_log_retention_in_days": 1,
+
+		// SQS settings
+		"enable_ha":         false,
+		"message_retention": 345600, // 4 days
+		"max_receive_count": 3,
+
+		"trip_created_visibility_timeout":    60,
+		"driver_assigned_visibility_timeout": 60,
+		"trip_completed_visibility_timeout":  60,
+
+		"common_tags": map[string]string{
+			"Module": "shared-infra-test",
+			"Owner":  "DevOps Team",
+		},
+	})
+}
+
+func SecretsTestOptions(t *testing.T) *terraform.Options {
+	t.Helper()
+	modulePath := GetModulePath(t, "secrets")
+
+	return CreateTerraformOptions(t, modulePath, map[string]interface{}{
+		"project_name":        "drive-ops",
+		"env":                 "test",
+		"db_identifier":       "drive-ops-test-postgres",
+		"rds_master_username": "driveops_admin",
 	})
 }

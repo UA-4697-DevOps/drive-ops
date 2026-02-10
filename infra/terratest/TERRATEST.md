@@ -97,3 +97,75 @@ Terratest is **not** run in CI due to cost and security considerations. Instead,
 - `terragrunt hclfmt --terragrunt-check`
 
 See `.github/workflows/infra-ci.yml` for details.
+
+## ClientGateway Infrastructure Tests
+
+### Overview
+ClientGateway tests validate the infrastructure dependencies required for the Telegram Bot service, including SQS queues for driver commands, security groups for outbound connectivity, and secrets management.
+
+### Test Suite
+
+#### 1. TestClientGatewaySharedInfraOutputs
+Validates that all required outputs from shared-infra module are available:
+- VPC and subnet IDs
+- Security group IDs
+- SQS queue URLs and ARNs
+- DLQ ARNs
+
+#### 2. TestClientGatewaySecurityGroupAllowsOutbound
+Verifies app security group egress rules:
+- Allows all outbound traffic (required for Telegram Bot API Long Polling)
+- Protocol: all (-1)
+- Destination: 0.0.0.0/0
+- Description mentions "Long Polling"
+
+#### 3. TestClientGatewaySQSQueuesConfiguration
+Validates SQS queue setup:
+- `driver_assigned` queue exists with URL output
+- `trip_completed` queue exists with URL output
+- DLQ configuration is present for all queues
+
+#### 4. TestClientGatewaySecretsOutputs
+Verifies Secrets Manager outputs:
+- `rds_master_secret_arn` is defined
+- `rds_master_secret_name` is defined
+
+#### 5. TestClientGatewayNetworkingSetup
+Validates VPC networking components:
+- VPC exists
+- Public subnets (for outbound internet access)
+- Private subnets (for app layer)
+- Internet Gateway (for Telegram API connectivity)
+
+### Running Tests
+
+#### Locally (all ClientGateway tests)
+```bash
+cd infra/terratest
+go test -v -run TestClientGateway -timeout 15m
+```
+
+#### Locally (specific test)
+```bash
+cd infra/terratest
+go test -v -run TestClientGatewaySecurityGroupAllowsOutbound -timeout 5m
+```
+
+#### CI/CD
+Tests run automatically via GitHub Actions on:
+- Pull requests modifying:
+  - `infra/modules/shared-infra/**`
+  - `infra/modules/vpc/**`
+  - `infra/modules/secrets/**`
+  - `infra/terratest/client_gateway_test.go`
+  - `infra/terratest/test_helper.go`
+- Pushes to `main` branch
+
+### Performance
+- **Runtime:** ~15-20 seconds (5 tests in parallel)
+- **Cost:** $0 (plan-only validation, no actual AWS resources created)
+- **Validation:** Terraform plan JSON analysis
+
+### Test Results
+All test results are uploaded as GitHub Actions artifacts and retained for 30 days.
+

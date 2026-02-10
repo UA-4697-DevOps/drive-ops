@@ -1,0 +1,57 @@
+name: ClientGateway Terratest
+
+on:
+  pull_request:
+    paths:
+      - 'infra/modules/shared-infra/**'
+      - 'infra/modules/vpc/**'
+      - 'infra/modules/secrets/**'
+      - 'infra/terratest/client_gateway_test.go'
+      - 'infra/terratest/test_helper.go'
+  push:
+    branches:
+      - main
+    paths:
+      - 'infra/modules/shared-infra/**'
+      - 'infra/modules/vpc/**'
+      - 'infra/modules/secrets/**'
+
+jobs:
+  terratest:
+    name: Run ClientGateway Infrastructure Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: infra/terratest/go.sum
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.14.3'
+          terraform_wrapper: false
+
+      - name: Download Go dependencies
+        working-directory: infra/terratest
+        run: go mod download
+
+      - name: Run ClientGateway Terratest
+        working-directory: infra/terratest
+        run: |
+          go test -v -run TestClientGateway -timeout 15m 2>&1 | tee test-results.log
+        env:
+          AWS_DEFAULT_REGION: eu-north-1
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terratest-results
+          path: infra/terratest/test-results.log
+          retention-days: 30
