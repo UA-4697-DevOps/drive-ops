@@ -17,7 +17,7 @@ Use the diagnostic table below for quick troubleshooting, then proceed to the de
 | `FATAL: password authentication failed` | Invalid RDS credentials | `aws secretsmanager get-secret-value --secret-id drive-ops/<env>/rds-credentials` | Sync password between Secrets Manager & env |
 | HTTP 500 / Cannot create trip | Migrations not applied — tables missing | `\dt` in psql via bastion / check migration logs | Run migrations manually |
 | Timeout at `sqs:GetQueueUrl` | No NAT Gateway or VPC Endpoint for SQS | `aws ec2 describe-vpc-endpoints --filters "Name=vpc-id,Values=<vpc-id>"` | Add VPC Endpoint for SQS or NAT Gateway |
-| `InvalidParameterValue`<br/>Resource not found | Region mismatch | Compare `AWS_REGION` with `terraform show \| grep region` | Set `AWS_REGION=us-east-2` for all services |
+| `InvalidParameterValue`<br/>Resource not found | Region mismatch | Compare `AWS_REGION` with `terraform show | grep region` | Set `AWS_REGION=us-east-2` for all services |
 
 ---
 
@@ -58,7 +58,7 @@ Required permissions per service:
 
 ### Symptom
 
-Service cannot connect to RDS — connection timeout (not refuse, but timeout).
+Service cannot connect to RDS — connection timeout (not refused, but timeout).
 
 ### Root Cause
 
