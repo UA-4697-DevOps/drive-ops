@@ -1,15 +1,8 @@
 /*
 Test Suite: TripService Infrastructure Dependencies
 Description:
-
-	This test suite validates the infrastructure components required by the Trip Service,
-	specifically focusing on the 'shared-infra' module where these dependencies are defined.
-
-	It utilizes a "Plan-only" approach (terraform plan) to assert the following:
-	1. SQS Wiring: Verifies that ALL required queues (trip-created, driver-assigned, trip-completed)
-	   are configured as FIFO and have valid Redrive Policies (DLQ).
-	2. Network Security: Verifies that the Database Security Group allows ingress traffic
-	   exclusively from the Application Security Group.
+    This test suite validates the infrastructure components required by the Trip Service.
+    It uses 'ResourceChangesMap' to handle computed values (like ARNs) correctly in a Plan-only test.
 */
 package infratests
 
@@ -26,13 +19,7 @@ import (
 func TestTripServiceDependencies(t *testing.T) {
 	t.Parallel()
 
-	// 1. Get the path to the REAL module
-	modulePath := GetModulePath(t, "shared-infra")
-
-	// 2. Inject the mock provider dynamically!
-	// This writes a temporary override file to the module directory to bypass AWS STS checks.
-	cleanup := InjectMockProvider(t, modulePath)
-	t.Cleanup(cleanup)
+	modulePath := SetupTestModule(t, "shared-infra", "us-east-2")
 
 	terraformOptions := CreateTerraformOptions(t, modulePath, map[string]interface{}{
 		"project_name":                       "drive-ops",
@@ -59,26 +46,43 @@ func TestTripServiceDependencies(t *testing.T) {
 	// -----------------------------------------------------------------------
 	// 1. Validate SQS Wiring (All Service Queues)
 	// -----------------------------------------------------------------------
-	// Define the list of queue modules expected to be found in shared-infra
 	targetQueues := []string{"trip_created", "driver_assigned", "trip_completed"}
 
 	for _, queueModule := range targetQueues {
-		// Run a subtest for each queue
 		t.Run(fmt.Sprintf("SQS_%s_Configuration", queueModule), func(t *testing.T) {
 
-			// Find the main queue within the specific module (e.g. module.trip_created...)
-			mainQueue := findResource(t, planStruct, "aws_sqs_queue", "main_queue", queueModule)
+			// Use findResourceChange to inspect planned changes (supports computed values)
+			mainQueue := findResourceChange(t, planStruct, "aws_sqs_queue", "main_queue", queueModule)
 			assert.NotNil(t, mainQueue, fmt.Sprintf("%s Main Queue must be defined", queueModule))
 
-			// Find the DLQ within the specific module
-			dlq := findResource(t, planStruct, "aws_sqs_queue", "dlq", queueModule)
+			dlq := findResourceChange(t, planStruct, "aws_sqs_queue", "dlq", queueModule)
 			assert.NotNil(t, dlq, fmt.Sprintf("%s DLQ must be defined", queueModule))
 
 			if mainQueue != nil {
-				// Verify FIFO
-				assert.Equal(t, true, mainQueue.AttributeValues["fifo_queue"], "Queue must be FIFO")
+				// Access known values map
+				props := mainQueue.Change.After.(map[string]interface{})
+				assert.Equal(t, true, props["fifo_queue"], "Queue must be FIFO")
 
-				// Verify wiring to the DLQ.
+				// FIX: Robust check for Redrive Policy (handles "known after apply")
+				// Check if the value is known (static)
+				policyVal, isKnown := props["redrive_policy"]
+				
+				// Check if the value is computed (unknown/known after apply)
+				unknowns := mainQueue.Change.AfterUnknown.(map[string]interface{})
+				_, isComputed := unknowns["redrive_policy"]
+
+				// It must be either explicitly set OR computed. If both are missing/nil, wiring is broken.
+				if isKnown && policyVal != nil {
+					// If strictly known, we can check the string
+					policyStr := policyVal.(string)
+					assert.Contains(t, policyStr, "\"maxReceiveCount\"", "Policy must specify maxReceiveCount")
+				} else if isComputed {
+					// If computed, it means Terraform sees the link to DLQ ARN.
+					// This is a PASS for a plan-only test.
+					t.Logf("SQS %s: Redrive policy is correctly wired (computed from DLQ ARN).", queueModule)
+				} else {
+					assert.Fail(t, "Redrive Policy is missing or nil (not linked to DLQ)", "Queue: %s", queueModule)
+				}
 			}
 		})
 	}
@@ -87,40 +91,38 @@ func TestTripServiceDependencies(t *testing.T) {
 	// 2. Validate Security Group Wiring (App -> DB)
 	// -----------------------------------------------------------------------
 	t.Run("SecurityGroup_Isolation", func(t *testing.T) {
-		// Verify App SG exists
-		appSg := findResource(t, planStruct, "aws_security_group", "app", "vpc")
+		appSg := findResourceChange(t, planStruct, "aws_security_group", "app", "vpc")
 		assert.NotNil(t, appSg, "App Security Group must be defined")
 
-		// Verify DB Ingress Rule exists
-		dbIngress := findResource(t, planStruct, "aws_security_group_rule", "db_ingress_postgres", "vpc")
+		dbIngress := findResourceChange(t, planStruct, "aws_security_group_rule", "db_ingress_postgres", "vpc")
 		assert.NotNil(t, dbIngress, "DB Ingress Rule must be defined")
 
 		if dbIngress != nil {
-			assert.Equal(t, "tcp", dbIngress.AttributeValues["protocol"], "Ingress must be TCP")
-			assert.Equal(t, float64(5432), dbIngress.AttributeValues["from_port"], "Ingress must be port 5432")
-			assert.Equal(t, float64(5432), dbIngress.AttributeValues["to_port"], "Ingress to_port must be 5432")
+			props := dbIngress.Change.After.(map[string]interface{})
+			
+			assert.Equal(t, "tcp", props["protocol"], "Ingress must be TCP")
+			assert.Equal(t, float64(5432), props["from_port"], "Ingress must be port 5432")
+			assert.Equal(t, float64(5432), props["to_port"], "Ingress to_port must be 5432")
 
-			// Check 1: Ensure NO CIDR blocks (no public access)
-			cidrBlocks := dbIngress.AttributeValues["cidr_blocks"]
+			cidrBlocks := props["cidr_blocks"]
 			if cidrBlocks != nil {
 				cidrs, ok := cidrBlocks.([]interface{})
 				if ok {
 					assert.Empty(t, cidrs, "DB Ingress must NOT specify CIDR blocks (should use Source SG)")
 				}
 			}
-
-			// Check 2: Verify Rule Type
-			assert.Equal(t, "ingress", dbIngress.AttributeValues["type"], "Rule must be type ingress")
+			assert.Equal(t, "ingress", props["type"], "Rule must be type ingress")
 		}
 	})
 }
 
-// findResource looks for a resource ending in "type.name", optionally filtered by parent module.
-func findResource(t *testing.T, plan *terraform.PlanStruct, resType string, resName string, parentModule string) *tfjson.StateResource {
+// Updated helper: returns ResourceChange instead of StateResource
+// This allows access to 'AfterUnknown' for computed attributes.
+func findResourceChange(t *testing.T, plan *terraform.PlanStruct, resType string, resName string, parentModule string) *tfjson.ResourceChange {
 	t.Helper()
 	targetSuffix := fmt.Sprintf("%s.%s", resType, resName)
 
-	for key, resource := range plan.ResourcePlannedValuesMap {
+	for key, resource := range plan.ResourceChangesMap {
 		if strings.HasSuffix(key, targetSuffix) {
 			if parentModule != "" && !strings.Contains(key, fmt.Sprintf("module.%s", parentModule)) {
 				continue

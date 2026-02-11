@@ -2,10 +2,12 @@
 package infratests
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/gruntwork-io/terratest/modules/files"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 )
 
@@ -19,10 +21,11 @@ const (
 	// TerragruntEnvsPath is the relative path to Terragrunt environments
 	TerragruntEnvsPath = "../terragrunt/envs"
 
-	// MockProviderConfig is the HCL configuration to force offline mode
-	MockProviderConfig = `
+	// MockProviderConfigTpl is the HCL template to force offline mode.
+	// We use %s to inject the correct region dynamically.
+	MockProviderConfigTpl = `
 provider "aws" {
-  region                      = "us-east-2"
+  region                      = "%s"
   skip_credentials_validation = true
   skip_metadata_api_check     = true
   skip_requesting_account_id  = true
@@ -32,7 +35,7 @@ provider "aws" {
 `
 )
 
-// GetModulePath returns the absolute path to a Terraform module.
+// GetModulePath returns the absolute path to a Terraform module source.
 func GetModulePath(t *testing.T, moduleName string) string {
 	t.Helper()
 	absPath, err := filepath.Abs(filepath.Join(TerraformModulesPath, moduleName))
@@ -52,39 +55,58 @@ func GetTerragruntPath(t *testing.T, env, component string) string {
 	return absPath
 }
 
-// InjectMockProvider writes a temporary provider override file to the module path.
-// It returns a cleanup function that must be deferred by the caller.
-func InjectMockProvider(t *testing.T, modulePath string) func() {
+// SetupTestModule copies the ENTIRE modules directory to a temp directory
+// to ensure relative paths (e.g., source = "../sqs") work correctly.
+// It returns the path to the specific target module within that temp directory.
+func SetupTestModule(t *testing.T, targetModuleName string, region string) string {
 	t.Helper()
-	filePath := filepath.Join(modulePath, "z_terratest_mock_provider_override.tf")
 
-	err := os.WriteFile(filePath, []byte(MockProviderConfig), 0644)
+	// 1. Get the path to the PARENT "modules" directory
+	// We need to copy everything (vpc, sqs, shared-infra) so relative paths work.
+	modulesRootPath, err := filepath.Abs(TerraformModulesPath)
+	if err != nil {
+		t.Fatalf("Failed to resolve modules root path: %v", err)
+	}
+
+	// 2. Create a temporary directory for this test
+	tempDir := t.TempDir()
+
+	// 3. Copy the ENTIRE modules folder structure
+	// This ensures that when shared-infra looks for "../sqs", it finds it in the temp dir.
+	err = files.CopyFolderContents(modulesRootPath, tempDir)
+	if err != nil {
+		t.Fatalf("Failed to copy modules from %s to %s: %v", modulesRootPath, tempDir, err)
+	}
+
+	// 4. Determine the path to the specific module INSIDE the temp dir
+	destModulePath := filepath.Join(tempDir, targetModuleName)
+
+	// 5. Write the mock provider override file into the target module's folder
+	overridePath := filepath.Join(destModulePath, "z_terratest_mock_provider_override.tf")
+	configContent := fmt.Sprintf(MockProviderConfigTpl, region)
+
+	err = os.WriteFile(overridePath, []byte(configContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write mock provider config: %v", err)
 	}
 
-	// Return a cleanup function to remove the file after the test
-	return func() {
-		err := os.Remove(filePath)
-		if err != nil && !os.IsNotExist(err) {
-			t.Logf("WARNING: Failed to remove mock provider file %s: %v", filePath, err)
-		}
-	}
+	// Return the path to the target module within the temp directory
+	return destModulePath
 }
 
 // CreateTerraformOptions creates Terraform options with the given variables.
 func CreateTerraformOptions(t *testing.T, modulePath string, vars map[string]interface{}) *terraform.Options {
 	t.Helper()
 
-	// Create a unique plan file path for this test
-	planFilePath := filepath.Join(t.TempDir(), "tfplan.out")
+	// Create a unique plan file path for this test inside the module directory
+	planFilePath := filepath.Join(modulePath, "tfplan.out")
 
 	return &terraform.Options{
 		TerraformDir: modulePath,
 		Vars:         vars,
 		NoColor:      true,
 		PlanFilePath: planFilePath,
-		// We can still set these for good measure, but the override file does the real work
+		// We keep these EnvVars as a backup, but the override file does the main work
 		EnvVars: map[string]string{
 			"AWS_DEFAULT_REGION": DefaultAWSRegion,
 			"AWS_REGION":         DefaultAWSRegion,
@@ -95,19 +117,19 @@ func CreateTerraformOptions(t *testing.T, modulePath string, vars map[string]int
 // VPCTestOptions returns Terraform options configured for VPC module tests.
 func VPCTestOptions(t *testing.T) *terraform.Options {
 	t.Helper()
-	modulePath := GetModulePath(t, "vpc")
-	
-	// Inject the mock provider for VPC tests too
-	cleanup := InjectMockProvider(t, modulePath)
-	t.Cleanup(cleanup)
+
+	// FIX: Use SetupTestModule with the correct region for VPC tests (eu-central-1)
+	// This resolves the "Region mismatch" warning.
+	region := "eu-central-1"
+	modulePath := SetupTestModule(t, "vpc", region)
 
 	return CreateTerraformOptions(t, modulePath, map[string]interface{}{
 		"project_name": "drive-ops",
 		"env":          "test",
 		"vpc_cidr":     "10.0.0.0/16",
 		"availability_zones": []string{
-			"eu-central-1a",
-			"eu-central-1b",
+			region + "a",
+			region + "b",
 		},
 	})
 }
@@ -115,11 +137,9 @@ func VPCTestOptions(t *testing.T) *terraform.Options {
 // SQSTestOptions returns Terraform options configured for SQS module tests.
 func SQSTestOptions(t *testing.T, queueName string) *terraform.Options {
 	t.Helper()
-	modulePath := GetModulePath(t, "sqs")
 
-	// Inject the mock provider for SQS tests too
-	cleanup := InjectMockProvider(t, modulePath)
-	t.Cleanup(cleanup)
+	// Use default region for SQS tests
+	modulePath := SetupTestModule(t, "sqs", DefaultAWSRegion)
 
 	return CreateTerraformOptions(t, modulePath, map[string]interface{}{
 		"project_name":       "drive-ops",
@@ -127,7 +147,7 @@ func SQSTestOptions(t *testing.T, queueName string) *terraform.Options {
 		"cost_center":        "test",
 		"queue_name":         queueName,
 		"visibility_timeout": 60,
-		"message_retention":  345600, 
+		"message_retention":  345600,
 		"max_receive_count":  3,
 		"tags": map[string]string{
 			"Component": "test-queue",
