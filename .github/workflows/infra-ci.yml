@@ -49,15 +49,12 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: mock_access_key
       AWS_SECRET_ACCESS_KEY: mock_secret_key
-      AWS_DEFAULT_REGION: eu-central-1
-      # Force the provider to skip all AWS API calls for validation
-      AWS_REGION: eu-central-1
+      AWS_DEFAULT_REGION: us-east-2
       # These variables are read directly by the AWS Provider to skip validation
-      TF_AWS_SKIP_CREDENTIALS_VALIDATION: "true"
-      TF_AWS_SKIP_METADATA_API_CHECK: "true"
-      TF_AWS_SKIP_REGION_VALIDATION: "true"
-      # These provide dummy values for common data sources
-      TF_VAR_account_id: "123456789012"
+      TF_VAR_skip_credentials_validation: "true"
+      TF_VAR_skip_metadata_api_check: "true"
+      TF_VAR_skip_requesting_account_id: "true"
+      TF_VAR_skip_region_validation: "true"
     steps:
       - uses: actions/checkout@v6
 
