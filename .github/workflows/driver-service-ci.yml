@@ -3,7 +3,6 @@ name: Driver Service CI/CD
 on:
   pull_request:
     branches:
-      - 'driver-service'
       - 'main'
     paths:
       - 'driver-service/**'
@@ -11,7 +10,6 @@ on:
 
   push:
     branches:
-      - 'driver-service'
       - 'main'
     paths:
       - 'driver-service/**'
@@ -22,7 +20,7 @@ on:
   workflow_dispatch:
 
 env:
-  ECR_REPOSITORY: drive-ops/driver-service
+  ECR_REPOSITORY: driver-service
   SHOULD_PUSH_IMAGE: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
 
 permissions:
