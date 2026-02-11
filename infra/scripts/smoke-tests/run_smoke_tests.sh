@@ -48,4 +48,17 @@ fi
 
 # Run the health check
 echo "Running smoke tests..."
+
+# 1. Health Check Test  
+echo "1. Running Health Check..."
+python "$SCRIPT_DIR/health_check.py"
+
+# 2. SQS Message Flow Test (in degraded mode for local testing)
+echo ""
+echo "2. Running SQS Message Flow Test (degraded mode)..."
+export SQS_FLOW_DEGRADED_MODE=true
+python "$SCRIPT_DIR/sqs_flow_test.py"
+
+echo ""
+echo "All smoke tests completed successfully!"
 python "$SCRIPT_DIR/health_check.py"
