@@ -1,14 +1,15 @@
 /*
 Test Suite: TripService Infrastructure Dependencies
 Description:
-  This test suite validates the infrastructure components required by the Trip Service,
-  specifically focusing on the 'shared-infra' module where these dependencies are defined.
 
-  It utilizes a "Plan-only" approach (terraform plan) to assert the following:
-  1. SQS Wiring: Verifies that ALL required queues (trip-created, driver-assigned, trip-completed)
-     are configured as FIFO and have valid Redrive Policies (DLQ).
-  2. Network Security: Verifies that the Database Security Group allows ingress traffic
-     exclusively from the Application Security Group.
+	This test suite validates the infrastructure components required by the Trip Service,
+	specifically focusing on the 'shared-infra' module where these dependencies are defined.
+
+	It utilizes a "Plan-only" approach (terraform plan) to assert the following:
+	1. SQS Wiring: Verifies that ALL required queues (trip-created, driver-assigned, trip-completed)
+	   are configured as FIFO and have valid Redrive Policies (DLQ).
+	2. Network Security: Verifies that the Database Security Group allows ingress traffic
+	   exclusively from the Application Security Group.
 */
 package infratests
 
@@ -18,14 +19,14 @@ import (
 	"testing"
 
 	"github.com/gruntwork-io/terratest/modules/terraform"
-	"github.com/stretchr/testify/assert"
 	tfjson "github.com/hashicorp/terraform-json"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTripServiceDependencies(t *testing.T) {
 	t.Parallel()
 
-	modulePath := GetModulePath(t, "shared-infra")
+	modulePath := "../terratest/fixtures/shared-infra"
 
 	terraformOptions := CreateTerraformOptions(t, modulePath, map[string]interface{}{
 		"project_name":                       "drive-ops",
@@ -58,11 +59,11 @@ func TestTripServiceDependencies(t *testing.T) {
 	for _, queueModule := range targetQueues {
 		// Run a subtest for each queue
 		t.Run(fmt.Sprintf("SQS_%s_Configuration", queueModule), func(t *testing.T) {
-			
+
 			// Find the main queue within the specific module (e.g. module.trip_created...)
 			mainQueue := findResource(t, planStruct, "aws_sqs_queue", "main_queue", queueModule)
 			assert.NotNil(t, mainQueue, fmt.Sprintf("%s Main Queue must be defined", queueModule))
-			
+
 			// Find the DLQ within the specific module
 			dlq := findResource(t, planStruct, "aws_sqs_queue", "dlq", queueModule)
 			assert.NotNil(t, dlq, fmt.Sprintf("%s DLQ must be defined", queueModule))
@@ -70,7 +71,7 @@ func TestTripServiceDependencies(t *testing.T) {
 			if mainQueue != nil {
 				// Verify FIFO
 				assert.Equal(t, true, mainQueue.AttributeValues["fifo_queue"], "Queue must be FIFO")
-				
+
 				// Verify wiring to the DLQ.
 				// (We do not check the JSON redrive_policy content in detail because it contains unknown values,
 				// but checking for the existence of the DLQ resource nearby is a good indicator).
@@ -89,7 +90,7 @@ func TestTripServiceDependencies(t *testing.T) {
 		// Verify DB Ingress Rule exists
 		dbIngress := findResource(t, planStruct, "aws_security_group_rule", "db_ingress_postgres", "vpc")
 		assert.NotNil(t, dbIngress, "DB Ingress Rule must be defined")
-		
+
 		if dbIngress != nil {
 			assert.Equal(t, "tcp", dbIngress.AttributeValues["protocol"], "Ingress must be TCP")
 			assert.Equal(t, float64(5432), dbIngress.AttributeValues["from_port"], "Ingress must be port 5432")
@@ -114,7 +115,7 @@ func TestTripServiceDependencies(t *testing.T) {
 func findResource(t *testing.T, plan *terraform.PlanStruct, resType string, resName string, parentModule string) *tfjson.StateResource {
 	t.Helper()
 	targetSuffix := fmt.Sprintf("%s.%s", resType, resName)
-	
+
 	for key, resource := range plan.ResourcePlannedValuesMap {
 		if strings.HasSuffix(key, targetSuffix) {
 			if parentModule != "" && !strings.Contains(key, fmt.Sprintf("module.%s", parentModule)) {
