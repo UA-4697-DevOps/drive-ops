@@ -26,7 +26,13 @@ import (
 func TestTripServiceDependencies(t *testing.T) {
 	t.Parallel()
 
-	modulePath := "../terratest/fixtures/shared-infra"
+	// 1. Get the path to the REAL module
+	modulePath := GetModulePath(t, "shared-infra")
+
+	// 2. Inject the mock provider dynamically!
+	// This writes a temporary override file to the module directory to bypass AWS STS checks.
+	cleanup := InjectMockProvider(t, modulePath)
+	t.Cleanup(cleanup)
 
 	terraformOptions := CreateTerraformOptions(t, modulePath, map[string]interface{}{
 		"project_name":                       "drive-ops",
@@ -73,8 +79,6 @@ func TestTripServiceDependencies(t *testing.T) {
 				assert.Equal(t, true, mainQueue.AttributeValues["fifo_queue"], "Queue must be FIFO")
 
 				// Verify wiring to the DLQ.
-				// (We do not check the JSON redrive_policy content in detail because it contains unknown values,
-				// but checking for the existence of the DLQ resource nearby is a good indicator).
 			}
 		})
 	}
