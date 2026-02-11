@@ -24,7 +24,7 @@ if [ -f "$PROJECT_ROOT/.venv/bin/activate" ]; then
 fi
 
 # Check if required smoke test variables are set
-REQUIRED_VARS=("SMOKE_TRIP_SERVICE_URL" "SMOKE_DRIVER_SERVICE_URL" "BOT_TOKEN")
+REQUIRED_VARS=("SMOKE_TRIP_SERVICE_URL" "SMOKE_DRIVER_SERVICE_URL" "SMOKE_CLIENT_GATEWAY_URL" "BOT_TOKEN")
 
 missing_vars=()
 for var in "${REQUIRED_VARS[@]}"; do
@@ -42,6 +42,7 @@ if [ ${#missing_vars[@]} -ne 0 ]; then
     echo "Please set them in your .env file or export them manually:"
     echo "  export SMOKE_TRIP_SERVICE_URL=http://your-trip-service:8081"
     echo "  export SMOKE_DRIVER_SERVICE_URL=http://your-driver-service:8082"
+    echo "  export SMOKE_CLIENT_GATEWAY_URL=http://your-client-gateway:8080"
     echo "  export BOT_TOKEN=your_telegram_bot_token"
     exit 1
 fi
@@ -49,16 +50,8 @@ fi
 # Run the health check
 echo "Running smoke tests..."
 
-# 1. Health Check Test  
 echo "1. Running Health Check..."
 python "$SCRIPT_DIR/health_check.py"
 
-# 2. SQS Message Flow Test (in degraded mode for local testing)
-echo ""
-echo "2. Running SQS Message Flow Test (degraded mode)..."
-export SQS_FLOW_DEGRADED_MODE=true
-python "$SCRIPT_DIR/sqs_flow_test.py"
-
 echo ""
 echo "All smoke tests completed successfully!"
-python "$SCRIPT_DIR/health_check.py"

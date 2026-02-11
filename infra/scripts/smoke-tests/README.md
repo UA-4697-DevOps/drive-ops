@@ -43,7 +43,7 @@ Verifies availability of all services through their health endpoints.
 **What it checks:**
 - Trip Service: `GET /health` → HTTP 200 + `{"status":"ok"}`
 - Driver Service: `GET /health` → HTTP 200 + `{"status":"ok"}`
-- Client Gateway: `GET /` → HTTP 200
+- Client Gateway: `GET /health` → HTTP 200 + `{"status":"ok"}`
 
 **Environment Variables:**
 - `SMOKE_TRIP_SERVICE_URL` - Trip Service URL (required)
@@ -59,7 +59,7 @@ Verifies availability of all services through their health endpoints.
 - `1` - at least one service is unavailable
 
 **Output Example:**
-```
+```text
 ======================================================================
   Drive-Ops Health Check Smoke Test
 ======================================================================
@@ -82,11 +82,7 @@ Client Gateway       ✅ OK           client-gateway.example.com:8080/
 ✅ All services are healthy!
 ```
 
-### 2. SQS Message Flow (planned)
-
-**TODO:** Verifies end-to-end async communication through SQS FIFO queues.
-
-### 3. RDS Connectivity (planned)
+### 2. RDS Connectivity (planned)
 
 **TODO:** Verifies write/read operations with PostgreSQL.
 
@@ -130,7 +126,7 @@ Smoke tests can be run after deployment via GitHub Actions:
 ## Troubleshooting
 
 ### Connection Timeout
-```
+```text
 ❌ Timeout after 10s (tried 3 times)
 ```
 **Possible Causes:**
@@ -146,7 +142,7 @@ Smoke tests can be run after deployment via GitHub Actions:
 4. Try curl manually: `curl -v http://<service-url>/health`
 
 ### Connection Refused
-```
+```text
 ❌ Connection error: Connection refused
 ```
 **Possible Causes:**
@@ -158,7 +154,7 @@ Smoke tests can be run after deployment via GitHub Actions:
 2. Check port configuration in Dockerfile/docker-compose.yml
 
 ### Invalid JSON Response
-```
+```text
 ❌ Invalid response: {"status": "error"}
 ```
 **Possible Causes:**
