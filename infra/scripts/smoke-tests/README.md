@@ -169,6 +169,6 @@ Smoke tests can be run after deployment via GitHub Actions:
 ## Additional Information
 
 For detailed information on common failures and their fixes, see:
-- [Smoke Tests Plan](../../../documentation/smoke-tests-plan.md) (Ukrainian)
-- [Failure Modes Guide](./FAILURE_MODES.md) — diagnostics for IAM, SG, SQS, RDS, VPC failures
-- [Smoke Test Failure Modes (documentation)](../../../documentation/architecture/smoke-test-failure-modes.md)
+- [Smoke Tests Plan](../../docs/FAILURE_MODES.md) (Ukrainian)
+- [Failure Modes Guide](../../docs/FAILURE_MODES.md) — diagnostics for IAM, SG, SQS, RDS, VPC failures
+- [Smoke Test Failure Modes (documentation)](../../docs/FAILURE_MODES.md)
