@@ -6,12 +6,14 @@ on:
     paths:
       - 'infra/terraform/**'
       - 'infra/terragrunt/**'
+      - 'infra/terratest/**'
       - '.github/workflows/infra-ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'infra/terraform/**'
       - 'infra/terragrunt/**'
+      - 'infra/terratest/**'
       - '.github/workflows/infra-ci.yml'
 
 concurrency:
@@ -21,6 +23,7 @@ concurrency:
 env:
   TERRAFORM_VERSION: '1.10.0'
   TERRAGRUNT_VERSION: '0.68.0'
+  GO_VERSION: '1.25'
 
 jobs:
   terraform-fmt:
@@ -38,6 +41,32 @@ jobs:
       - name: Terraform Format Check
         run: terraform fmt -check -recursive -diff
         working-directory: infra/terraform
+  terratest-plan:
+    name: TripService Terratest (Plan)
+    runs-on: ubuntu-latest
+    needs: terraform-fmt # Run after format check passes
+    steps:
+      - uses: actions/checkout@v6
+
+      # 1. Setup Go (Required for running the test)
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      # 2. Setup Terraform (Required for the test to run 'terraform plan')
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false # Important for Terratest parsing
+
+      # 3. Run the Test
+      - name: Run TripService Plan Test
+        working-directory: infra/terratest
+        run: |
+          go mod download
+          go test -v -run TestTripServiceInfra
 
   terraform-validate:
     name: Terraform Validate
@@ -110,4 +139,3 @@ jobs:
           AWS_DEFAULT_REGION: eu-central-1
           # Skip AWS credential validation in provider (read by root.hcl)
           TG_SKIP_AWS_VALIDATION: "true"
-
