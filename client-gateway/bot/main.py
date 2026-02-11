@@ -1279,6 +1279,10 @@ async def run_telegram_bot():
     finally:
         # Perform graceful shutdown - always cleanup even on errors
         logger.info("Stopping bot updater...", extra={'correlationId': 'SHUTDOWN'})
+        try:
+            await application.updater.stop_polling()
+        except Exception as e:
+            logger.warning("Error stopping polling: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
         
         try:
             await application.updater.stop()
