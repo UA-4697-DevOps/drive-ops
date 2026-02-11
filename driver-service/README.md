@@ -380,8 +380,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 Internal project - UA-4697-DevOps team
 
-# Deployment
-See .github/workflows/driver-service-ci.yml for CI/CD pipeline
+## Deployment
 
-# Deployment
-See .github/workflows/driver-service-ci.yml for CI/CD pipeline
+See `.github/workflows/driver-service-ci.yml` for the CI/CD pipeline.
