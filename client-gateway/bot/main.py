@@ -24,14 +24,11 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 TRIP_SERVICE_URL = os.getenv('TRIP_SERVICE_URL', 'http://localhost:8081')
 DRIVER_SERVICE_URL = os.getenv('DRIVER_SERVICE_URL', 'http://localhost:8082')
-HEALTH_CHECK_PORT = int(os.getenv('HEALTH_CHECK_PORT', '8080'))
-
-# FastAPI app for health check
-health_app = FastAPI()
-
-@health_app.get("/health")
-async def health_check():
-    return {"status": "ok"}
+# Parse HEALTH_CHECK_PORT with fallback to 8080 for invalid/missing values
+try:
+    HEALTH_CHECK_PORT = int(os.getenv('HEALTH_CHECK_PORT', '8080'))
+except (ValueError, TypeError):
+    HEALTH_CHECK_PORT = 8080
 
 DEBUGGING = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
 
@@ -1215,12 +1212,12 @@ async def run_fastapi():
     config = uvicorn.Config(
         app,
         host="0.0.0.0",
-        port=8080,
+        port=HEALTH_CHECK_PORT,
         log_level="info",
         access_log=False  # Disable access logs to reduce noise
     )
     uvicorn_server = uvicorn.Server(config)
-    logger.info("Starting FastAPI health server on port 8080", extra={'correlationId': 'STARTUP'})
+    logger.info("Starting FastAPI health server on port %d", HEALTH_CHECK_PORT, extra={'correlationId': 'STARTUP'})
     await uvicorn_server.serve()
 
 async def run_telegram_bot():
@@ -1231,11 +1228,6 @@ async def run_telegram_bot():
         "ignore",
         message="If 'per_message=False', 'CallbackQueryHandler' will not be tracked for every message.*",
     )
-    
-    # Start health check server in background thread
-    health_thread = threading.Thread(target=run_health_server, daemon=True)
-    health_thread.start()
-    print(f"Health check server running on port {HEALTH_CHECK_PORT}...")
     
     application = Application.builder().token(BOT_TOKEN).build()
     
@@ -1348,7 +1340,7 @@ def main():
     Main entry point that runs both FastAPI health server and Telegram bot concurrently.
     """
     print("Starting client-gateway service...")
-    print("- FastAPI health endpoint on port 8080")
+    print(f"- FastAPI health endpoint on port {HEALTH_CHECK_PORT}")
     print("- Telegram bot with polling")
     
     # Run both services concurrently
