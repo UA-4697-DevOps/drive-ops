@@ -46,17 +46,6 @@ jobs:
     name: TripService Terratest (Plan)
     runs-on: ubuntu-latest
     needs: terraform-fmt # Run after format check passes
-    env:
-      AWS_ACCESS_KEY_ID: mock_access_key
-      AWS_SECRET_ACCESS_KEY: mock_secret_key
-      AWS_DEFAULT_REGION: us-east-2
-      AWS_REGION: us-east-2
-      # These variables are read directly by the AWS Provider to skip validation
-      TERRAFORM_AWS_SKIP_ADMISSIONS: "true"
-      TF_AWS_SKIP_CREDENTIALS_VALIDATION: "true"
-      TF_AWS_SKIP_REGION_VALIDATION: "true"
-      TF_AWS_SKIP_METADATA_API_CHECK: "true"
-      TF_AWS_SKIP_REQUESTING_ACCOUNT_ID: "true"
     steps:
       - uses: actions/checkout@v6
 
