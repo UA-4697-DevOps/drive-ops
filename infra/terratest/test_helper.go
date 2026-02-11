@@ -57,31 +57,23 @@ func GetTerragruntPath(t *testing.T, env, component string) string {
 
 // SetupTestModule copies the ENTIRE modules directory to a temp directory
 // to ensure relative paths (e.g., source = "../sqs") work correctly.
-// It returns the path to the specific target module within that temp directory.
 func SetupTestModule(t *testing.T, targetModuleName string, region string) string {
 	t.Helper()
 
-	// 1. Get the path to the PARENT "modules" directory
-	// We need to copy everything (vpc, sqs, shared-infra) so relative paths work.
 	modulesRootPath, err := filepath.Abs(TerraformModulesPath)
 	if err != nil {
 		t.Fatalf("Failed to resolve modules root path: %v", err)
 	}
 
-	// 2. Create a temporary directory for this test
 	tempDir := t.TempDir()
 
-	// 3. Copy the ENTIRE modules folder structure
-	// This ensures that when shared-infra looks for "../sqs", it finds it in the temp dir.
 	err = files.CopyFolderContents(modulesRootPath, tempDir)
 	if err != nil {
 		t.Fatalf("Failed to copy modules from %s to %s: %v", modulesRootPath, tempDir, err)
 	}
 
-	// 4. Determine the path to the specific module INSIDE the temp dir
 	destModulePath := filepath.Join(tempDir, targetModuleName)
 
-	// 5. Write the mock provider override file into the target module's folder
 	overridePath := filepath.Join(destModulePath, "z_terratest_mock_provider_override.tf")
 	configContent := fmt.Sprintf(MockProviderConfigTpl, region)
 
@@ -90,15 +82,14 @@ func SetupTestModule(t *testing.T, targetModuleName string, region string) strin
 		t.Fatalf("Failed to write mock provider config: %v", err)
 	}
 
-	// Return the path to the target module within the temp directory
 	return destModulePath
 }
 
-// CreateTerraformOptions creates Terraform options with the given variables.
-func CreateTerraformOptions(t *testing.T, modulePath string, vars map[string]interface{}) *terraform.Options {
+// CreateTerraformOptions creates Terraform options with the given variables and region.
+// Passing the region explicitly ensures that EnvVars match the Provider configuration.
+func CreateTerraformOptions(t *testing.T, modulePath string, vars map[string]interface{}, region string) *terraform.Options {
 	t.Helper()
 
-	// Create a unique plan file path for this test inside the module directory
 	planFilePath := filepath.Join(modulePath, "tfplan.out")
 
 	return &terraform.Options{
@@ -106,10 +97,10 @@ func CreateTerraformOptions(t *testing.T, modulePath string, vars map[string]int
 		Vars:         vars,
 		NoColor:      true,
 		PlanFilePath: planFilePath,
-		// We keep these EnvVars as a backup, but the override file does the main work
+		// FIX: Use the provided region for environment variables to prevent region drift
 		EnvVars: map[string]string{
-			"AWS_DEFAULT_REGION": DefaultAWSRegion,
-			"AWS_REGION":         DefaultAWSRegion,
+			"AWS_DEFAULT_REGION": region,
+			"AWS_REGION":         region,
 		},
 	}
 }
@@ -118,8 +109,7 @@ func CreateTerraformOptions(t *testing.T, modulePath string, vars map[string]int
 func VPCTestOptions(t *testing.T) *terraform.Options {
 	t.Helper()
 
-	// FIX: Use SetupTestModule with the correct region for VPC tests (eu-central-1)
-	// This resolves the "Region mismatch" warning.
+	// VPC module tests specifically use eu-central-1
 	region := "eu-central-1"
 	modulePath := SetupTestModule(t, "vpc", region)
 
@@ -131,15 +121,15 @@ func VPCTestOptions(t *testing.T) *terraform.Options {
 			region + "a",
 			region + "b",
 		},
-	})
+	}, region)
 }
 
 // SQSTestOptions returns Terraform options configured for SQS module tests.
 func SQSTestOptions(t *testing.T, queueName string) *terraform.Options {
 	t.Helper()
 
-	// Use default region for SQS tests
-	modulePath := SetupTestModule(t, "sqs", DefaultAWSRegion)
+	region := DefaultAWSRegion
+	modulePath := SetupTestModule(t, "sqs", region)
 
 	return CreateTerraformOptions(t, modulePath, map[string]interface{}{
 		"project_name":       "drive-ops",
@@ -152,5 +142,5 @@ func SQSTestOptions(t *testing.T, queueName string) *terraform.Options {
 		"tags": map[string]string{
 			"Component": "test-queue",
 		},
-	})
+	}, region)
 }

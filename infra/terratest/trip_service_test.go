@@ -3,6 +3,7 @@ Test Suite: TripService Infrastructure Dependencies
 Description:
     This test suite validates the infrastructure components required by the Trip Service.
     It uses 'ResourceChangesMap' to handle computed values (like ARNs) correctly in a Plan-only test.
+    The test execution is isolated in a temporary directory to prevent race conditions.
 */
 package infratests
 
@@ -19,15 +20,21 @@ import (
 func TestTripServiceDependencies(t *testing.T) {
 	t.Parallel()
 
-	modulePath := SetupTestModule(t, "shared-infra", "us-east-2")
+	// FIX: Define region as a variable to ensure consistency across the setup
+	region := "us-east-2"
+	
+	// 1. Setup the test module in a temp directory with a mock provider.
+	modulePath := SetupTestModule(t, "shared-infra", region)
 
+	// 2. Create Terraform options. 
+	// FIX: We now pass 'region' as the 4th argument to sync EnvVars with the Provider.
 	terraformOptions := CreateTerraformOptions(t, modulePath, map[string]interface{}{
 		"project_name":                       "drive-ops",
 		"env":                                "test",
 		"account_id":                         "123456789012",
 		"cost_center":                        "test-center",
 		"vpc_cidr":                           "10.0.0.0/16",
-		"availability_zones":                 []string{"us-east-2a", "us-east-2b"},
+		"availability_zones":                 []string{region + "a", region + "b"},
 		"enable_flow_logs":                   false,
 		"flow_log_retention_in_days":         1,
 		"enable_ha":                          false,
@@ -39,7 +46,7 @@ func TestTripServiceDependencies(t *testing.T) {
 		"common_tags": map[string]string{
 			"Test": "true",
 		},
-	})
+	}, region)
 
 	planStruct := terraform.InitAndPlanAndShowWithStruct(t, terraformOptions)
 
@@ -63,22 +70,16 @@ func TestTripServiceDependencies(t *testing.T) {
 				props := mainQueue.Change.After.(map[string]interface{})
 				assert.Equal(t, true, props["fifo_queue"], "Queue must be FIFO")
 
-				// FIX: Robust check for Redrive Policy (handles "known after apply")
-				// Check if the value is known (static)
+				// Robust check for Redrive Policy (handles "known after apply")
 				policyVal, isKnown := props["redrive_policy"]
 				
-				// Check if the value is computed (unknown/known after apply)
 				unknowns := mainQueue.Change.AfterUnknown.(map[string]interface{})
 				_, isComputed := unknowns["redrive_policy"]
 
-				// It must be either explicitly set OR computed. If both are missing/nil, wiring is broken.
 				if isKnown && policyVal != nil {
-					// If strictly known, we can check the string
 					policyStr := policyVal.(string)
 					assert.Contains(t, policyStr, "\"maxReceiveCount\"", "Policy must specify maxReceiveCount")
 				} else if isComputed {
-					// If computed, it means Terraform sees the link to DLQ ARN.
-					// This is a PASS for a plan-only test.
 					t.Logf("SQS %s: Redrive policy is correctly wired (computed from DLQ ARN).", queueModule)
 				} else {
 					assert.Fail(t, "Redrive Policy is missing or nil (not linked to DLQ)", "Queue: %s", queueModule)
@@ -116,8 +117,7 @@ func TestTripServiceDependencies(t *testing.T) {
 	})
 }
 
-// Updated helper: returns ResourceChange instead of StateResource
-// This allows access to 'AfterUnknown' for computed attributes.
+// findResourceChange looks for a resource ending in "type.name", optionally filtered by parent module.
 func findResourceChange(t *testing.T, plan *terraform.PlanStruct, resType string, resName string, parentModule string) *tfjson.ResourceChange {
 	t.Helper()
 	targetSuffix := fmt.Sprintf("%s.%s", resType, resName)
