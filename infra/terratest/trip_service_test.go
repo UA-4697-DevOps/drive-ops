@@ -93,6 +93,7 @@ func TestTripServiceDependencies(t *testing.T) {
 		if dbIngress != nil {
 			assert.Equal(t, "tcp", dbIngress.AttributeValues["protocol"], "Ingress must be TCP")
 			assert.Equal(t, float64(5432), dbIngress.AttributeValues["from_port"], "Ingress must be port 5432")
+			assert.Equal(t, float64(5432), dbIngress.AttributeValues["to_port"], "Ingress to_port must be 5432")
 
 			// Check 1: Ensure NO CIDR blocks (no public access)
 			cidrBlocks := dbIngress.AttributeValues["cidr_blocks"]
