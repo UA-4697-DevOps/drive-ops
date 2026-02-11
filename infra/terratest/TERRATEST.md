@@ -109,8 +109,6 @@ ClientGateway tests validate the infrastructure dependencies required for the Te
 Validates that all required outputs from shared-infra module are available:
 - VPC and subnet IDs
 - Security group IDs
-- SQS queue URLs and ARNs
-- DLQ ARNs
 
 #### 2. TestClientGatewaySecurityGroupAllowsOutbound
 Verifies app security group egress rules:
@@ -145,16 +143,17 @@ go test -v -run TestClientGateway -timeout 15m
 cd infra/terratest
 go test -v -run TestClientGatewaySecurityGroupAllowsOutbound -timeout 5m
 ```
-
 #### CI/CD
 Tests run automatically via GitHub Actions on:
 - Pull requests modifying:
-  - `infra/modules/shared-infra/**`
-  - `infra/modules/vpc/**`
-  - `infra/modules/secrets/**`
+  - `infra/terraform/modules/client-gateway/**`
+  - `infra/terraform/modules/shared-infra/**`
+  - `infra/terraform/modules/vpc/**`
+  - `infra/terraform/modules/secrets/**`
   - `infra/terratest/client_gateway_test.go`
   - `infra/terratest/test_helper.go`
-- Pushes to `main` branch
+  - `.github/workflows/terratest-client-gateway.yml`
+- Manual workflow dispatch
 
 ### Performance
 - **Runtime:** ~15-20 seconds (4 tests in parallel)

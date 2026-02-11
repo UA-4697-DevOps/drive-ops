@@ -2,6 +2,7 @@ package infratests
 
 import (
 	"testing"
+	"strings"
 
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
@@ -87,10 +88,8 @@ func TestClientGatewaySecretsOutputs(t *testing.T) {
 		assert.True(t, exists, "Expected secrets output '%s' should be defined", outputName)
 	}
 }
-
 func TestClientGatewayNetworkingSetup(t *testing.T) {
 	t.Parallel()
-
 	terraformOptions := VPCTestOptions(t)
 	planStruct := terraform.InitAndPlanAndShowWithStruct(t, terraformOptions)
 
@@ -103,6 +102,7 @@ func TestClientGatewayNetworkingSetup(t *testing.T) {
 		igwFound           bool
 	)
 
+	// VPC module has no child modules, so resources are in RootModule
 	for _, resource := range planStruct.RawPlan.PlannedValues.RootModule.Resources {
 		switch resource.Type {
 		case "aws_vpc":
@@ -117,7 +117,6 @@ func TestClientGatewayNetworkingSetup(t *testing.T) {
 				continue
 			}
 
-			// Check if the subnet name contains "public" or "private"
 			name, hasName := tags["Name"]
 			if !hasName {
 				continue
@@ -128,9 +127,9 @@ func TestClientGatewayNetworkingSetup(t *testing.T) {
 				continue
 			}
 
-			if containsIgnoreCase(nameStr, "public") {
+			if strings.Contains(strings.ToLower(nameStr), "public") {
 				publicSubnetFound = true
-			} else if containsIgnoreCase(nameStr, "private") {
+			} else if strings.Contains(strings.ToLower(nameStr), "private") {
 				privateSubnetFound = true
 			}
 
@@ -145,38 +144,3 @@ func TestClientGatewayNetworkingSetup(t *testing.T) {
 	assert.True(t, igwFound, "Internet Gateway should exist for outbound connectivity")
 }
 
-// containsIgnoreCase checks if a string contains a substring (case-insensitive)
-func containsIgnoreCase(str, substr string) bool {
-	str = toLower(str)
-	substr = toLower(substr)
-	return contains(str, substr)
-}
-
-// toLower converts a string to lowercase
-func toLower(str string) string {
-	result := ""
-	for _, r := range str {
-		if r >= 'A' && r <= 'Z' {
-			result += string(r + 32)
-		} else {
-			result += string(r)
-		}
-	}
-	return result
-}
-
-// contains checks if a string contains a substring
-func contains(str, substr string) bool {
-	if len(substr) == 0 {
-		return true
-	}
-	if len(str) < len(substr) {
-		return false
-	}
-	for i := 0; i <= len(str)-len(substr); i++ {
-		if str[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
