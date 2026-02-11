@@ -17,19 +17,12 @@ func TestClientGatewaySharedInfraOutputs(t *testing.T) {
 	require.NotNil(t, planStruct.RawPlan, "Plan should not be nil")
 	require.NotNil(t, planStruct.RawPlan.PlannedValues, "PlannedValues should not be nil")
 
-	// ClientGateway requires these outputs from shared-infra
+	// ClientGateway requires these outputs from shared-infra (VPC only, no SQS)
 	expectedOutputs := []string{
-		// VPC outputs for network connectivity
 		"vpc_id",
 		"public_subnet_ids",
 		"private_subnet_ids",
 		"sg_app_id",
-
-		// SQS outputs for driver command queues
-		"driver_assigned_queue_url",
-		"trip_completed_queue_url",
-		"all_queue_arns",
-		"all_dlq_arns",
 	}
 
 	for _, outputName := range expectedOutputs {
@@ -73,37 +66,6 @@ func TestClientGatewaySecurityGroupAllowsOutbound(t *testing.T) {
 	assert.True(t, outboundRuleFound, "App security group should have outbound rule for Telegram Bot API")
 }
 
-func TestClientGatewaySQSQueuesConfiguration(t *testing.T) {
-	t.Parallel()
-
-	terraformOptions := SharedInfraTestOptions(t)
-	planStruct := terraform.InitAndPlanAndShowWithStruct(t, terraformOptions)
-
-	require.NotNil(t, planStruct.RawPlan.PlannedValues)
-
-	// Track which queues we found
-	queuesFound := make(map[string]bool)
-	expectedQueues := []string{"driver_assigned", "trip_completed"}
-
-	// Check module outputs for queue URLs
-	outputs := planStruct.RawPlan.PlannedValues.Outputs
-
-	for _, queueName := range expectedQueues {
-		outputKey := queueName + "_queue_url"
-		_, exists := outputs[outputKey]
-		queuesFound[queueName] = exists
-	}
-
-	// Verify all expected queues are present
-	for _, queueName := range expectedQueues {
-		assert.True(t, queuesFound[queueName],
-			"ClientGateway requires '%s' queue to be configured", queueName)
-	}
-
-	// Verify DLQ outputs exist
-	_, dlqOutputExists := outputs["all_dlq_arns"]
-	assert.True(t, dlqOutputExists, "DLQ configuration should be available for all queues")
-}
 
 func TestClientGatewaySecretsOutputs(t *testing.T) {
 	t.Parallel()

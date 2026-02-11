@@ -119,18 +119,13 @@ Verifies app security group egress rules:
 - Destination: 0.0.0.0/0
 - Description mentions "Long Polling"
 
-#### 3. TestClientGatewaySQSQueuesConfiguration
-Validates SQS queue setup:
-- `driver_assigned` queue exists with URL output
-- `trip_completed` queue exists with URL output
-- DLQ configuration is present for all queues
 
-#### 4. TestClientGatewaySecretsOutputs
+#### 3. TestClientGatewaySecretsOutputs
 Verifies Secrets Manager outputs:
 - `rds_master_secret_arn` is defined
 - `rds_master_secret_name` is defined
 
-#### 5. TestClientGatewayNetworkingSetup
+#### 4. TestClientGatewayNetworkingSetup
 Validates VPC networking components:
 - VPC exists
 - Public subnets (for outbound internet access)
@@ -162,7 +157,7 @@ Tests run automatically via GitHub Actions on:
 - Pushes to `main` branch
 
 ### Performance
-- **Runtime:** ~15-20 seconds (5 tests in parallel)
+- **Runtime:** ~15-20 seconds (4 tests in parallel)
 - **Cost:** $0 (plan-only validation, no actual AWS resources created)
 - **Validation:** Terraform plan JSON analysis
 

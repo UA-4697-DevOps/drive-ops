@@ -54,6 +54,7 @@ func VPCTestOptions(t *testing.T) *terraform.Options {
 	return CreateTerraformOptions(t, modulePath, map[string]interface{}{
 		"project_name": "drive-ops",
 		"env":          "test",
+		"account_id":   "123456789012",
 		"vpc_cidr":     "10.0.0.0/16",
 		"availability_zones": []string{
 			"eu-central-1a",
