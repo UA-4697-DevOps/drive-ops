@@ -144,7 +144,8 @@ func SQSTestOptions(t *testing.T, queueName string) *terraform.Options {
 // SharedInfraTestOptions returns Terraform options configured for shared-infra module tests
 func SharedInfraTestOptions(t *testing.T) *terraform.Options {
 	t.Helper()
-	modulePath := GetModulePath(t, "shared-infra")
+	region := DefaultAWSRegion
+	modulePath := SetupTestModule(t, "shared-infra", region)
 
 	return CreateTerraformOptions(t, modulePath, map[string]interface{}{
 		"project_name": "drive-ops",
@@ -172,17 +173,18 @@ func SharedInfraTestOptions(t *testing.T) *terraform.Options {
 			"Module": "shared-infra-test",
 			"Owner":  "DevOps Team",
 		},
-	})
+	}, region)
 }
 
 func SecretsTestOptions(t *testing.T) *terraform.Options {
 	t.Helper()
-	modulePath := GetModulePath(t, "secrets")
+	region := DefaultAWSRegion
+	modulePath := SetupTestModule(t, "secrets", region)
 
 	return CreateTerraformOptions(t, modulePath, map[string]interface{}{
 		"project_name":        "drive-ops",
 		"env":                 "test",
 		"db_identifier":       "drive-ops-test-postgres",
 		"rds_master_username": "driveops_admin",
-	})
+	}, region)
 }
