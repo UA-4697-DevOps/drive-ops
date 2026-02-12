@@ -3,7 +3,17 @@ output "repository_url" {
   value       = aws_ecr_repository.service_repository.repository_url
 }
 
-output "github_actions_role_arn" {
-  description = "The ARN of the IAM role for GitHub Actions OIDC"
+output "repository_arn" {
+  description = "The ARN of the ECR repository"
+  value       = aws_ecr_repository.service_repository.arn
+}
+
+output "role_arn" {
+  description = "The ARN of the GitHub Actions IAM role"
   value       = aws_iam_role.github_actions.arn
+}
+
+output "role_name" {
+  description = "The name of the GitHub Actions IAM role (for attaching additional policies)"
+  value       = aws_iam_role.github_actions.name
 }
