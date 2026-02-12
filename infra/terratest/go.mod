@@ -4,6 +4,7 @@ go 1.25.6
 
 require (
 	github.com/gruntwork-io/terratest v0.55.0
+	github.com/hashicorp/terraform-json v0.23.0
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -19,7 +20,6 @@ require (
 	github.com/hashicorp/go-safetemp v1.0.0 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.22.0 // indirect
-	github.com/hashicorp/terraform-json v0.23.0 // indirect
 	github.com/jinzhu/copier v0.0.0-20190924061706-b57f9002281a // indirect
 	github.com/klauspost/compress v1.16.5 // indirect
 	github.com/kr/pretty v0.3.0 // indirect

@@ -1,0 +1,8 @@
+# Dependencies for smoke tests
+
+# HTTP client with retry support
+requests>=2.31.0
+urllib3>=2.0.0
+
+# PostgreSQL adapter (for RDS connectivity tests)
+psycopg2-binary>=2.9.9
