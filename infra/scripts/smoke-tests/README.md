@@ -43,7 +43,7 @@ Verifies availability of all services through their health endpoints.
 **What it checks:**
 - Trip Service: `GET /health` → HTTP 200 + `{"status":"ok"}`
 - Driver Service: `GET /health` → HTTP 200 + `{"status":"ok"}`
-- Client Gateway: `GET /` → HTTP 200 + `{"status":"ok"}`
+- Client Gateway: `GET /health` → HTTP 200 + `{"status":"ok"}`
 
 **Environment Variables:**
 - `SMOKE_TRIP_SERVICE_URL` - Trip Service URL (required)
@@ -169,4 +169,6 @@ Smoke tests can be run after deployment via GitHub Actions:
 ## Additional Information
 
 For detailed information on common failures and their fixes, see:
-- [Failure Modes Guide](../../docs/FAILURE_MODES.md) — diagnostics for IAM, SG, SQS, RDS, VPC failures
+- [Smoke Tests Plan](../../../documentation/smoke-tests-plan.md) (Ukrainian)
+- [Failure Modes Guide](./FAILURE_MODES.md) — diagnostics for IAM, SG, SQS, RDS, VPC failures
+- [Smoke Test Failure Modes (documentation)](../../../documentation/architecture/smoke-test-failure-modes.md)

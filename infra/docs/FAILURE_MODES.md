@@ -58,7 +58,7 @@ Required permissions per service:
 
 ### Symptom
 
-Service cannot connect to RDS — connection timeout (not refused, but timeout).
+Service cannot connect to RDS — connection timeout (not refuse, but timeout).
 
 ### Root Cause
 
