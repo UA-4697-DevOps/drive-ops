@@ -13,6 +13,15 @@ on:
     paths:
       - 'client-gateway/**'
       - '.github/workflows/client-gateway-ci.yml'
+  workflow_dispatch:
+    
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true      
+ 
+env:
+  AWS_REGION: us-east-2
 
 jobs:
   test:
@@ -65,22 +74,35 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3.12.0
 
-      - name: Login to GitHub Container Registry
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@v3
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and Push Docker Image
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/client-gateway-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Build and Push to Amazon ECR
         uses: docker/build-push-action@v6
         with:
           context: ./client-gateway
-          file: ./client-gateway/Dockerfile
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: |
-            ghcr.io/${{ steps.meta.outputs.image_name }}:latest
-            ghcr.io/${{ steps.meta.outputs.image_name }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/client-gateway:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Generate Build Metadata
+        run: |
+          # Note: Using the registry output ensures reliability
+          echo "IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/client-gateway:${{ github.sha }}" > build-metadata.txt
+          echo "COMMIT_SHA: ${{ github.sha }}" >> build-metadata.txt
+          echo "BUILD_TIME: $(date -u)" >> build-metadata.txt
+
+      - name: Upload Metadata Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-gateway-metadata
+          path: build-metadata.txt
