@@ -1,0 +1,62 @@
+---
+# Ansible role: deploy-trip-service
+# Deploys a specific TripService image from ECR to the EC2 host
+#
+# Required variables:
+#   - ecr_registry:  ECR registry URL (e.g., 969283154407.dkr.ecr.us-east-2.amazonaws.com)
+#   - image_tag:     Image tag to deploy (commit SHA)
+#   - aws_region:    AWS region (e.g., us-east-2)
+
+- name: Authenticate Docker to ECR
+  ansible.builtin.shell: |
+    aws ecr get-login-password --region {{ aws_region }} | \
+    docker login --username AWS --password-stdin {{ ecr_registry }}
+  changed_when: true
+  tags: [deploy, trip]
+
+- name: Pull TripService image from ECR
+  community.docker.docker_image:
+    name: "{{ ecr_registry }}/trip-service"
+    tag: "{{ image_tag }}"
+    source: pull
+    force_source: true
+  tags: [deploy, trip]
+
+- name: Stop existing TripService container
+  community.docker.docker_compose_v2:
+    project_src: "/opt/drive-ops"
+    state: absent
+    services:
+      - "trip-service"
+  tags: [deploy, trip]
+
+- name: Start TripService with new image
+  community.docker.docker_compose_v2:
+    project_src: "/opt/drive-ops"
+    state: present
+    services:
+      - "trip-service"
+    env_file: "/opt/drive-ops/.env"
+  environment:
+    TRIP_SERVICE_IMAGE: "{{ ecr_registry }}/trip-service:{{ image_tag }}"
+  tags: [deploy, trip]
+
+- name: Wait for TripService to become healthy
+  ansible.builtin.uri:
+    url: "http://localhost:8081/health"
+    method: GET
+    return_content: true
+    status_code: 200
+  register: health_result
+  retries: 10
+  delay: 5
+  until: health_result.status == 200
+  tags: [deploy, trip]
+
+- name: Verify health response
+  ansible.builtin.assert:
+    that:
+      - "'ok' in health_result.content"
+    fail_msg: "TripService health check returned unexpected response: {{ health_result.content }}"
+    success_msg: "TripService is healthy: {{ health_result.content }}"
+  tags: [deploy, trip]
