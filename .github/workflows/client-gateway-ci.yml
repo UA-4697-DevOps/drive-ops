@@ -23,6 +23,7 @@ env:
   SHOULD_PUSH_IMAGE: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
 
 permissions:
+  id-token: write
   contents: read
 
 jobs:
