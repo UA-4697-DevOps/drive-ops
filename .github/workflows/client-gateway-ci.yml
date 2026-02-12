@@ -78,7 +78,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Configure AWS Credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v5
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/client-gateway-github-actions-role
           aws-region: ${{ env.AWS_REGION }}
@@ -130,13 +130,11 @@ jobs:
             --arg uri "$URI" \
             --arg tag "$TAG" \
             --arg digest "$DIGEST" \
-            --arg commit "${{ github.sha }}" \
-            --arg ref "${{ github.ref }}" \
-            '{uri: $uri, tag: $tag, digest: $digest, commit: $commit, ref: $ref}' > build-artifacts/metadata.json
+            '{uri: $uri, tag: $tag, digest: $digest}' > build-artifacts/metadata.json
 
       - name: Upload build metadata
         if: ${{ env.SHOULD_PUSH_IMAGE == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: client-gateway-metadata
           path: build-artifacts/

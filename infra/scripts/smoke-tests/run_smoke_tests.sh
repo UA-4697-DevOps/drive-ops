@@ -24,7 +24,7 @@ if [ -f "$PROJECT_ROOT/.venv/bin/activate" ]; then
 fi
 
 # Check if required smoke test variables are set
-REQUIRED_VARS=("SMOKE_TRIP_SERVICE_URL" "SMOKE_DRIVER_SERVICE_URL" "SMOKE_CLIENT_GATEWAY_URL" "BOT_TOKEN")
+REQUIRED_VARS=("SMOKE_TRIP_SERVICE_URL" "SMOKE_DRIVER_SERVICE_URL" "SMOKE_CLIENT_GATEWAY_URL")
 
 missing_vars=()
 for var in "${REQUIRED_VARS[@]}"; do
@@ -43,7 +43,6 @@ if [ ${#missing_vars[@]} -ne 0 ]; then
     echo "  export SMOKE_TRIP_SERVICE_URL=http://your-trip-service:8081"
     echo "  export SMOKE_DRIVER_SERVICE_URL=http://your-driver-service:8082"
     echo "  export SMOKE_CLIENT_GATEWAY_URL=http://your-client-gateway:8080"
-    echo "  export BOT_TOKEN=your_telegram_bot_token"
     exit 1
 fi
 

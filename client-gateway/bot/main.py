@@ -1204,7 +1204,8 @@ async def health_check():
     }
 
 # Global reference to uvicorn.Server for shutdown handling
-uvicorn_server = None
+# Initialized to None to prevent race conditions during initialization
+uvicorn_server: "uvicorn.Server | None" = None
 
 async def run_fastapi():
     """Run FastAPI server for health checks."""
@@ -1218,10 +1219,22 @@ async def run_fastapi():
     )
     uvicorn_server = uvicorn.Server(config)
     logger.info("Starting FastAPI health server on port %d", HEALTH_CHECK_PORT, extra={'correlationId': 'STARTUP'})
-    await uvicorn_server.serve()
+    try:
+        await uvicorn_server.serve()
+    except asyncio.CancelledError:
+        logger.info("FastAPI server received cancellation signal", extra={'correlationId': 'SHUTDOWN'})
+        # Ensure graceful shutdown is signaled to uvicorn
+        if uvicorn_server:
+            uvicorn_server.should_exit = True
+        raise
 
-async def run_telegram_bot():
-    """Run Telegram bot with polling and graceful shutdown handling."""
+async def run_telegram_bot(shutdown_event: asyncio.Event):
+    """
+    Run Telegram bot with polling and graceful shutdown handling.
+    
+    Args:
+        shutdown_event: Asyncio event signaled by main_async() on shutdown signal
+    """
     ensure_bot_token()
     # Suppress PTBUserWarning about mixing CallbackQueryHandler entry points
     warnings.filterwarnings(
@@ -1240,28 +1253,6 @@ async def run_telegram_bot():
     logger.info("Telegram bot starting...", extra={'correlationId': 'STARTUP'})
     logger.info("Modules loaded: passenger, driver", extra={'correlationId': 'STARTUP'})
     
-    # Create shutdown event for signal handling
-    shutdown_event = asyncio.Event()
-    
-    # Signal handler - synchronous function
-    def signal_handler(sig):
-        """Handle SIGINT/SIGTERM signals for graceful shutdown."""
-        signal_name = signal.Signals(sig).name
-        logger.info("Received %s, initiating graceful shutdown...", signal_name, extra={'correlationId': 'SHUTDOWN'})
-        shutdown_event.set()
-        # Signal uvicorn server to exit
-        if uvicorn_server:
-            uvicorn_server.should_exit = True
-    
-    # Register signal handlers with platform compatibility
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
-            loop.add_signal_handler(sig, signal_handler, sig)
-        except NotImplementedError:
-            # Windows doesn't support signal.signal for SIGTERM in asyncio
-            logger.warning("Signal %s not supported on this platform", signal.Signals(sig).name, extra={'correlationId': 'STARTUP'})
-    
     # Initialize the application with proper error handling and cleanup
     try:
         logger.info("Initializing Telegram bot application...", extra={'correlationId': 'STARTUP'})
@@ -1275,7 +1266,6 @@ async def run_telegram_bot():
         await shutdown_event.wait()
     except Exception as e:
         logger.error("Error during bot startup or execution: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
-        shutdown_event.set()
     finally:
         # Perform graceful shutdown - always cleanup even on errors
         logger.info("Stopping bot updater...", extra={'correlationId': 'SHUTDOWN'})
@@ -1310,13 +1300,36 @@ async def run_telegram_bot():
 async def main_async():
     """
     Async main that runs both FastAPI health server and Telegram bot concurrently.
-    Properly handles shutdown by triggering graceful shutdown before canceling tasks.
+    Registers signal handlers to ensure both services shut down gracefully.
+    Coordinates shutdown to signal uvicorn before task cancellation.
     """
+    # Create shutdown event for signal handling
+    shutdown_event = asyncio.Event()
+    
+    # Signal handler - synchronous function
+    def signal_handler(sig):
+        """Handle SIGINT/SIGTERM signals for graceful shutdown."""
+        signal_name = signal.Signals(sig).name
+        logger.info("Received %s, initiating graceful shutdown...", signal_name, extra={'correlationId': 'SHUTDOWN'})
+        shutdown_event.set()
+        # Signal uvicorn server to exit gracefully (handles race condition)
+        if uvicorn_server is not None:
+            uvicorn_server.should_exit = True
+    
+    # Register signal handlers with platform compatibility
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, signal_handler, sig)
+        except NotImplementedError:
+            # Windows doesn't support signal.signal for SIGTERM in asyncio
+            logger.warning("Signal %s not supported on this platform", signal.Signals(sig).name, extra={'correlationId': 'STARTUP'})
+    
     # Create tasks for both services
     fastapi_task = asyncio.create_task(run_fastapi())
-    telegram_task = asyncio.create_task(run_telegram_bot())
+    telegram_task = asyncio.create_task(run_telegram_bot(shutdown_event))
     
-    # Wait for either task to complete (bot shutdown)
+    # Wait for either task to complete (bot shutdown or FastAPI crash)
     done, pending = await asyncio.wait(
         [fastapi_task, telegram_task],
         return_when=asyncio.FIRST_COMPLETED
@@ -1325,13 +1338,22 @@ async def main_async():
     # Before canceling, allow graceful shutdown to complete
     logger.info("First service completed, initiating graceful shutdown...", extra={'correlationId': 'SHUTDOWN'})
     
-    # Cancel the remaining task(s)
+    # Signal graceful shutdown to both services
+    shutdown_event.set()
+    
+    # Set uvicorn shutdown flag to ensure graceful HTTP server shutdown
+    if uvicorn_server is not None:
+        uvicorn_server.should_exit = True
+    
+    # Cancel the remaining task(s) with graceful handling
     for task in pending:
         task.cancel()
         try:
             await task
         except asyncio.CancelledError:
             logger.info("Task cancelled during shutdown", extra={'correlationId': 'SHUTDOWN'})
+        except Exception as e:
+            logger.warning("Exception during task cancellation: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
     
     logger.info("All services have shut down", extra={'correlationId': 'SHUTDOWN'})
 
