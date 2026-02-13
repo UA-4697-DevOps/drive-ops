@@ -88,11 +88,31 @@ jobs:
           if [ -n "${IMAGE_TAG_INPUT}" ]; then
             TAG="${IMAGE_TAG_INPUT}"
           else
-            # Fetch the latest image tag pushed to ECR
-            TAG=$(aws ecr describe-images \
+            # Fetch the latest image tag pushed to ECR, preferring deterministic sha-* tags
+            LATEST_IMAGE=$(aws ecr describe-images \
               --repository-name "${{ env.ECR_REPOSITORY }}" \
-              --query 'sort_by(imageDetails,& imagePushedAt)[-1].imageTags[0]' \
-              --output text)
+              --query 'sort_by(imageDetails,& imagePushedAt)[-1]' \
+              --output json)
+            
+            # Try to find a sha-* tag (most deterministic)
+            TAG=$(echo "$LATEST_IMAGE" | jq -r '.imageTags[] | select(. | startswith("sha-")) | .' | head -1)
+            
+            # If no sha-* tag found, use imageDigest as fallback
+            if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+              IMAGE_DIGEST=$(echo "$LATEST_IMAGE" | jq -r '.imageDigest // empty')
+              if [ -z "$IMAGE_DIGEST" ]; then
+                # Last resort: use first available tag from imageTags
+                TAG=$(echo "$LATEST_IMAGE" | jq -r '.imageTags[0] // empty')
+              else
+                # Use digest-based lookup to get a proper tag reference
+                TAG=$(aws ecr batch-get-image \
+                  --repository-name "${{ env.ECR_REPOSITORY }}" \
+                  --image-ids imageDigest="$IMAGE_DIGEST" \
+                  --query 'images[0].imageId.imageTag // images[0].imageId.imageDigest' \
+                  --output text)
+              fi
+            fi
+            
             if [ -z "$TAG" ] || [ "$TAG" = "None" ]; then
               echo "::error::No images found in ECR repository ${{ env.ECR_REPOSITORY }}"
               exit 1
@@ -514,12 +534,14 @@ jobs:
             echo "$STDOUT" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
           else
+            # SQS reachability is a gate for deployment validation
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             echo "Status: $STATUS" >> "$GITHUB_STEP_SUMMARY"
             [ -n "$STDOUT" ] && echo "$STDOUT" >> "$GITHUB_STEP_SUMMARY"
             [ -n "$STDERR" ] && echo "$STDERR" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             echo "::warning::SQS connectivity check failed on EC2 instance"
+            exit 1
           fi
 
   # -------------------------------------------------------
