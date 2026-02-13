@@ -20,14 +20,14 @@ import (
 func TestTripServiceDependencies(t *testing.T) {
 	t.Parallel()
 
-	// FIX: Define region as a variable to ensure consistency across the setup
+	// Use us-east-2 as the target region for Trip Service infrastructure
 	region := "us-east-2"
-	
+
 	// 1. Setup the test module in a temp directory with a mock provider.
 	modulePath := SetupTestModule(t, "shared-infra", region)
 
-	// 2. Create Terraform options. 
-	// FIX: We now pass 'region' as the 4th argument to sync EnvVars with the Provider.
+	// 2. Create Terraform options.
+	// All variables required by the consolidated shared-infra module are provided here.
 	terraformOptions := CreateTerraformOptions(t, modulePath, map[string]interface{}{
 		"project_name":                       "drive-ops",
 		"env":                                "test",
@@ -43,10 +43,19 @@ func TestTripServiceDependencies(t *testing.T) {
 		"trip_created_visibility_timeout":    60,
 		"driver_assigned_visibility_timeout": 60,
 		"trip_completed_visibility_timeout":  60,
+
+		// Variables added for refactor compatibility (ECR, RDS Secrets)
+		"github_repo":         "UA-4697-DevOps/drive-ops",
+		"db_identifier":       "drive-ops-test-db",
+		"rds_master_username": "test_admin",
+
 		"common_tags": map[string]string{
 			"Test": "true",
 		},
 	}, region)
+
+	// Note: Mock AWS credentials and skip-validation flags are now handled 
+	// automatically by CreateTerraformOptions in test_helper.go.
 
 	planStruct := terraform.InitAndPlanAndShowWithStruct(t, terraformOptions)
 
@@ -66,13 +75,11 @@ func TestTripServiceDependencies(t *testing.T) {
 			assert.NotNil(t, dlq, fmt.Sprintf("%s DLQ must be defined", queueModule))
 
 			if mainQueue != nil {
-				// Access known values map
 				props := mainQueue.Change.After.(map[string]interface{})
 				assert.Equal(t, true, props["fifo_queue"], "Queue must be FIFO")
 
-				// Robust check for Redrive Policy (handles "known after apply")
+				// Robust check for Redrive Policy (handles "known after apply" scenario)
 				policyVal, isKnown := props["redrive_policy"]
-				
 				unknowns := mainQueue.Change.AfterUnknown.(map[string]interface{})
 				_, isComputed := unknowns["redrive_policy"]
 
@@ -89,7 +96,7 @@ func TestTripServiceDependencies(t *testing.T) {
 	}
 
 	// -----------------------------------------------------------------------
-	// 2. Validate Security Group Wiring (App -> DB)
+	// 2. Validate Security Group Wiring (App -> DB Isolation)
 	// -----------------------------------------------------------------------
 	t.Run("SecurityGroup_Isolation", func(t *testing.T) {
 		appSg := findResourceChange(t, planStruct, "aws_security_group", "app", "vpc")
@@ -100,7 +107,7 @@ func TestTripServiceDependencies(t *testing.T) {
 
 		if dbIngress != nil {
 			props := dbIngress.Change.After.(map[string]interface{})
-			
+
 			assert.Equal(t, "tcp", props["protocol"], "Ingress must be TCP")
 			assert.Equal(t, float64(5432), props["from_port"], "Ingress must be port 5432")
 			assert.Equal(t, float64(5432), props["to_port"], "Ingress to_port must be 5432")

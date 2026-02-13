@@ -86,7 +86,8 @@ func SetupTestModule(t *testing.T, targetModuleName string, region string) strin
 }
 
 // CreateTerraformOptions creates Terraform options with the given variables and region.
-// Passing the region explicitly ensures that EnvVars match the Provider configuration.
+// It automatically adds environment variables to force offline/mock mode for AWS,
+// matching the configuration used in CI/CD.
 func CreateTerraformOptions(t *testing.T, modulePath string, vars map[string]interface{}, region string) *terraform.Options {
 	t.Helper()
 
@@ -97,10 +98,19 @@ func CreateTerraformOptions(t *testing.T, modulePath string, vars map[string]int
 		Vars:         vars,
 		NoColor:      true,
 		PlanFilePath: planFilePath,
-		// FIX: Use the provided region for environment variables to prevent region drift
+		
+		// Centralized environment variables for offline testing.
+		// These prevent Terraform from attempting to contact real AWS STS/Metadata APIs.
 		EnvVars: map[string]string{
-			"AWS_DEFAULT_REGION": region,
-			"AWS_REGION":         region,
+			"AWS_DEFAULT_REGION":              region,
+			"AWS_REGION":                      region,
+			"AWS_ACCESS_KEY_ID":               "testing",
+			"AWS_SECRET_ACCESS_KEY":           "testing",
+			"AWS_SKIP_CREDENTIALS_VALIDATION": "true",
+			"AWS_SKIP_REQUESTING_ACCOUNT_ID":  "true",
+			"AWS_SKIP_METADATA_API_CHECK":     "true",
+			"AWS_SKIP_REGION_CHECK":           "true",
+			"AWS_EC2_METADATA_DISABLED":       "true",
 		},
 	}
 }
