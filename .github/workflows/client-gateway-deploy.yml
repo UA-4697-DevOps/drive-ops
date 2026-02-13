@@ -79,12 +79,14 @@ jobs:
 
       - name: Resolve image tag
         id: resolve
+        env:
+          IMAGE_TAG_INPUT: ${{ github.event.inputs.image_tag }}
         run: |
           REGISTRY="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
           REPO="${REGISTRY}/${{ env.ECR_REPOSITORY }}"
 
-          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
-            TAG="${{ github.event.inputs.image_tag }}"
+          if [ -n "${IMAGE_TAG_INPUT}" ]; then
+            TAG="${IMAGE_TAG_INPUT}"
           else
             # Fetch the latest image tag pushed to ECR
             TAG=$(aws ecr describe-images \
@@ -141,20 +143,34 @@ jobs:
             --query 'Command.CommandId' \
             --output text)
 
+          # Wait for command to complete
           aws ssm wait command-executed \
             --command-id "$CMD_ID" \
             --instance-id "${{ steps.instance.outputs.instance_id }}" \
-            2>/dev/null || true
+            || echo "::warning::SSM wait timed out for previous image capture"
 
-          PREV=$(aws ssm get-command-invocation \
+          # Check invocation status explicitly
+          INVOCATION=$(aws ssm get-command-invocation \
             --command-id "$CMD_ID" \
-            --instance-id "${{ steps.instance.outputs.instance_id }}" \
-            --query 'StandardOutputContent' \
-            --output text | tr -d '[:space:]')
+            --instance-id "${{ steps.instance.outputs.instance_id }}")
 
-          echo "previous_image=${PREV}" >> "$GITHUB_OUTPUT"
+          STATUS=$(echo "$INVOCATION" | jq -r '.Status')
+          case "$STATUS" in
+            Success)
+              PREV=$(echo "$INVOCATION" | jq -r '.StandardOutputContent' | tr -d '[:space:]')
+              echo "previous_image=${PREV}" >> "$GITHUB_OUTPUT"
+              ;;
+            InProgress|TimedOut|Failed)
+              echo "::warning::SSM command did not complete successfully (Status: $STATUS) — previous image unavailable for rollback"
+              echo "previous_image=none" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Unexpected SSM invocation status: $STATUS"
+              exit 1
+              ;;
+          esac
           echo "### 🔄 Previous image" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`${PREV}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Status: ${STATUS}" >> "$GITHUB_STEP_SUMMARY"
 
   # -------------------------------------------------------
   # 2. Deploy — SSM-run Compose update
@@ -256,24 +272,26 @@ jobs:
           exit 1
           DEPLOY_EOF
 
-          # Substitute placeholders
+          # Single-pass template substitution using sed to avoid
+          # double-substitution and secret corruption risks
           ECR_REGISTRY="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
-          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__APP_DIR__/${{ env.APP_DIR }}}"
-          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__IMAGE__/${IMAGE}}"
-          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__SERVICE__/${{ env.COMPOSE_SERVICE }}}"
-          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__TRIP_URL__/${TRIP_URL}}"
-          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__DRIVER_URL__/${DRIVER_URL}}"
-          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__BOT_TOKEN__/${BOT_TOKEN}}"
-          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__AWS_REGION__/${{ env.AWS_REGION }}}"
-          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__ECR_REGISTRY__/${ECR_REGISTRY}}"
-          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__CONTAINER__/${{ env.CONTAINER_NAME }}}"
+          DEPLOY_SCRIPT_TMPL=$(echo "$DEPLOY_SCRIPT" | sed \
+            -e "s|__APP_DIR__|${{ env.APP_DIR }}|g" \
+            -e "s|__IMAGE__|${IMAGE}|g" \
+            -e "s|__SERVICE__|${{ env.COMPOSE_SERVICE }}|g" \
+            -e "s|__TRIP_URL__|${TRIP_URL}|g" \
+            -e "s|__DRIVER_URL__|${DRIVER_URL}|g" \
+            -e "s|__BOT_TOKEN__|${BOT_TOKEN}|g" \
+            -e "s|__AWS_REGION__|${{ env.AWS_REGION }}|g" \
+            -e "s|__ECR_REGISTRY__|${ECR_REGISTRY}|g" \
+            -e "s|__CONTAINER__|${{ env.CONTAINER_NAME }}|g")
 
           # Execute via SSM
           CMD_ID=$(aws ssm send-command \
             --instance-ids "${INSTANCE_ID}" \
             --document-name "AWS-RunShellScript" \
             --timeout-seconds 300 \
-            --parameters commands=["$(echo "$DEPLOY_SCRIPT" | base64 -w0 | xargs -I{} echo 'echo {} | base64 -d | bash')"] \
+            --parameters commands=["$(echo "$DEPLOY_SCRIPT_TMPL" | base64 -w0 | xargs -I{} echo 'echo {} | base64 -d | bash')"] \
             --query 'Command.CommandId' \
             --output text)
 
@@ -407,26 +425,33 @@ jobs:
         run: |
           # Client-gateway itself does not use SQS, but downstream
           # services (driver-service, trip-service) rely on these queues
-          # for the driver-command flow.  Verify IAM/network access to
-          # confirm the broader system is operational after deploy.
+          # for the driver-command flow.  This check runs on the actual
+          # deployed EC2 instance to verify the runtime IAM principal
+          # and network can access SQS, confirming the driver-command
+          # flow infrastructure is operational after deploy.
+
+          INSTANCE_ID="${{ needs.prepare.outputs.instance_id }}"
+
+          read -r -d '' SQS_SCRIPT << 'EOF' || true
+          set -euo pipefail
 
           QUEUES=(
-            "trip-created-${{ env.DEPLOY_ENV }}.fifo"
-            "driver-assigned-${{ env.DEPLOY_ENV }}.fifo"
-            "trip-completed-${{ env.DEPLOY_ENV }}.fifo"
+            "trip-created-__DEPLOY_ENV__.fifo"
+            "driver-assigned-__DEPLOY_ENV__.fifo"
+            "trip-completed-__DEPLOY_ENV__.fifo"
           )
 
-          echo "### SQS Queue Connectivity" >> "$GITHUB_STEP_SUMMARY"
-
+          echo "Checking SQS queue connectivity from EC2 instance..."
           FAILED=0
+
           for QUEUE_NAME in "${QUEUES[@]}"; do
             QUEUE_URL=$(aws sqs get-queue-url \
               --queue-name "$QUEUE_NAME" \
+              --region __AWS_REGION__ \
               --query 'QueueUrl' --output text 2>/dev/null) || true
 
             if [ -z "$QUEUE_URL" ] || [ "$QUEUE_URL" = "None" ]; then
-              echo "::warning::Queue not found: ${QUEUE_NAME}"
-              echo "- ⚠️ \`${QUEUE_NAME}\` — not found" >> "$GITHUB_STEP_SUMMARY"
+              echo "[⚠️] $QUEUE_NAME — not found"
               FAILED=1
               continue
             fi
@@ -434,21 +459,67 @@ jobs:
             # Lightweight attribute fetch to confirm IAM permissions
             ATTRS=$(aws sqs get-queue-attributes \
               --queue-url "$QUEUE_URL" \
+              --region __AWS_REGION__ \
               --attribute-names ApproximateNumberOfMessages \
               --query 'Attributes.ApproximateNumberOfMessages' \
               --output text 2>/dev/null) || true
 
             if [ -n "$ATTRS" ] && [ "$ATTRS" != "None" ]; then
-              echo "- ✅ \`${QUEUE_NAME}\` — accessible (msgs: ${ATTRS})" >> "$GITHUB_STEP_SUMMARY"
+              echo "[✅] $QUEUE_NAME — accessible (msgs: $ATTRS)"
             else
-              echo "::warning::Cannot read attributes for queue: ${QUEUE_NAME}"
-              echo "- ⚠️ \`${QUEUE_NAME}\` — access denied or error" >> "$GITHUB_STEP_SUMMARY"
+              echo "[⚠️] $QUEUE_NAME — cannot read attributes (access denied or error)"
               FAILED=1
             fi
           done
 
-          if [ "$FAILED" -ne 0 ]; then
-            echo "::warning::One or more SQS queues are not accessible. Driver-command flow may be impacted."
+          if [ "$FAILED" -eq 0 ]; then
+            echo "All SQS queues accessible from EC2 instance"
+            exit 0
+          else
+            echo "One or more SQS queues are not accessible from EC2 instance"
+            exit 1
+          fi
+          EOF
+
+          SQS_SCRIPT=$(echo "$SQS_SCRIPT" | sed "s|__DEPLOY_ENV__|${{ env.DEPLOY_ENV }}|g; s|__AWS_REGION__|${{ env.AWS_REGION }}|g")
+
+          echo "Running SQS connectivity check on EC2 instance..."
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "${INSTANCE_ID}" \
+            --document-name "AWS-RunShellScript" \
+            --timeout-seconds 120 \
+            --parameters commands=["$(echo "$SQS_SCRIPT" | base64 -w0 | xargs -I{} echo 'echo {} | base64 -d | bash')"] \
+            --query 'Command.CommandId' \
+            --output text)
+
+          aws ssm wait command-executed \
+            --command-id "$CMD_ID" \
+            --instance-id "${INSTANCE_ID}" \
+            || echo "::warning::SSM SQS check timed out"
+
+          RESULT=$(aws ssm get-command-invocation \
+            --command-id "$CMD_ID" \
+            --instance-id "${INSTANCE_ID}")
+
+          STATUS=$(echo "$RESULT" | jq -r '.Status')
+          STDOUT=$(echo "$RESULT" | jq -r '.StandardOutputContent')
+          STDERR=$(echo "$RESULT" | jq -r '.StandardErrorContent')
+
+          echo "$STDOUT"
+          [ -n "$STDERR" ] && echo "$STDERR"
+
+          echo "### SQS Queue Connectivity (EC2 Runtime)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$STATUS" = "Success" ]; then
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$STDOUT" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "Status: $STATUS" >> "$GITHUB_STEP_SUMMARY"
+            [ -n "$STDOUT" ] && echo "$STDOUT" >> "$GITHUB_STEP_SUMMARY"
+            [ -n "$STDERR" ] && echo "$STDERR" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::SQS connectivity check failed on EC2 instance"
           fi
 
   # -------------------------------------------------------
