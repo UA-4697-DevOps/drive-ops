@@ -145,16 +145,21 @@ jobs:
           done
         working-directory: infra/terragrunt
         env:
-          # Use dummy credentials for offline validation
-          AWS_ACCESS_KEY_ID: dummy
-          AWS_SECRET_ACCESS_KEY: dummy
-          AWS_DEFAULT_REGION: us-east-2
+          # Use "testing" instead of "dummy" - some SDKs prefer this
+          AWS_ACCESS_KEY_ID: "testing"
+          AWS_SECRET_ACCESS_KEY: "testing"
+          AWS_SECURITY_TOKEN: "testing"
+          AWS_SESSION_TOKEN: "testing"
+          AWS_DEFAULT_REGION: "us-east-2"
+          AWS_REGION: "us-east-2"
           
-          # --- Fix for STS:GetCallerIdentity 403 Errors ---
-          # These variables tell the AWS Provider to skip real credential validation
+          # --- The "Master Switch" for Offline Validation ---
+          # These MUST be strings (in quotes) to ensure they are passed correctly
           AWS_SKIP_CREDENTIALS_VALIDATION: "true"
+          AWS_SKIP_REQUESTING_ACCOUNT_ID: "true" # This stops the GetCallerIdentity call
           AWS_SKIP_REGION_CHECK: "true"
           AWS_SKIP_METADATA_API_CHECK: "true"
+          AWS_EC2_METADATA_DISABLED: "true"
           
-          # Prevents Terragrunt from trying to call AWS STS during the validation phase
+          # Terragrunt-specific bypass
           TG_SKIP_AWS_VALIDATION: "true"
