@@ -28,3 +28,9 @@ variable "rds_master_username" {
     error_message = "rds_master_username must be 1-16 characters, start with a letter, contain only alphanumeric characters and underscores, and not be a reserved word."
   }
 }
+
+variable "discord_webhook_url" {
+  type        = string
+  description = "The Discord webhook URL for notifications"
+  sensitive   = true # Ensures the value is hidden in CLI output
+}

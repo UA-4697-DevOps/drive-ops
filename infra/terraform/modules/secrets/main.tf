@@ -23,3 +23,14 @@ resource "aws_secretsmanager_secret_version" "rds_credentials" {
     engine   = "postgres"
   })
 }
+
+resource "aws_secretsmanager_secret" "discord_webhook" {
+  name        = "${var.project_name}/${var.env}/discord/webhook"
+  description = "Discord Webhook for ${var.project_name} alerts"
+  tags        = var.tags
+}
+
+resource "aws_secretsmanager_secret_version" "discord_webhook" {
+  secret_id     = aws_secretsmanager_secret.discord_webhook.id
+  secret_string = var.discord_webhook_url
+}
