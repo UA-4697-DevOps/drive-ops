@@ -19,6 +19,7 @@ dependency "shared_infra" {
 
 inputs = {
   name      = "drive-ops-dev-trip-service"
+  ami       = "ami-0f9c27b471bdcd702"
   vpc_id    = dependency.shared_infra.outputs.vpc_id
   subnet_id = dependency.shared_infra.outputs.public_subnet_ids[0]
 
