@@ -64,7 +64,7 @@ jobs:
     name: Infrastructure Tests
     runs-on: ubuntu-latest
     env:
-      GO_VERSION: '1.25.5'
+      GO_VERSION: '1.25.6'
       TERRAFORM_VERSION: '1.10.0'
       TERRAGRUNT_VERSION: '0.68.0'
 
