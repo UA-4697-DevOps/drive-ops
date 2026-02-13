@@ -147,7 +147,7 @@ jobs:
             if [ -d "$dir" ]; then
               echo "Validating directory: $dir..."
               cd "$dir"
-              terragrunt validate --terragrunt-non-interactive
+              terragrunt validate
               cd - > /dev/null
             else
               echo "Error: Directory $dir not found! Please check your folder structure."
