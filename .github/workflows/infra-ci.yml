@@ -102,6 +102,11 @@ jobs:
     name: Terragrunt Validate
     runs-on: ubuntu-latest
     needs: terraform-fmt
+    
+    # --- NEW: Permissions required for OIDC authentication ---
+    permissions:
+      id-token: write # This is required for requesting the JWT
+      contents: read  # This is required for actions/checkout
 
     steps:
       - uses: actions/checkout@v6
@@ -110,6 +115,14 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      # --- NEW: Authenticate to AWS using OIDC ---
+      # This provides real credentials so the AWS Provider stops complaining about InvalidClientTokenId
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/trip-service-github-actions-role
+          aws-region: us-east-2
 
       - name: Setup Terragrunt
         run: |
@@ -134,32 +147,11 @@ jobs:
             if [ -d "$dir" ]; then
               echo "Validating directory: $dir..."
               cd "$dir"
-              # Initialize with -backend=false to skip S3 backend initialization (no AWS creds needed)
               terragrunt validate --terragrunt-non-interactive --terragrunt-init-flag="-backend=false"
               cd - > /dev/null
             else
               echo "Error: Directory $dir not found! Please check your folder structure."
-              # Terminate the workflow if a required module directory is missing
               exit 1
             fi
           done
         working-directory: infra/terragrunt
-        env:
-          # Use "testing" instead of "dummy" - some SDKs prefer this
-          AWS_ACCESS_KEY_ID: "testing"
-          AWS_SECRET_ACCESS_KEY: "testing"
-          AWS_SECURITY_TOKEN: "testing"
-          AWS_SESSION_TOKEN: "testing"
-          AWS_DEFAULT_REGION: "us-east-2"
-          AWS_REGION: "us-east-2"
-          
-          # --- The "Master Switch" for Offline Validation ---
-          # These MUST be strings (in quotes) to ensure they are passed correctly
-          AWS_SKIP_CREDENTIALS_VALIDATION: "true"
-          AWS_SKIP_REQUESTING_ACCOUNT_ID: "true" # This stops the GetCallerIdentity call
-          AWS_SKIP_REGION_CHECK: "true"
-          AWS_SKIP_METADATA_API_CHECK: "true"
-          AWS_EC2_METADATA_DISABLED: "true"
-          
-          # Terragrunt-specific bypass
-          TG_SKIP_AWS_VALIDATION: "true"
