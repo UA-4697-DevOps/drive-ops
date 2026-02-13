@@ -73,3 +73,47 @@ module "trip_completed" {
     EventType = "trip.event.completed"
   })
 }
+
+# --- ECR Repositories ---
+
+# ECR for Client Gateway (Python)
+module "ecr_client_gateway" {
+  source = "../ecr"
+
+  repository_name = "client-gateway"
+  account_id      = var.account_id
+  github_repo     = var.github_repo
+}
+
+# ECR for Driver Service (Python)
+module "ecr_driver_service" {
+  source = "../ecr"
+
+  repository_name = "driver-service"
+  account_id      = var.account_id
+  github_repo     = var.github_repo
+}
+
+# ECR for Trip Service (Go)
+module "ecr_trip_service" {
+  source = "../ecr"
+
+  repository_name = "trip-service"
+  account_id      = var.account_id
+  github_repo     = var.github_repo
+}
+
+# --- RDS Secrets ---
+
+module "rds_secrets" {
+  source = "../secrets"
+
+  project_name        = var.project_name
+  env                 = var.env
+  db_identifier       = var.db_identifier
+  rds_master_username = var.rds_master_username
+
+  tags = merge(var.common_tags, {
+    Component = "secrets-manager"
+  })
+}
