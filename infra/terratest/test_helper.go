@@ -144,23 +144,3 @@ func SQSTestOptions(t *testing.T, queueName string) *terraform.Options {
 		},
 	}, region)
 }
-
-// DriverServiceTestOptions returns Terraform options configured for Driver Service module tests.
-// It points to the dev environment driver-service configuration and uses terragrunt.
-func DriverServiceTestOptions(t *testing.T) *terraform.Options {
-	t.Helper()
-
-	// Locate the terragrunt configuration for driver-service in dev env
-	terragruntDir := GetTerragruntPath(t, "dev", "driver-service")
-
-	// Create a unique plan file path
-	planFilePath := filepath.Join(t.TempDir(), "tfplan.out")
-
-	return &terraform.Options{
-		TerraformDir:    terragruntDir,
-		TerraformBinary: "terragrunt",
-		NoColor:         true,
-		PlanFilePath:    planFilePath,
-		// Retry common errors if needed, though for Plan it's less critical than Apply
-	}
-}
