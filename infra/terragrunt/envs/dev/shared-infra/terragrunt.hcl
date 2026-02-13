@@ -5,7 +5,7 @@ include "root" {
 }
 
 terraform {
-  # Points to the network infrastructure module
+  # Points to the consolidated shared infrastructure module
   source = "../../../../terraform/modules//shared-infra"
 }
 
@@ -25,23 +25,32 @@ inputs = {
   vpc_cidr           = "10.0.0.0/16"
   availability_zones = ["us-east-2a", "us-east-2b"]
 
-  # VPC Flow Logs (Added for Task: Enable VPC Flow Logs)
+  # VPC Flow Logs
   enable_flow_logs           = true
-  flow_log_retention_in_days = 3 # Minimal retention for low cost (Dev env)
+  flow_log_retention_in_days = 3 
 
   # SQS settings
   enable_ha         = false
-  message_retention = 345600 # 4 days
+  message_retention = 345600 
   max_receive_count = 3
 
   trip_created_visibility_timeout    = 60
   driver_assigned_visibility_timeout = 60
   trip_completed_visibility_timeout  = 60
 
-  # Common tags - NO PARENTHESES ALLOWED IN SQS TAGS!
+  # --- ECR & CI/CD Configuration ---
+  # Required for GitHub Actions OIDC trust policy in the ECR module
+  github_repo = "UA-4697-DevOps/drive-ops"
+
+  # --- RDS Secrets Configuration ---
+  # These values are required for the secrets module to generate the master password
+  db_identifier       = "drive-ops-dev-db"
+  rds_master_username = "drive_admin"
+
+  # Common tags
   common_tags = {
     Module      = "shared-infra"
     Owner       = "DevOps Team"
-    Description = "Shared infrastructure for drive-ops VPC and SQS"
+    Description = "Shared infrastructure including VPC SQS ECR and Secrets"
   }
 }
