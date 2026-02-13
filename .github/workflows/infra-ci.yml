@@ -78,8 +78,8 @@ jobs:
       fail-fast: false
       matrix:
         module:
-          - vpc
-          - sqs
+          - shared-infra
+          - rds
           - state-backend
 
     steps:
@@ -123,13 +123,24 @@ jobs:
 
       - name: Terragrunt Validate All
         run: |
-          # Validate each terragrunt module (skip backend since it requires AWS creds)
-          for dir in envs/dev/vpc envs/dev/sqs-*; do
+          # --- UPDATED: Explicit list of new modules to validate ---
+          modules=(
+            "envs/dev/shared-infra"
+            "envs/dev/rds"
+            "envs/dev/state-backend"
+          )
+
+          for dir in "${modules[@]}"; do
             if [ -d "$dir" ]; then
               echo "Validating $dir..."
               cd "$dir"
+              # Initialize without backend to prevent locking/config issues in CI
               terragrunt validate --terragrunt-non-interactive --terragrunt-init-flag="-backend=false"
               cd - > /dev/null
+            else
+              echo "Warning: Directory $dir not found! Check your folder structure."
+              # Fail if a critical module is missing
+              exit 1
             fi
           done
         working-directory: infra/terragrunt
