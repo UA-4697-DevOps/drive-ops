@@ -2,6 +2,12 @@ include "root" {
   path = find_in_parent_folders("root.hcl")
 }
 
+
+local{
+  common_tags = yamldecode(file(find_in_parent_folders("common_vars.yaml")))
+  env_vars = yamldecode(file(find_in_parent_folders("env_vars.yaml)))
+}
+
 terraform {
   source = "../../../../terraform/modules//shared-infra"
 }
