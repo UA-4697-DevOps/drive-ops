@@ -80,3 +80,9 @@ go.work
 .env.production.local
 *.pem
 *.bak
+
+# === Infrastructure Secrets ===
+*.tfvars
+*.tfvars.json
+# Exclude potential sensitive terragrunt configs
+.terragrunt-cache/

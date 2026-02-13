@@ -2,13 +2,19 @@
 env: "dev"
 account_id: "969283154407"
 
-# Override AWS region for dev if needed (inherits from common_vars.yaml by default)
-# aws_region: "us-east-1"
-
 # Enable high availability in dev (set to false to save costs)
-enable_ha: false
+enable_ha: false # Good for keeping RDS costs low
+
+# Observability Settings
+# Minimal log retention to stay within Free Tier limits
+log_retention_days: 3 # Reduces storage costs in CloudWatch
+
+# Monitoring thresholds
+cpu_alarm_threshold: 80 # Trigger alarm at 80% CPU
+sqs_delay_threshold: 300 # Alarm if message is older than 5 minutes
 
 # Environment-specific tags
 env_tags:
   Environment: "dev"
   AutoShutdown: "true"
+  Project: "drive-ops" # Matches project context

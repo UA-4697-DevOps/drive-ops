@@ -6,6 +6,19 @@ owner: "devops-team"
 # AWS region (can be overridden per environment)
 aws_region: "us-east-2"
 
+# --- Monitoring & Observability ---
+# List of microservices to be monitored
+monitored_services:
+  - "trip-service"
+  - "driver-service"
+  - "client-gateway"
+
+# Canonical SQS Queue names for alarm targeting
+sqs_queues:
+  trip_created: "trip-created-dev.fifo"
+  driver_assigned: "driver-assigned-dev.fifo"
+  trip_completed: "trip-completed-dev.fifo"
+
 # Common tags applied to all resources
 common_tags:
   Project: "drive-ops"
