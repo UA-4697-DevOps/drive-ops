@@ -123,7 +123,7 @@ jobs:
 
       - name: Terragrunt Validate All
         run: |
-          # --- UPDATED: Explicit list of new modules to validate ---
+          # List of specific modules to validate following the infrastructure refactor
           modules=(
             "envs/dev/shared-infra"
             "envs/dev/rds"
@@ -132,22 +132,29 @@ jobs:
 
           for dir in "${modules[@]}"; do
             if [ -d "$dir" ]; then
-              echo "Validating $dir..."
+              echo "Validating directory: $dir..."
               cd "$dir"
-              # Initialize without backend to prevent locking/config issues in CI
+              # Initialize with -backend=false to skip S3 backend initialization (no AWS creds needed)
               terragrunt validate --terragrunt-non-interactive --terragrunt-init-flag="-backend=false"
               cd - > /dev/null
             else
-              echo "Warning: Directory $dir not found! Check your folder structure."
-              # Fail if a critical module is missing
+              echo "Error: Directory $dir not found! Please check your folder structure."
+              # Terminate the workflow if a required module directory is missing
               exit 1
             fi
           done
         working-directory: infra/terragrunt
         env:
-          # Provide dummy values for validation (no real AWS access needed)
+          # Use dummy credentials for offline validation
           AWS_ACCESS_KEY_ID: dummy
           AWS_SECRET_ACCESS_KEY: dummy
-          AWS_DEFAULT_REGION: eu-central-1
-          # Skip AWS credential validation in provider (read by root.hcl)
+          AWS_DEFAULT_REGION: us-east-2
+          
+          # --- Fix for STS:GetCallerIdentity 403 Errors ---
+          # These variables tell the AWS Provider to skip real credential validation
+          AWS_SKIP_CREDENTIALS_VALIDATION: "true"
+          AWS_SKIP_REGION_CHECK: "true"
+          AWS_SKIP_METADATA_API_CHECK: "true"
+          
+          # Prevents Terragrunt from trying to call AWS STS during the validation phase
           TG_SKIP_AWS_VALIDATION: "true"
