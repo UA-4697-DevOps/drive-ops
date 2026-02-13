@@ -40,13 +40,13 @@ inputs = {
   rds_master_secret_id = dependency.shared_infra.outputs.rds_secret_arn
 
   # Instance Configuration
-  engine_version           = "15.10" # Verified version for us-east-2
-  instance_class           = "db.t3.micro"
-  allocated_storage        = 20
-  backup_retention_period  = 1
-  multi_az                 = false
-  deletion_protection      = false
-  skip_final_snapshot      = true
+  engine_version          = "15.10" # Verified version for us-east-2
+  instance_class          = "db.t3.micro"
+  allocated_storage       = 20
+  backup_retention_period = 1
+  multi_az                = false
+  deletion_protection     = false
+  skip_final_snapshot     = true
 
   # Tags are merged with common tags from global configuration
   tags = merge(local.common_vars.common_tags, {

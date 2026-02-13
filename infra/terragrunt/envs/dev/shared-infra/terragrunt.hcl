@@ -27,11 +27,11 @@ inputs = {
 
   # VPC Flow Logs
   enable_flow_logs           = true
-  flow_log_retention_in_days = 3 
+  flow_log_retention_in_days = 3
 
   # SQS settings
   enable_ha         = false
-  message_retention = 345600 
+  message_retention = 345600
   max_receive_count = 3
 
   trip_created_visibility_timeout    = 60

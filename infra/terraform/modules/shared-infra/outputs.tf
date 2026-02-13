@@ -32,12 +32,12 @@ output "sqs_urls" {
 output "sqs_policy_arns" {
   description = "Map of IAM policy ARNs for granular service permissions"
   value = {
-    trip_created_publisher     = module.trip_created.publisher_policy_arn
-    trip_created_consumer      = module.trip_created.consumer_policy_arn
-    driver_assigned_publisher  = module.driver_assigned.publisher_policy_arn
-    driver_assigned_consumer   = module.driver_assigned.consumer_policy_arn
-    trip_completed_publisher   = module.trip_completed.publisher_policy_arn
-    trip_completed_consumer    = module.trip_completed.consumer_policy_arn
+    trip_created_publisher    = module.trip_created.publisher_policy_arn
+    trip_created_consumer     = module.trip_created.consumer_policy_arn
+    driver_assigned_publisher = module.driver_assigned.publisher_policy_arn
+    driver_assigned_consumer  = module.driver_assigned.consumer_policy_arn
+    trip_completed_publisher  = module.trip_completed.publisher_policy_arn
+    trip_completed_consumer   = module.trip_completed.consumer_policy_arn
   }
 }
 
