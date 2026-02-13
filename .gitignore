@@ -45,6 +45,9 @@ wheels/
 .vagrant/
 postgres_data/
 rabbitmq_data/
+# Added for Terratest safety
+z_terratest_mock_provider_override.tf
+tfplan.out
 
 # === Web ===
 node_modules/
