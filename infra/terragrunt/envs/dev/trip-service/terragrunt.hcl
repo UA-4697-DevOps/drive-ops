@@ -18,7 +18,7 @@ dependency "shared_infra" {
 }
 
 inputs = {
-  name      = "drive-ops-dev-client-gateway"
+  name      = "drive-ops-dev-trip-service"
   vpc_id    = dependency.shared_infra.outputs.vpc_id
   subnet_id = dependency.shared_infra.outputs.public_subnet_ids[0]
 
@@ -28,12 +28,12 @@ inputs = {
   instance_type               = "t3.micro"
   associate_public_ip_address = true
 
-  # Open client-gateway application port
-  app_port                     = 8080
+  # Open trip-service application port
+  app_port                     = 8081
   allowed_app_port_cidr_blocks = ["0.0.0.0/0"]
 
   tags = {
-    Service   = "client-gateway"
+    Service   = "trip-service"
     Component = "ec2"
   }
 }
