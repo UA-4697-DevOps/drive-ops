@@ -115,13 +115,13 @@ resource "aws_iam_policy" "deploy_policy" {
         Resource = var.rds_secret_arn
       },
       {
-        Sid    = "ECRImagePull"
+        Sid    = "ECRAuth"
         Effect = "Allow"
         Action = [
-          "ecr:BatchGetImage",
-          "ecr:GetDownloadUrlForLayer"
+          "ecr:GetAuthorizationToken",
+          "ecr:DescribeImages"
         ]
-        Resource = var.ecr_repo_arn
+        Resource = "*"
       }
     ]
   })

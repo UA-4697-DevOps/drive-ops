@@ -85,6 +85,15 @@ output "ecr_iam_role_arns" {
   }
 }
 
+output "ecr_iam_role_names" {
+  description = "IAM Role names for GitHub Actions (for policy attachment)"
+  value = {
+    client_gateway = module.ecr_client_gateway.role_name
+    driver_service = module.ecr_driver_service.role_name
+    trip_service   = module.ecr_trip_service.role_name
+  }
+}
+
 # --- Secrets ---
 output "rds_secret_arn" {
   description = "ARN of the Secrets Manager secret for RDS credentials"

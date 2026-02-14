@@ -76,10 +76,6 @@ variable "github_actions_role_name" {
   type        = string
 }
 
-variable "ecr_repo_arn" {
-  description = "ARN of the ECR repository for image pull permissions"
-  type        = string
-}
 
 # --- EC2 Instance ---
 
