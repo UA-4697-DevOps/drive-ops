@@ -10,6 +10,7 @@ dependency "shared_infra" {
   config_path = "../shared-infra"
 
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "init"]
+  mock_outputs_merge_strategy_with_state  = "shallow"
   mock_outputs = {
     vpc_id            = "vpc-00000000000000000"
     public_subnet_ids = ["subnet-00000000000000000", "subnet-11111111111111111"]
@@ -19,7 +20,7 @@ dependency "shared_infra" {
 
 inputs = {
   name      = "drive-ops-dev-trip-service"
-  ami       = "ami-0f9c27b471bdcd702"
+  ami       = "ami-050352a65e954abb1"
   vpc_id    = dependency.shared_infra.outputs.vpc_id
   subnet_id = dependency.shared_infra.outputs.public_subnet_ids[0]
 
