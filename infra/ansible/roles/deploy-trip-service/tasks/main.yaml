@@ -36,7 +36,8 @@
     state: present
     services:
       - "trip-service"
-    env_file: "/opt/drive-ops/.env"
+    env_files:
+      - ".env"
   environment:
     TRIP_SERVICE_IMAGE: "{{ ecr_registry }}/trip-service:{{ image_tag }}"
   tags: [deploy, trip]
