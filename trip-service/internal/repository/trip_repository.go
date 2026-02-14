@@ -17,6 +17,16 @@ func NewTripRepository(db *gorm.DB) *TripRepository {
 	return &TripRepository{db: db}
 }
 
+// WithTransaction executes the provided function within a database transaction.
+// It ensures that all operations in the callback are committed atomically,
+// or rolled back if any error is returned.
+func (r *TripRepository) WithTransaction(ctx context.Context, fn func(txRepo *TripRepository) error) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txRepo := &TripRepository{db: tx}
+		return fn(txRepo)
+	})
+}
+
 // Create persists a new trip record into the database
 func (r *TripRepository) Create(ctx context.Context, trip *domain.Trip) error {
 	return r.db.WithContext(ctx).Create(trip).Error
