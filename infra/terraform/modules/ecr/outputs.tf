@@ -10,10 +10,10 @@ output "repository_arn" {
 
 output "role_arn" {
   description = "The ARN of the GitHub Actions IAM role"
-  value       = aws_iam_role.github_actions.arn
+  value       = aws_iam_role.role.arn
 }
 
 output "role_name" {
   description = "The name of the GitHub Actions IAM role (for attaching additional policies)"
-  value       = aws_iam_role.github_actions.name
+  value       = aws_iam_role.role.name
 }

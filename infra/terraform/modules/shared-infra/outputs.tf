@@ -88,9 +88,9 @@ output "ecr_repository_arns" {
 output "ecr_iam_role_arns" {
   description = "IAM Role ARNs for GitHub Actions OIDC authentication"
   value = {
-    client_gateway = module.ecr_client_gateway.github_actions_role_arn
-    driver_service = module.ecr_driver_service.github_actions_role_arn
-    trip_service   = module.ecr_trip_service.github_actions_role_arn
+    client_gateway = module.ecr_client_gateway.role_arn
+    driver_service = module.ecr_driver_service.role_arn
+    trip_service   = module.ecr_trip_service.role_arn
   }
 }
 
