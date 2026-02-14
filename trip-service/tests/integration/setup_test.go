@@ -225,9 +225,11 @@ func getTestDSN() string {
     // Default to the specific test database defined in your test compose
     dbname := getEnv("TRIP_DB_NAME", "trip_service_test")
 
+    sslmode := getEnv("DB_SSL_MODE", "disable")
+
     return fmt.Sprintf(
-        "host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-        host, port, user, password, dbname,
+        "host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+        host, port, user, password, dbname, sslmode,
     )
 }
 
