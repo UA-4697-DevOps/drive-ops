@@ -40,16 +40,6 @@ aws cloudwatch set-alarm-state \
   --state-reason "Test finished, clearing manual state."
 ```
 
-### 3. Reset the Alarm
-Once confirmed, return the alarm to its healthy (`OK`) state to clear the dashboard:
-
-```bash
-aws cloudwatch set-alarm-state \
-  --alarm-name "drive-ops-dev-rds-high-cpu" \
-  --state-value OK \
-  --state-reason "Test finished, clearing manual state."
-```
-
 ## 🔐 Security & IAM Requirements
 
 This module is compliant with the `DevOpsBound` permissions boundary. 

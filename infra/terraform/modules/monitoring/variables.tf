@@ -41,6 +41,11 @@ variable "discord_webhook_url" {
   description = "The sensitive Discord Webhook URL for alerts"
   type        = string
   sensitive   = true
+
+  validation {
+    condition     = length(var.discord_webhook_url) > 0
+    error_message = "The discord_webhook_url variable cannot be empty. Did you forget to 'export DISCORD_WEBHOOK_URL=...'?"
+  }
 }
 
 # --- Alarm Thresholds & Settings ---
