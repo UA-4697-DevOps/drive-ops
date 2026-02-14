@@ -161,10 +161,12 @@ jobs:
           DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__IMAGE_TAG__/${{ inputs.image_tag }}}"
           DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__AWS_REGION__/${{ env.AWS_REGION }}}"
 
+          B64_DEPLOY=$(echo "${DEPLOY_SCRIPT}" | base64 -w0)
+
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.ssm-config.outputs.instance_id }}" \
             --document-name "AWS-RunShellScript" \
-            --parameters "commands=[\"$(echo "${DEPLOY_SCRIPT}" | base64 -w0)\"]" \
+            --parameters "commands=[\"echo ${B64_DEPLOY} | base64 -d | bash\"]" \
             --timeout-seconds 300 \
             --comment "Deploy TripService:${{ inputs.image_tag }}" \
             --query "Command.CommandId" --output text)
@@ -246,10 +248,12 @@ jobs:
 
           SMOKE_SCRIPT="${SMOKE_SCRIPT//__PORT__/${{ env.SERVICE_PORT }}}"
 
+          B64_SMOKE=$(echo "${SMOKE_SCRIPT}" | base64 -w0)
+
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.ssm-config.outputs.instance_id }}" \
             --document-name "AWS-RunShellScript" \
-            --parameters "commands=[\"$(echo "${SMOKE_SCRIPT}" | base64 -w0)\"]" \
+            --parameters "commands=[\"echo ${B64_SMOKE} | base64 -d | bash\"]" \
             --timeout-seconds 120 \
             --comment "Smoke checks for TripService:${{ inputs.image_tag }}" \
             --query "Command.CommandId" --output text)
@@ -333,10 +337,12 @@ jobs:
           ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT//__AWS_REGION__/${{ env.AWS_REGION }}}"
           ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT//__PORT__/${{ env.SERVICE_PORT }}}"
 
+          B64_ROLLBACK=$(echo "${ROLLBACK_SCRIPT}" | base64 -w0)
+
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.ssm-config.outputs.instance_id }}" \
             --document-name "AWS-RunShellScript" \
-            --parameters "commands=[\"$(echo "${ROLLBACK_SCRIPT}" | base64 -w0)\"]" \
+            --parameters "commands=[\"echo ${B64_ROLLBACK} | base64 -d | bash\"]" \
             --timeout-seconds 300 \
             --comment "Rollback TripService to ${PREVIOUS_TAG}" \
             --query "Command.CommandId" --output text)
