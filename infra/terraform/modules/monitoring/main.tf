@@ -116,8 +116,12 @@ resource "aws_lambda_function" "discord_notifier" {
   function_name = "${var.project_name}-${var.env}-discord-notifier"
   role          = aws_iam_role.lambda_exec.arn
   handler       = "discord.lambda_handler"
+  runtime       = "python3.12"
 
-  runtime = "python3.12"
+  # Explicitly set timeout to 30s to handle external API latency
+  timeout = 30
+  # Set memory to 128MB (Standard for light functions)
+  memory_size = 128
 
   source_code_hash = data.archive_file.discord_lambda_zip.output_base64sha256
 
@@ -154,7 +158,7 @@ resource "aws_iam_role_policy_attachment" "lambda_logs" {
 }
 
 # Subscribe the Lambda function to the SNS topic
-resource "aws_sns_topic_subscription" "discord_sqs_target" {
+resource "aws_sns_topic_subscription" "discord_lambda" {
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "lambda"
   endpoint  = aws_lambda_function.discord_notifier.arn
