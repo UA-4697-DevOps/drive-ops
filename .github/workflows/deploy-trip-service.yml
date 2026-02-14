@@ -367,7 +367,7 @@ jobs:
                 --instance-id "${{ steps.ssm-config.outputs.instance_id }}" \
                 --query "StandardOutputContent" --output text
               break
-            elif [ "${STATUS}" = "Failed" ] || [ "${STATUS}" = "TimedOut" ]; then
+            elif [ "${STATUS}" = "Failed" ] || [ "${STATUS}" = "TimedOut" ] || [ "${STATUS}" = "Cancelled" ]; then
               echo "❌ Rollback failed!"
               aws ssm get-command-invocation \
                 --command-id "${COMMAND_ID}" \
