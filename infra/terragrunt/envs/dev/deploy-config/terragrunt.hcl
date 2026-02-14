@@ -56,7 +56,7 @@ dependency "trip_service_ecr" {
 
 
 dependency "ec2" {
-  config_path = "../ec2"
+  config_path = "../compute"
 
   mock_outputs = {
     instance_id = "mock_id"
@@ -88,7 +88,5 @@ inputs = {
   github_actions_role_name = dependency.trip_service_ecr.outputs.role_name
   ecr_repo_arn             = dependency.trip_service_ecr.outputs.repository_arn
 
-  # EC2 instance ID — update this after provisioning the EC2 instance
-  # TODO: Replace with actual instance ID or read from a future EC2 module
-  ec2_instance_id = "i-PLACEHOLDER"
+  ec2_instance_id = dependency.ec2.outputs.instance_id
 }

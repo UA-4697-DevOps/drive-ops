@@ -1,9 +1,3 @@
-# =============================================================================
-# Deploy Config Module
-# Creates SSM Parameters from existing infrastructure outputs and extends
-# the GitHub Actions IAM role with deployment permissions.
-# =============================================================================
-
 # --- SSM Parameters: Database Configuration ---
 
 resource "aws_ssm_parameter" "db_host" {
