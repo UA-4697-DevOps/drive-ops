@@ -272,11 +272,9 @@ jobs:
             "DRIVER_SERVICE_URL=${DRIVER_URL}" \
             "TELEGRAM_BOT_TOKEN=${BOT_TOKEN}"; do
             VAR_KEY="${VAR_LINE%%=*}"
-            if grep -q "^${VAR_KEY}=" .env; then
-              sed -i "s|^${VAR_KEY}=.*|${VAR_LINE}|" .env
-            else
-              echo "${VAR_LINE}" >> .env
-            fi
+            # Remove any existing line for this key, then append the new value
+            grep -v "^${VAR_KEY}=" .env > .env.tmp && mv .env.tmp .env || true
+            printf '%s\n' "${VAR_LINE}" >> .env
           done
 
           echo ">>> Deploying ${SERVICE} with image ${IMAGE}..."
