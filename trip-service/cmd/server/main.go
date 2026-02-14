@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -58,8 +59,8 @@ func getEnv(key, fallback string) string {
 // parseIntEnv reads an integer value from the environment and falls back to a default on error.
 func parseIntEnv(key string, defaultVal int) int {
 	if raw, ok := os.LookupEnv(key); ok {
-		var v int
-		if _, err := fmt.Sscanf(raw, "%d", &v); err != nil {
+		v, err := strconv.Atoi(raw)
+		if err != nil {
 			log.Printf("Invalid value for %s=%q, using default %d: %v", key, raw, defaultVal, err)
 			return defaultVal
 		}
