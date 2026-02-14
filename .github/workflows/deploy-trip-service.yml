@@ -202,6 +202,12 @@ jobs:
             sleep 5
           done
 
+          # Fail if the loop completed without Success
+          if [ "${STATUS}" != "Success" ]; then
+            echo "❌ Deployment timed out after 300s (last status: ${STATUS})"
+            exit 1
+          fi
+
       # ---------------------------------------------------------------
       # Step 6: Post-deploy smoke checks
       # ---------------------------------------------------------------
