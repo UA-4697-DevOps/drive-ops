@@ -1,12 +1,7 @@
-data "aws_ssm_parameter" "al2023_ami" {
-  count = var.ami == null ? 1 : 0
-  name  = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
-}
-
 data "aws_region" "current" {}
 
 locals {
-  resolved_ami = var.ami != null ? var.ami : data.aws_ssm_parameter.al2023_ami[0].value
+  resolved_ami = var.ami
 
   # Construct permissions boundary from account_id (DevOpsBound is required in this account)
   permissions_boundary = var.account_id != null ? "arn:aws:iam::${var.account_id}:policy/DevOpsBound" : null
@@ -40,7 +35,7 @@ locals {
 
     # Start Docker
     systemctl enable --now docker
-    usermod -aG docker admin
+    usermod -aG docker ${var.default_user}
 
     # Create service working directory
     mkdir -p /opt/${var.name}
