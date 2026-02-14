@@ -11,10 +11,10 @@ resource "aws_cloudwatch_log_group" "services" {
 # --- 2. Notification Channel (SNS) ---
 resource "aws_sns_topic" "alerts" {
   name = "${var.project_name}-${var.env}-alerts"
-  
+
   # SSE: Enable server-side encryption using the AWS-managed key to protect data at rest
   kms_master_key_id = "alias/aws/sns"
-  
+
   tags = { Name = "${var.project_name}-${var.env}-alerts-topic" }
 }
 
@@ -112,13 +112,13 @@ data "archive_file" "discord_lambda_zip" {
 }
 
 resource "aws_lambda_function" "discord_notifier" {
-  filename         = data.archive_file.discord_lambda_zip.output_path
-  function_name    = "${var.project_name}-${var.env}-discord-notifier"
-  role             = aws_iam_role.lambda_exec.arn
-  handler          = "discord.lambda_handler"
-  
-  runtime          = "python3.12"
-  
+  filename      = data.archive_file.discord_lambda_zip.output_path
+  function_name = "${var.project_name}-${var.env}-discord-notifier"
+  role          = aws_iam_role.lambda_exec.arn
+  handler       = "discord.lambda_handler"
+
+  runtime = "python3.12"
+
   source_code_hash = data.archive_file.discord_lambda_zip.output_base64sha256
 
   environment {
