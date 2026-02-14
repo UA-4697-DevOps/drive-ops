@@ -58,28 +58,25 @@ func (s *TripService) CreateTrip(ctx context.Context, trip *domain.Trip) error {
 
 	var event *domain.TripCreatedEvent
 
-	// Wrap "insert trip + publish event" in a single DB transaction.
+	// 1. Persist to database; build event payload but do NOT publish inside the transaction.
+	//    Publishing inside would risk a phantom event if the DB commit fails after the publish.
 	if err := s.repo.WithTransaction(ctx, func(txRepo *repository.TripRepository) error {
-		// 1. Persist to Database
 		if err := txRepo.Create(ctx, trip); err != nil {
 			return err
 		}
-
-		// 2. Notify Driver Service via SQS
 		event = broker.BuildTripCreatedEvent(trip, trip.ID.String())
-
-		// Use the generic publisher interface
-		if err := s.publisher.PublishTripCreated(ctx, event); err != nil {
-			log.Printf("ERROR: Failed to publish trip.created for trip_id=%s correlation_id=%s: %v", trip.ID, event.CorrelationID, err)
-			return fmt.Errorf("failed to notify drivers via SQS: %w", err)
-		}
-
-		log.Printf("INFO: Successfully published trip.created for trip_id=%s correlation_id=%s", trip.ID, event.CorrelationID)
 		return nil
 	}); err != nil {
 		return err
 	}
 
+	// 2. Publish only after the transaction commits successfully.
+	if err := s.publisher.PublishTripCreated(ctx, event); err != nil {
+		log.Printf("ERROR: Failed to publish trip.created for trip_id=%s correlation_id=%s: %v", trip.ID, event.CorrelationID, err)
+		return fmt.Errorf("failed to notify drivers via SQS: %w", err)
+	}
+
+	log.Printf("INFO: Successfully published trip.created for trip_id=%s correlation_id=%s", trip.ID, event.CorrelationID)
 	return nil
 }
 
