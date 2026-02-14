@@ -1,8 +1,3 @@
-# =============================================================================
-# Variables for Deploy Config Module
-# =============================================================================
-
-# --- Project Identification ---
 
 variable "project_name" {
   description = "The name of the project (e.g., drive-ops)"
@@ -100,3 +95,24 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# --- Global inputs from root.hcl (accepted but unused by this module) ---
+
+variable "enable_ha" {
+  description = "High availability flag (passed by root.hcl, unused here)"
+  type        = bool
+  default     = false
+}
+
+variable "cost_center" {
+  description = "Cost center tag (passed by root.hcl, unused here)"
+  type        = string
+  default     = ""
+}
+
+variable "owner" {
+  description = "Owner tag (passed by root.hcl, unused here)"
+  type        = string
+  default     = ""
+}
+

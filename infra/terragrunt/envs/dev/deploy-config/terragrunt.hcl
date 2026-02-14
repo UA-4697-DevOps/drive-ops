@@ -54,17 +54,21 @@ dependency "trip_service_ecr" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "init"]
 }
 
-locals {
-  common_vars = yamldecode(file(find_in_parent_folders("common_vars.yaml")))
-  env_vars    = yamldecode(file(find_in_parent_folders("env_vars.yaml")))
+
+dependency "ec2" {
+  config_path = "../ec2"
+
+  mock_outputs = {
+    instance_id = "mock_id"
+  }
+
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init"]
 }
 
-inputs = {
-  project_name = local.common_vars.project_name
-  env          = local.env_vars.env
-  aws_region   = try(local.env_vars.aws_region, local.common_vars.aws_region)
-  account_id   = local.env_vars.account_id
+# Note: project_name, env, aws_region, account_id, and tags are already
+# provided by root.hcl's global inputs block — no need to redeclare them.
 
+inputs = {
   # Database config (wired from RDS module outputs)
   db_host = dependency.rds.outputs.db_address
   db_port = dependency.rds.outputs.db_port
@@ -87,8 +91,4 @@ inputs = {
   # EC2 instance ID — update this after provisioning the EC2 instance
   # TODO: Replace with actual instance ID or read from a future EC2 module
   ec2_instance_id = "i-PLACEHOLDER"
-
-  tags = {
-    Component = "deploy-config"
-  }
 }
