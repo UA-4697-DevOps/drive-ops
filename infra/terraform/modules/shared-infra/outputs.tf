@@ -4,6 +4,11 @@ output "vpc_id" {
   value       = module.vpc.vpc_id
 }
 
+output "public_subnet_ids" {
+  description = "List of public subnet IDs for internet-facing workloads"
+  value       = module.vpc.public_subnet_ids
+}
+
 output "private_subnet_ids" {
   description = "List of private subnet IDs for internal workloads"
   value       = module.vpc.private_subnet_ids

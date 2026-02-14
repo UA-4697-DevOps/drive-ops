@@ -24,7 +24,7 @@ dependency "shared_infra" {
 }
 
 inputs = {
-  name      = "drive-ops-dev-client-gateway"
+  name      = "drive-ops-dev-trip-service"
   ami       = "ami-050352a65e954abb1"
   vpc_id    = dependency.shared_infra.outputs.vpc_id
   subnet_id = dependency.shared_infra.outputs.public_subnet_ids[0]
@@ -33,17 +33,17 @@ inputs = {
   additional_security_group_ids = [dependency.shared_infra.outputs.sg_app_id]
 
   # ECR repository for container image pull + SSM deploy document
-  ecr_repository_url = dependency.shared_infra.outputs.ecr_repository_urls.client_gateway
+  ecr_repository_url = dependency.shared_infra.outputs.ecr_repository_urls.trip_service
 
   instance_type               = "t3.micro"
   associate_public_ip_address = true
 
-  # Open client-gateway application port
-  app_port                     = 8080
+  # Open trip-service application port
+  app_port                     = 8081
   allowed_app_port_cidr_blocks = ["0.0.0.0/0"]
 
   tags = {
-    Service   = "client-gateway"
+    Service   = "trip-service"
     Component = "ec2"
   }
 }
