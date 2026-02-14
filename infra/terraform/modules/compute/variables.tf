@@ -61,8 +61,14 @@ variable "user_data" {
   default     = null
 }
 
-variable "iam_instance_profile" {
-  description = "IAM instance profile name"
+variable "ecr_repository_url" {
+  description = "ECR repository URL for the service (enables ECR pull permission and SSM deploy document)"
+  type        = string
+  default     = null
+}
+
+variable "account_id" {
+  description = "AWS account ID (used to construct IAM permissions boundary ARN)"
   type        = string
   default     = null
 }

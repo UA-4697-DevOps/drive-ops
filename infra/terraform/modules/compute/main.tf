@@ -5,9 +5,9 @@ resource "aws_instance" "this" {
   vpc_security_group_ids      = concat([aws_security_group.ec2.id], var.additional_security_group_ids)
   key_name                    = var.key_name
   associate_public_ip_address = var.associate_public_ip_address
-  iam_instance_profile        = var.iam_instance_profile
+  iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name
   monitoring                  = var.enable_monitoring
-  user_data                   = var.user_data
+  user_data                   = local.resolved_user_data
   disable_api_termination     = var.enable_termination_protection
 
   root_block_device {

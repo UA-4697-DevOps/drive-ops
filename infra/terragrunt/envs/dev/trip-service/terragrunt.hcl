@@ -15,6 +15,11 @@ dependency "shared_infra" {
     vpc_id            = "vpc-00000000000000000"
     public_subnet_ids = ["subnet-00000000000000000", "subnet-11111111111111111"]
     sg_app_id         = "sg-00000000000000000"
+    ecr_repository_urls = {
+      trip_service   = "000000000000.dkr.ecr.us-east-2.amazonaws.com/trip-service"
+      driver_service = "000000000000.dkr.ecr.us-east-2.amazonaws.com/driver-service"
+      client_gateway = "000000000000.dkr.ecr.us-east-2.amazonaws.com/client-gateway"
+    }
   }
 }
 
@@ -26,6 +31,9 @@ inputs = {
 
   # Attach sg-app so RDS (sg-db) accepts connections from this instance
   additional_security_group_ids = [dependency.shared_infra.outputs.sg_app_id]
+
+  # ECR repository for container image pull + SSM deploy document
+  ecr_repository_url = dependency.shared_infra.outputs.ecr_repository_urls.trip_service
 
   instance_type               = "t3.micro"
   associate_public_ip_address = true
