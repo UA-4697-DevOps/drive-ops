@@ -71,11 +71,20 @@ variable "repository_name" {
   type        = string
 }
 
+variable "ecr_repo_arn" {
+  description = "ARN of the ECR repository (for scoping DescribeImages permission)"
+  type        = string
+}
+
 variable "github_actions_role_name" {
   description = "Name of the existing GitHub Actions IAM role to attach deploy policy to"
   type        = string
 }
 
+variable "service_name" {
+  description = "Service name used to scope SSM parameter paths (e.g., trip-service)"
+  type        = string
+}
 
 # --- EC2 Instance ---
 

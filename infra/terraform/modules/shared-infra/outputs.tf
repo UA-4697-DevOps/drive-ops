@@ -76,6 +76,15 @@ output "ecr_repository_urls" {
   }
 }
 
+output "ecr_repository_arns" {
+  description = "Map of ECR repository ARNs for IAM policy scoping"
+  value = {
+    client_gateway = module.ecr_client_gateway.repository_arn
+    driver_service = module.ecr_driver_service.repository_arn
+    trip_service   = module.ecr_trip_service.repository_arn
+  }
+}
+
 output "ecr_iam_role_arns" {
   description = "IAM Role ARNs for GitHub Actions OIDC authentication"
   value = {

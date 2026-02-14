@@ -31,6 +31,9 @@ dependency "shared_infra" {
     ecr_iam_role_names = {
       trip_service = "trip-service-github-actions-role"
     }
+    ecr_repository_arns = {
+      trip_service = "arn:aws:ecr:us-east-2:123456789012:repository/trip-service"
+    }
   }
 
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "init"]
@@ -78,7 +81,9 @@ inputs = {
   sqs_trip_completed_url  = dependency.shared_infra.outputs.trip_completed_queue_url
 
   # ECR / GitHub Actions role (from shared-infra ECR outputs)
+  service_name             = "trip-service"
   repository_name          = "trip-service"
+  ecr_repo_arn             = dependency.shared_infra.outputs.ecr_repository_arns.trip_service
   github_actions_role_name = dependency.shared_infra.outputs.ecr_iam_role_names.trip_service
 
   ec2_instance_id = dependency.ec2.outputs.instance_id

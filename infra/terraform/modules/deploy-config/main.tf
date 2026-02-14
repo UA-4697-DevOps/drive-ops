@@ -104,7 +104,11 @@ resource "aws_iam_policy" "deploy_policy" {
           "ssm:GetParameter",
           "ssm:GetParametersByPath"
         ]
-        Resource = "arn:aws:ssm:${var.aws_region}:${var.account_id}:parameter/${var.project_name}/${var.env}/*"
+        Resource = [
+          "arn:aws:ssm:${var.aws_region}:${var.account_id}:parameter/${var.project_name}/${var.env}/${var.service_name}/*",
+          "arn:aws:ssm:${var.aws_region}:${var.account_id}:parameter/${var.project_name}/${var.env}/sqs/*",
+          "arn:aws:ssm:${var.aws_region}:${var.account_id}:parameter/${var.project_name}/${var.env}/infra/*"
+        ]
       },
       {
         Sid    = "SecretsManagerRead"
@@ -115,13 +119,16 @@ resource "aws_iam_policy" "deploy_policy" {
         Resource = var.rds_secret_arn
       },
       {
-        Sid    = "ECRAuth"
-        Effect = "Allow"
-        Action = [
-          "ecr:GetAuthorizationToken",
-          "ecr:DescribeImages"
-        ]
+        Sid      = "ECRAuth"
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
         Resource = "*"
+      },
+      {
+        Sid      = "ECRDescribe"
+        Effect   = "Allow"
+        Action   = ["ecr:DescribeImages"]
+        Resource = var.ecr_repo_arn
       }
     ]
   })
