@@ -1,17 +1,34 @@
-# terraform/modules/shared-infra/main.tf
+# ------------------------------------------------------------------------------
+# SHARED INFRASTRUCTURE MODULE
+# ------------------------------------------------------------------------------
+# This module creates the foundational resources shared across the environment:
+# 1. Networking (VPC)
+# 2. Event Bus (SQS Queues)
+# 3. Artifact Registry (ECR)
+# 4. Security & Secrets (Secrets Manager)
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# 1. NETWORKING
+# ------------------------------------------------------------------------------
 module "vpc" {
   source = "../vpc"
 
-  project_name               = var.project_name
-  account_id                 = var.account_id
-  env                        = var.env
+  project_name = var.project_name
+  account_id   = var.account_id
+  env          = var.env
+
   vpc_cidr                   = var.vpc_cidr
   availability_zones         = var.availability_zones
   enable_flow_logs           = var.enable_flow_logs
   flow_log_retention_in_days = var.flow_log_retention_in_days
 }
 
-# Trip Created Queue
+# ------------------------------------------------------------------------------
+# 2. EVENT BUS (SQS)
+# ------------------------------------------------------------------------------
+
+# Queue: Trip Created (Producers: Trip Service | Consumers: Driver Service)
 module "trip_created" {
   source = "../sqs"
 
@@ -32,7 +49,7 @@ module "trip_created" {
   })
 }
 
-# Driver Assigned Queue
+# Queue: Driver Assigned (Producers: Driver Service | Consumers: Client Gateway)
 module "driver_assigned" {
   source = "../sqs"
 
@@ -53,7 +70,7 @@ module "driver_assigned" {
   })
 }
 
-# Trip Completed Queue
+# Queue: Trip Completed (Producers: Driver Service | Consumers: Billing/Analytics)
 module "trip_completed" {
   source = "../sqs"
 
@@ -74,9 +91,10 @@ module "trip_completed" {
   })
 }
 
-# --- ECR Repositories ---
+# ------------------------------------------------------------------------------
+# 3. ARTIFACT REGISTRY (ECR)
+# ------------------------------------------------------------------------------
 
-# ECR for Client Gateway (Python)
 module "ecr_client_gateway" {
   source = "../ecr"
 
@@ -85,7 +103,6 @@ module "ecr_client_gateway" {
   github_repo     = var.github_repo
 }
 
-# ECR for Driver Service (Python)
 module "ecr_driver_service" {
   source = "../ecr"
 
@@ -94,7 +111,6 @@ module "ecr_driver_service" {
   github_repo     = var.github_repo
 }
 
-# ECR for Trip Service (Go)
 module "ecr_trip_service" {
   source = "../ecr"
 
@@ -103,7 +119,9 @@ module "ecr_trip_service" {
   github_repo     = var.github_repo
 }
 
-# --- RDS Secrets ---
+# ------------------------------------------------------------------------------
+# 4. SECURITY & SECRETS
+# ------------------------------------------------------------------------------
 
 module "rds_secrets" {
   source = "../secrets"
