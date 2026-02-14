@@ -1,3 +1,4 @@
+# --- 1. RDS Master Password ---
 resource "random_password" "master_password" {
   length           = 32
   special          = true
@@ -11,8 +12,7 @@ resource "random_password" "master_password" {
 resource "aws_secretsmanager_secret" "rds_credentials" {
   name        = "${var.project_name}/${var.env}/rds/credentials"
   description = "RDS master credentials for ${var.project_name} ${var.env}"
-
-  tags = var.tags
+  tags        = var.tags
 }
 
 resource "aws_secretsmanager_secret_version" "rds_credentials" {

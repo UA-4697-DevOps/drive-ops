@@ -6,7 +6,7 @@ include "root" {
 
 terraform {
   # Points to the consolidated shared infrastructure module
-  source = "../../../../terraform/modules//shared-infra"
+  source = "../../../../terraform//modules/shared-infra"
 }
 
 locals {

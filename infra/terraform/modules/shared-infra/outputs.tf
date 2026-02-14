@@ -34,6 +34,16 @@ output "sqs_urls" {
   }
 }
 
+# Required for Monitoring Module to attach alarms
+output "sqs_names" {
+  description = "Map of SQS Queue Names for CloudWatch Alarms"
+  value = {
+    trip_created    = module.trip_created.queue_name
+    driver_assigned = module.driver_assigned.queue_name
+    trip_completed  = module.trip_completed.queue_name
+  }
+}
+
 output "sqs_policy_arns" {
   description = "Map of IAM policy ARNs for granular service permissions"
   value = {
