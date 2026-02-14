@@ -14,9 +14,14 @@ variable "subnet_id" {
 }
 
 variable "ami" {
-  description = "AMI ID for the EC2 instance (null = auto-select latest Amazon Linux 2023)"
+  description = "AMI ID for the EC2 instance"
   type        = string
-  default     = null
+}
+
+variable "default_user" {
+  description = "Default OS user on the AMI (e.g. admin for Debian, ubuntu for Ubuntu, ec2-user for AL2023)"
+  type        = string
+  default     = "admin"
 }
 
 variable "instance_type" {

@@ -1,12 +1,7 @@
-data "aws_ssm_parameter" "al2023_ami" {
-  count = var.ami == null ? 1 : 0
-  name  = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
-}
-
 data "aws_region" "current" {}
 
 locals {
-  resolved_ami = var.ami != null ? var.ami : data.aws_ssm_parameter.al2023_ami[0].value
+  resolved_ami = var.ami
 
   # Construct permissions boundary from account_id (DevOpsBound is required in this account)
   permissions_boundary = var.account_id != null ? "arn:aws:iam::${var.account_id}:policy/DevOpsBound" : null
@@ -17,17 +12,30 @@ locals {
     #!/bin/bash
     set -ex
 
-    # Install Docker
-    dnf update -y
-    dnf install -y docker
-    systemctl enable --now docker
-    usermod -aG docker ec2-user
+    # Install prerequisites
+    apt-get update -y
+    apt-get install -y ca-certificates curl gnupg
 
-    # Install Docker Compose plugin
-    mkdir -p /usr/local/lib/docker/cli-plugins
-    curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" \
-      -o /usr/local/lib/docker/cli-plugins/docker-compose
-    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+    # Add Docker GPG key
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/debian/gpg \
+      | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+
+    # Add Docker apt repository
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+      https://download.docker.com/linux/debian \
+      $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+      | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    # Install Docker Engine + Compose plugin
+    apt-get update -y
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+    # Start Docker
+    systemctl enable --now docker
+    usermod -aG docker ${var.default_user}
 
     # Create service working directory
     mkdir -p /opt/${var.name}
