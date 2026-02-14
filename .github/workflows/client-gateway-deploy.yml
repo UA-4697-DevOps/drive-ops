@@ -8,8 +8,10 @@
 #
 # Prerequisites (one-time, before first deploy):
 #   1. EC2 instance tagged  Service=client-gateway, Environment=dev
-#      with SSM Agent running and an instance profile that allows
-#      ssm:SendCommand / ssm:GetCommandInvocation.
+#      with SSM Agent running and an instance profile that allows:
+#        - ssm:SendCommand / ssm:GetCommandInvocation
+#        - ssm:GetParameter on /drive-ops/<env>/client-gateway/*
+#        - secretsmanager:GetSecretValue on drive-ops/<env>/client-gateway/*
 #   2. SSM Parameter Store values:
 #        /drive-ops/dev/client-gateway/trip-service-url
 #        /drive-ops/dev/client-gateway/driver-service-url
@@ -208,38 +210,50 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/client-gateway-github-actions-role
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Inject configuration & deploy via SSM
+      - name: Deploy via SSM
         id: ssm_deploy
         run: |
           INSTANCE_ID="${{ needs.prepare.outputs.instance_id }}"
           IMAGE="${{ needs.prepare.outputs.image_uri }}"
 
-          # Fetch configuration from SSM Parameter Store
-          TRIP_URL=$(aws ssm get-parameter \
-            --name "/drive-ops/${{ env.DEPLOY_ENV }}/client-gateway/trip-service-url" \
-            --query 'Parameter.Value' --output text)
-
-          DRIVER_URL=$(aws ssm get-parameter \
-            --name "/drive-ops/${{ env.DEPLOY_ENV }}/client-gateway/driver-service-url" \
-            --query 'Parameter.Value' --output text)
-
-          # Fetch Telegram bot token from Secrets Manager
-          BOT_TOKEN=$(aws secretsmanager get-secret-value \
-            --secret-id "drive-ops/${{ env.DEPLOY_ENV }}/client-gateway/telegram-token" \
-            --query 'SecretString' --output text)
-
           # Build the remote deploy script
+          # SSM parameters and secrets are fetched directly on the
+          # EC2 instance so that sensitive values never transit GitHub.
           read -r -d '' DEPLOY_SCRIPT << 'DEPLOY_EOF' || true
           set -euo pipefail
 
           APP_DIR="__APP_DIR__"
           IMAGE="__IMAGE__"
           SERVICE="__SERVICE__"
-          TRIP_URL="__TRIP_URL__"
-          DRIVER_URL="__DRIVER_URL__"
-          BOT_TOKEN="__BOT_TOKEN__"
           AWS_REGION="__AWS_REGION__"
           ECR_REGISTRY="__ECR_REGISTRY__"
+          DEPLOY_ENV="__DEPLOY_ENV__"
+
+          echo ">>> Fetching configuration from SSM Parameter Store..."
+          TRIP_URL=$(aws ssm get-parameter \
+            --name "/drive-ops/${DEPLOY_ENV}/client-gateway/trip-service-url" \
+            --region "${AWS_REGION}" \
+            --query 'Parameter.Value' --output text)
+
+          DRIVER_URL=$(aws ssm get-parameter \
+            --name "/drive-ops/${DEPLOY_ENV}/client-gateway/driver-service-url" \
+            --region "${AWS_REGION}" \
+            --query 'Parameter.Value' --output text)
+
+          echo ">>> Fetching secrets from Secrets Manager..."
+          BOT_TOKEN=$(aws secretsmanager get-secret-value \
+            --secret-id "drive-ops/${DEPLOY_ENV}/client-gateway/telegram-token" \
+            --region "${AWS_REGION}" \
+            --query 'SecretString' --output text)
+
+          # Validate that all required values were retrieved
+          for VAR_NAME in TRIP_URL DRIVER_URL BOT_TOKEN; do
+            if [ -z "${!VAR_NAME}" ]; then
+              echo "::error::Failed to retrieve ${VAR_NAME} — check EC2 instance IAM permissions"
+              exit 1
+            fi
+          done
+          echo ">>> Configuration retrieved successfully"
 
           echo ">>> Authenticating with ECR..."
           aws ecr get-login-password --region "${AWS_REGION}" \
@@ -248,7 +262,7 @@ jobs:
           echo ">>> Pulling image ${IMAGE}..."
           docker pull "${IMAGE}"
 
-          echo ">>> Updating .env with injected configuration..."
+          echo ">>> Updating .env with fetched configuration..."
           cd "${APP_DIR}"
 
           # Update or add each variable in .env (create file if missing)
@@ -292,18 +306,16 @@ jobs:
           exit 1
           DEPLOY_EOF
 
-          # Single-pass template substitution using sed to avoid
-          # double-substitution and secret corruption risks
+          # Template substitution — only infrastructure values;
+          # secrets and config are fetched on the instance itself.
           ECR_REGISTRY="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
           DEPLOY_SCRIPT_TMPL=$(echo "$DEPLOY_SCRIPT" | sed \
             -e "s|__APP_DIR__|${{ env.APP_DIR }}|g" \
             -e "s|__IMAGE__|${IMAGE}|g" \
             -e "s|__SERVICE__|${{ env.COMPOSE_SERVICE }}|g" \
-            -e "s|__TRIP_URL__|${TRIP_URL}|g" \
-            -e "s|__DRIVER_URL__|${DRIVER_URL}|g" \
-            -e "s|__BOT_TOKEN__|${BOT_TOKEN}|g" \
             -e "s|__AWS_REGION__|${{ env.AWS_REGION }}|g" \
             -e "s|__ECR_REGISTRY__|${ECR_REGISTRY}|g" \
+            -e "s|__DEPLOY_ENV__|${{ env.DEPLOY_ENV }}|g" \
             -e "s|__CONTAINER__|${{ env.CONTAINER_NAME }}|g")
 
           # Execute via SSM
