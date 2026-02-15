@@ -22,8 +22,18 @@ logger = create_trip_request_logger()
 
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-TRIP_SERVICE_URL = os.getenv('TRIP_SERVICE_URL', 'http://localhost:8081')
-DRIVER_SERVICE_URL = os.getenv('DRIVER_SERVICE_URL', 'http://localhost:8082')
+TRIP_SERVICE_URL = os.getenv('TRIP_SERVICE_URL')
+DRIVER_SERVICE_URL = os.getenv('DRIVER_SERVICE_URL')
+
+_missing_vars = [
+    name for name, val in {
+        'TRIP_SERVICE_URL': TRIP_SERVICE_URL,
+        'DRIVER_SERVICE_URL': DRIVER_SERVICE_URL,
+    }.items()
+    if not val
+]
+if _missing_vars:
+    sys.exit(f"ERROR: Required environment variables not set: {', '.join(_missing_vars)}")
 # Parse HEALTH_CHECK_PORT with fallback to 8080 for invalid/missing values
 try:
     HEALTH_CHECK_PORT = int(os.getenv('HEALTH_CHECK_PORT', '8080'))
