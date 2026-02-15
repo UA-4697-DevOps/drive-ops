@@ -1,4 +1,5 @@
 # --- 1. Centralized Log Groups ---
+# Creates CloudWatch Log Groups for each service with a specified retention period
 resource "aws_cloudwatch_log_group" "services" {
   for_each          = var.service_names
   name              = "/${var.project_name}/${var.env}/${each.key}"
@@ -8,8 +9,10 @@ resource "aws_cloudwatch_log_group" "services" {
 }
 
 # --- 2. Notification Channel (SNS) ---
+# Centralized SNS topic for all infrastructure and application alerts
 resource "aws_sns_topic" "alerts" {
   name = "${var.project_name}-${var.env}-alerts"
+  # Optional: Enable encryption at rest using AWS managed keys
   # kms_master_key_id = "alias/aws/sns"
 
   tags = { Name = "${var.project_name}-${var.env}-alerts-topic" }
@@ -20,10 +23,11 @@ resource "aws_sns_topic_policy" "default" {
   policy = data.aws_iam_policy_document.sns_topic_policy.json
 }
 
+# IAM policy document allowing CloudWatch to publish to the SNS topic
 data "aws_iam_policy_document" "sns_topic_policy" {
   statement {
-    actions = ["SNS:Publish"]
-    effect  = "Allow"
+    actions   = ["SNS:Publish"]
+    effect    = "Allow"
     principals {
       type        = "Service"
       identifiers = ["cloudwatch.amazonaws.com"]
@@ -32,15 +36,10 @@ data "aws_iam_policy_document" "sns_topic_policy" {
   }
 }
 
-# --- 3. Data Source for Discord Webhook ---
-# Fetches the secret value at deployment time to inject into Lambda
-data "aws_secretsmanager_secret_version" "discord_url" {
-  secret_id = var.discord_webhook_secret_arn
-}
-
-# --- 4. Alarms ---
+# --- 3. Alarms ---
 
 # A. RDS High CPU
+# Monitors database load; alerts when CPU stays above threshold for two periods
 resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
   alarm_name          = "${var.project_name}-${var.env}-rds-high-cpu"
   comparison_operator = "GreaterThanThreshold"
@@ -52,12 +51,15 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
   threshold           = var.cpu_alarm_threshold
   alarm_description   = "RDS CPU > ${var.cpu_alarm_threshold}%"
   alarm_actions       = [aws_sns_topic.alerts.arn]
+  
+  # Keeping OK actions for critical database recovery notifications
   ok_actions          = [aws_sns_topic.alerts.arn]
 
   dimensions = { DBInstanceIdentifier = var.rds_instance_id }
 }
 
 # B. SQS Processing Delay
+# Monitors message age in the queue to detect processing bottlenecks
 resource "aws_cloudwatch_metric_alarm" "sqs_old_messages" {
   alarm_name          = "${var.project_name}-${var.env}-sqs-delay"
   comparison_operator = "GreaterThanThreshold"
@@ -68,12 +70,15 @@ resource "aws_cloudwatch_metric_alarm" "sqs_old_messages" {
   statistic           = "Maximum"
   threshold           = var.sqs_delay_threshold
   alarm_actions       = [aws_sns_topic.alerts.arn]
-  ok_actions          = [aws_sns_topic.alerts.arn]
+  
+  # OK actions removed to reduce noise during system startup
+  # ok_actions          = [aws_sns_topic.alerts.arn]
 
   dimensions = { QueueName = var.sqs_queue_name }
 }
 
 # C. EC2 High CPU
+# Iterates through provided instances to create individual CPU alarms
 resource "aws_cloudwatch_metric_alarm" "ec2_cpu_high" {
   for_each            = var.ec2_instances
   alarm_name          = "${var.project_name}-${var.env}-${each.key}-cpu-high"
@@ -85,12 +90,15 @@ resource "aws_cloudwatch_metric_alarm" "ec2_cpu_high" {
   statistic           = "Average"
   threshold           = 85
   alarm_actions       = [aws_sns_topic.alerts.arn]
-  ok_actions          = [aws_sns_topic.alerts.arn]
+  
+  # OK actions removed to prevent alert storms for service recovery
+  # ok_actions          = [aws_sns_topic.alerts.arn]
 
   dimensions = { InstanceId = each.value }
 }
 
 # D. EC2 Status Check Failed
+# Triggers if the EC2 instance fails any underlying AWS hardware or software checks
 resource "aws_cloudwatch_metric_alarm" "ec2_status_check" {
   for_each            = var.ec2_instances
   alarm_name          = "${var.project_name}-${var.env}-${each.key}-status-check"
@@ -102,19 +110,23 @@ resource "aws_cloudwatch_metric_alarm" "ec2_status_check" {
   statistic           = "Maximum"
   threshold           = 0
   alarm_actions       = [aws_sns_topic.alerts.arn]
-  ok_actions          = [aws_sns_topic.alerts.arn]
+  
+  # Recovery notifications disabled for standard status checks
+  # ok_actions          = [aws_sns_topic.alerts.arn]
 
   dimensions = { InstanceId = each.value }
 }
 
-# --- 5. Discord Integration (Lambda) ---
+# --- 4. Discord Integration (Lambda) ---
 
+# Packages the Python notification script into a deployment zip file
 data "archive_file" "discord_lambda_zip" {
   type        = "zip"
   source_file = "${path.module}/discord.py"
   output_path = "${path.module}/discord.zip"
 }
 
+# Lambda function that processes SNS alerts and sends them to Discord
 resource "aws_lambda_function" "discord_notifier" {
   filename         = data.archive_file.discord_lambda_zip.output_path
   function_name    = "${var.project_name}-${var.env}-discord-notifier"
@@ -127,15 +139,16 @@ resource "aws_lambda_function" "discord_notifier" {
 
   environment {
     variables = {
-      # Extracts the 'url' key from the JSON stored in Secrets Manager
-      DISCORD_WEBHOOK_URL = jsondecode(data.aws_secretsmanager_secret_version.discord_url.secret_string)["url"]
+      # SECURITY IMPROVEMENT: Pass the Secret ARN instead of a plaintext URL
+      # The secret is retrieved at runtime to keep credentials out of the console
+      DISCORD_SECRET_ARN = var.discord_webhook_secret_arn
     }
   }
 
   tags = { Name = "${var.project_name}-${var.env}-discord-notifier" }
 }
 
-# IAM Role for Lambda
+# IAM Role for Lambda execution with specific permission boundaries
 resource "aws_iam_role" "lambda_exec" {
   name                 = "Training-${var.project_name}-${var.env}-lambda-discord-role"
   permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
@@ -150,12 +163,13 @@ resource "aws_iam_role" "lambda_exec" {
   })
 }
 
+# Attaches the AWS managed policy for basic Lambda execution (Logs)
 resource "aws_iam_role_policy_attachment" "lambda_logs" {
   role       = aws_iam_role.lambda_exec.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# NEW: Explicit permission to read the Discord Secret
+# Inline policy granting the Lambda permission to read the Discord secret from Secrets Manager
 resource "aws_iam_role_policy" "lambda_secrets_read" {
   name = "Training-${var.project_name}-${var.env}-lambda-secrets-policy"
   role = aws_iam_role.lambda_exec.id
@@ -170,12 +184,14 @@ resource "aws_iam_role_policy" "lambda_secrets_read" {
   })
 }
 
+# Subscribes the Lambda function to the SNS alerts topic
 resource "aws_sns_topic_subscription" "discord_lambda" {
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "lambda"
   endpoint  = aws_lambda_function.discord_notifier.arn
 }
 
+# Grants SNS service permission to invoke the Lambda notifier function
 resource "aws_lambda_permission" "with_sns" {
   statement_id  = "AllowExecutionFromSNS"
   action        = "lambda:InvokeFunction"
