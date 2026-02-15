@@ -31,7 +31,11 @@ DATABASE_URL = _clean_url
 
 _connect_args = {}
 if _sslmode and _sslmode != "disable":
-    _connect_args["ssl"] = True
+    # asyncpg ssl="require" encrypts the connection without verifying the
+    # server certificate, matching psycopg2's sslmode=require semantics.
+    # ssl=True would enforce full cert verification and fails against RDS
+    # which uses an AWS-managed CA not in Python's default trust store.
+    _connect_args["ssl"] = "require"
 
 try:
     engine = create_async_engine(DATABASE_URL, echo=True, connect_args=_connect_args)
