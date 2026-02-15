@@ -22,6 +22,8 @@ COPY --chown=app:app requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY --chown=app:app ./src ./src
+COPY --chown=app:app ./alembic ./alembic
+COPY --chown=app:app alembic.ini .
 
 # Unified service port
 EXPOSE 8082
