@@ -6,39 +6,57 @@ terraform {
   source = "../../../../terraform/modules//compute"
 }
 
+# --- Load Common & Env Variables ---
+locals {
+  common_vars = yamldecode(file(find_in_parent_folders("common_vars.yaml")))
+  env_vars    = yamldecode(file(find_in_parent_folders("env_vars.yaml")))
+}
+
+# --- Dependencies ---
+
 dependency "shared_infra" {
   config_path = "../shared-infra"
 
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "init"]
   mock_outputs_merge_strategy_with_state  = "shallow"
+
   mock_outputs = {
-    vpc_id            = "vpc-00000000000000000"
-    public_subnet_ids = ["subnet-00000000000000000", "subnet-11111111111111111"]
-    sg_app_id         = "sg-00000000000000000"
+    vpc_id            = "vpc-mock-id"
+    public_subnet_ids = ["subnet-mock-1", "subnet-mock-2"]
+    sg_app_id         = "sg-mock-app"
+
     ecr_repository_urls = {
-      trip_service   = "000000000000.dkr.ecr.us-east-2.amazonaws.com/trip-service"
-      driver_service = "000000000000.dkr.ecr.us-east-2.amazonaws.com/driver-service"
       client_gateway = "000000000000.dkr.ecr.us-east-2.amazonaws.com/client-gateway"
     }
   }
 }
 
+# --- Inputs ---
+
 inputs = {
-  name      = "drive-ops-dev-client-gateway"
-  ami       = "ami-050352a65e954abb1"
-  vpc_id    = dependency.shared_infra.outputs.vpc_id
-  subnet_id = dependency.shared_infra.outputs.public_subnet_ids[0]
+  # Context
+  name         = "Training-${local.common_vars.project_name}-${local.env_vars.env}-client-gateway"
+  project_name = local.common_vars.project_name
+  env          = local.env_vars.env
+  service_name = "client-gateway"
+  account_id   = local.env_vars.account_id
 
-  # Attach sg-app so RDS (sg-db) accepts connections from this instance
-  additional_security_group_ids = [dependency.shared_infra.outputs.sg_app_id]
-
-  # ECR repository for container image pull + SSM deploy document
-  ecr_repository_url = dependency.shared_infra.outputs.ecr_repository_urls.client_gateway
-
+  # EC2 Configuration
+  ami                         = "ami-050352a65e954abb1"
   instance_type               = "t3.micro"
   associate_public_ip_address = true
 
-  # Open client-gateway application port
+  # Network Placement
+  vpc_id    = dependency.shared_infra.outputs.vpc_id
+  subnet_id = dependency.shared_infra.outputs.public_subnet_ids[0]
+
+  # Security Groups
+  additional_security_group_ids = [dependency.shared_infra.outputs.sg_app_id]
+
+  # ECR
+  ecr_repository_url = dependency.shared_infra.outputs.ecr_repository_urls.client_gateway
+
+  # Application Port
   app_port                     = 8080
   allowed_app_port_cidr_blocks = ["0.0.0.0/0"]
 

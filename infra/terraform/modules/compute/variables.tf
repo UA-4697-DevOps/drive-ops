@@ -1,7 +1,47 @@
+# --- General Identification ---
+
 variable "name" {
   description = "Name prefix for EC2 resources"
   type        = string
 }
+
+variable "project_name" {
+  description = "The name of the project, used to construct SSM Parameter Store paths for config retrieval (e.g., drive-ops)"
+  type        = string
+
+  validation {
+    condition     = length(var.project_name) > 0
+    error_message = "project_name must not be empty — it is used in SSM Parameter Store paths and IAM policy ARNs."
+  }
+}
+
+variable "env" {
+  description = "The deployment environment, used to construct SSM Parameter Store paths for config retrieval (e.g., dev)"
+  type        = string
+
+  validation {
+    condition     = length(var.env) > 0
+    error_message = "env must not be empty — it is used in SSM Parameter Store paths and IAM policy ARNs."
+  }
+}
+
+variable "service_name" {
+  description = "Short service identifier for SSM Parameter Store path (e.g., trip-service, driver-service, client-gateway)"
+  type        = string
+
+  validation {
+    condition     = length(var.service_name) > 0
+    error_message = "service_name must not be empty — it is used in SSM Parameter Store paths (/${project_name}/${env}/${service_name}/)."
+  }
+}
+
+variable "tags" {
+  description = "Tags to apply to all resources"
+  type        = map(string)
+  default     = {}
+}
+
+# --- Network & Compute ---
 
 variable "vpc_id" {
   description = "VPC ID where EC2 instances will be deployed"
@@ -16,12 +56,6 @@ variable "subnet_id" {
 variable "ami" {
   description = "AMI ID for the EC2 instance"
   type        = string
-}
-
-variable "default_user" {
-  description = "Default OS user on the AMI (e.g. admin for Debian, ubuntu for Ubuntu, ec2-user for AL2023)"
-  type        = string
-  default     = "admin"
 }
 
 variable "instance_type" {
@@ -42,6 +76,14 @@ variable "associate_public_ip_address" {
   default     = true
 }
 
+variable "default_user" {
+  description = "Default OS user on the AMI (e.g. admin for Debian, ubuntu for Ubuntu, ec2-user for AL2023)"
+  type        = string
+  default     = "admin"
+}
+
+# --- Storage ---
+
 variable "root_volume_size" {
   description = "Size of the root volume in GB"
   type        = number
@@ -54,29 +96,45 @@ variable "root_volume_type" {
   default     = "gp3"
 }
 
-variable "enable_monitoring" {
-  description = "Enable detailed monitoring"
-  type        = bool
-  default     = false
-}
-
-variable "user_data" {
-  description = "User data script to run on instance launch"
-  type        = string
-  default     = null
-}
-
-variable "ecr_repository_url" {
-  description = "ECR repository URL for the service (enables ECR pull permission and SSM deploy document)"
-  type        = string
-  default     = null
-}
+# --- Security & Access ---
 
 variable "account_id" {
   description = "AWS account ID (used to construct IAM permissions boundary ARN)"
   type        = string
   default     = null
 }
+
+variable "iam_sqs_arns" {
+  description = "List of SQS Queue ARNs that this EC2 instance is allowed to access (Send/Receive/Delete)"
+  type        = list(string)
+  default     = []
+}
+
+variable "iam_secret_arns" {
+  description = "List of Secrets Manager Secret ARNs that this EC2 instance is allowed to read (GetSecretValue)"
+  type        = list(string)
+  default     = []
+}
+
+variable "ecr_repository_url" {
+  description = "ECR repository URL for the service (enables ECR pull permission and creates the SSM deploy document)"
+  type        = string
+  default     = null
+}
+
+variable "additional_security_group_ids" {
+  description = "Additional security group IDs to attach to the instance (e.g., sg-app for RDS access)"
+  type        = list(string)
+  default     = []
+}
+
+variable "enable_termination_protection" {
+  description = "Enable EC2 instance termination protection"
+  type        = bool
+  default     = false
+}
+
+# --- Network Access Rules (Security Group) ---
 
 variable "allowed_ssh_cidr_blocks" {
   description = "CIDR blocks allowed to SSH to the instance"
@@ -96,18 +154,6 @@ variable "allowed_https_cidr_blocks" {
   default     = ["0.0.0.0/0"]
 }
 
-variable "enable_termination_protection" {
-  description = "Enable EC2 instance termination protection"
-  type        = bool
-  default     = false
-}
-
-variable "additional_security_group_ids" {
-  description = "Additional security group IDs to attach to the instance (e.g., sg-app for RDS access)"
-  type        = list(string)
-  default     = []
-}
-
 variable "app_port" {
   description = "Application port to allow inbound traffic on (0 = disabled)"
   type        = number
@@ -120,8 +166,18 @@ variable "allowed_app_port_cidr_blocks" {
   default     = ["0.0.0.0/0"]
 }
 
-variable "tags" {
-  description = "Tags to apply to all resources"
-  type        = map(string)
-  default     = {}
+# --- Observability ---
+
+variable "enable_monitoring" {
+  description = "Enable detailed CloudWatch monitoring"
+  type        = bool
+  default     = false
+}
+
+# --- Customization ---
+
+variable "user_data" {
+  description = "User data script to run on instance launch (overrides default bootstrap if provided)"
+  type        = string
+  default     = null
 }

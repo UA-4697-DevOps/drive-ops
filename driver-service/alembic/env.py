@@ -37,12 +37,8 @@ def get_url():
     """Отримує URL бази даних з оточення."""
     url = os.getenv("DATABASE_URL")
     if not url:
-        # Запасний варіант, якщо DATABASE_URL не задано
-        user = os.getenv("DB_USER", "postgres")
-        pw = os.getenv("DB_PASSWORD", "postgres")
-        db = os.getenv("DRIVER_DB_NAME", "driver_db")
-        host = os.getenv("DB_HOST", "localhost")
-        url = f"postgresql://{user}:{pw}@{host}:5432/{db}"
+        print("❌ DATABASE_URL must be set", file=sys.stderr)
+        sys.exit(1)
     return url
 
 

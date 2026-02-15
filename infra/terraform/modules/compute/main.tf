@@ -32,10 +32,13 @@ resource "aws_instance" "this" {
     Name = var.name
   })
 
+  # --- CRITICAL UPDATE ---
   lifecycle {
     ignore_changes = [
       ami,
-      user_data
+      # REMOVED user_data from here. 
+      # This allows Terraform to detect the new SSM Agent installation 
+      # script and replace the instance.
     ]
   }
 }
