@@ -11,6 +11,7 @@ on:
   push:
     branches:
       - 'main'
+      - 'fix/fix-3'
     paths:
       - 'driver-service/**'
       - '.github/workflows/driver-service-ci.yml'
