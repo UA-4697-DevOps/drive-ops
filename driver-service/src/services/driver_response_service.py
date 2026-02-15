@@ -6,11 +6,11 @@ import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from schemas.driver_response import DriverResponseEvent
-# We keep DriverResponseEvent for the input, but we don't need DriverAssignedPayload 
+from src.schemas.driver_response import DriverResponseEvent
+# We keep DriverResponseEvent for the input, but we don't need DriverAssignedPayload
 # because the SQS Publisher now handles the outgoing data structure.
 
-from clients.sqs_publisher import SQSPublisher
+from src.clients.sqs_publisher import SQSPublisher
 
 logger = logging.getLogger(__name__)
 

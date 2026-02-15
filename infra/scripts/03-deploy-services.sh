@@ -13,11 +13,12 @@ set -euo pipefail
 #   - IAM roles must have ssm:SendCommand permission
 #
 # Usage:
-#   ./03-deploy-services.sh [dev|staging|prod] [image-tag]
+#   ./03-deploy-services.sh [dev|staging|prod] [image-tag] [service]
 #
 # Examples:
-#   ./03-deploy-services.sh dev latest
-#   ./03-deploy-services.sh dev v1.2.3
+#   ./03-deploy-services.sh dev latest                        # all services
+#   ./03-deploy-services.sh dev sha-d14c08b trip-service      # one service
+#   ./03-deploy-services.sh dev sha-d14c08b driver-service
 # ============================================================================
 
 # --- Colors ---
@@ -39,17 +40,24 @@ fi
 ENV="$ENV_RAW"
 PROJECT="drive-ops"
 REGION="${AWS_REGION:-us-east-2}"
-POLL_INTERVAL=5   # seconds between status checks
-TIMEOUT=300       # max seconds to wait per service
+SERVICE_FILTER="${3:-}"   # optional: trip-service | driver-service | client-gateway
+POLL_INTERVAL=5           # seconds between status checks
+TIMEOUT=300               # max seconds to wait per service
 
 # SSM document names follow the compute module naming: Training-{project}-{env}-{service}-deploy
 TRIP_DOC="Training-${PROJECT}-${ENV}-trip-service-deploy"
 DRIVER_DOC="Training-${PROJECT}-${ENV}-driver-service-deploy"
 GW_DOC="Training-${PROJECT}-${ENV}-client-gateway-deploy"
 
-echo -e "${BLUE}============================================================${NC}"
-echo -e "${BLUE}  Deploy services — env=${ENV}  tag=${IMAGE_TAG}${NC}"
-echo -e "${BLUE}============================================================${NC}"
+if [[ -n "$SERVICE_FILTER" ]]; then
+  echo -e "${BLUE}============================================================${NC}"
+  echo -e "${BLUE}  Deploy ${SERVICE_FILTER} — env=${ENV}  tag=${IMAGE_TAG}${NC}"
+  echo -e "${BLUE}============================================================${NC}"
+else
+  echo -e "${BLUE}============================================================${NC}"
+  echo -e "${BLUE}  Deploy all services — env=${ENV}  tag=${IMAGE_TAG}${NC}"
+  echo -e "${BLUE}============================================================${NC}"
+fi
 echo ""
 
 # ============================================================
@@ -127,20 +135,43 @@ deploy_service() {
 }
 
 # ============================================================
-# 1. Resolve instance IDs
+# Build list of services to deploy
+# ============================================================
+# Each entry: "service-tag:ssm-doc"
+ALL_SERVICES=(
+  "trip-service:$TRIP_DOC"
+  "driver-service:$DRIVER_DOC"
+  "client-gateway:$GW_DOC"
+)
+
+SERVICES=()
+for entry in "${ALL_SERVICES[@]}"; do
+  svc="${entry%%:*}"
+  if [[ -z "$SERVICE_FILTER" || "$SERVICE_FILTER" == "$svc" ]]; then
+    SERVICES+=("$entry")
+  fi
+done
+
+if [[ ${#SERVICES[@]} -eq 0 ]]; then
+  echo -e "${RED}✗ Unknown service: '$SERVICE_FILTER'${NC}"
+  echo "  Valid values: trip-service, driver-service, client-gateway"
+  exit 1
+fi
+
+# ============================================================
+# 1. Resolve instance IDs — stored as third field: svc:doc:iid
 # ============================================================
 echo -e "${YELLOW}→ Resolving EC2 instance IDs...${NC}"
 
-TRIP_INSTANCE=$(get_instance_id "trip-service")
-DRIVER_INSTANCE=$(get_instance_id "driver-service")
-GW_INSTANCE=$(get_instance_id "client-gateway")
-
-for pair in "trip-service:$TRIP_INSTANCE" "driver-service:$DRIVER_INSTANCE" "client-gateway:$GW_INSTANCE"; do
-  svc="${pair%%:*}"
-  iid="${pair##*:}"
+RESOLVED=()
+for entry in "${SERVICES[@]}"; do
+  svc="${entry%%:*}"
+  doc="${entry##*:}"
+  iid=$(get_instance_id "$svc")
   if [[ -z "$iid" || "$iid" == "None" ]]; then
     echo -e "${RED}✗ No running EC2 found for service tag: $svc${NC}"; exit 1
   fi
+  RESOLVED+=("${svc}:${doc}:${iid}")
   echo -e "  ${GREEN}✓${NC} $svc → $iid"
 done
 echo ""
@@ -149,7 +180,10 @@ echo ""
 # 2. Verify SSM documents exist
 # ============================================================
 echo -e "${YELLOW}→ Verifying SSM documents exist...${NC}"
-for doc in "$TRIP_DOC" "$DRIVER_DOC" "$GW_DOC"; do
+for entry in "${RESOLVED[@]}"; do
+  svc="${entry%%:*}"
+  rest="${entry#*:}"
+  doc="${rest%%:*}"
   STATUS=$(aws ssm describe-document \
     --region "$REGION" \
     --name "$doc" \
@@ -165,16 +199,18 @@ done
 echo ""
 
 # ============================================================
-# 3. Deploy all services
+# 3. Deploy
 # ============================================================
 FAILED=0
 
-deploy_service "trip-service"    "$TRIP_DOC"   "$TRIP_INSTANCE"   || FAILED=$((FAILED + 1))
-echo ""
-deploy_service "driver-service"  "$DRIVER_DOC" "$DRIVER_INSTANCE" || FAILED=$((FAILED + 1))
-echo ""
-deploy_service "client-gateway"  "$GW_DOC"     "$GW_INSTANCE"     || FAILED=$((FAILED + 1))
-echo ""
+for entry in "${RESOLVED[@]}"; do
+  svc="${entry%%:*}"
+  rest="${entry#*:}"
+  doc="${rest%%:*}"
+  iid="${rest##*:}"
+  deploy_service "$svc" "$doc" "$iid" || FAILED=$((FAILED + 1))
+  echo ""
+done
 
 # ============================================================
 # 4. Summary
