@@ -31,7 +31,7 @@ variable "service_name" {
 
   validation {
     condition     = length(var.service_name) > 0
-    error_message = "service_name must not be empty — it is used in SSM Parameter Store paths (/${project_name}/${env}/${service_name}/)."
+    error_message = "service_name must not be empty — it is used in SSM Parameter Store paths (/<project_name>/<env>/<service_name>/)."
   }
 }
 

@@ -117,6 +117,8 @@ fi
 if [[ -z "$DB_PASS" || "$DB_PASS" == "null" ]]; then
   echo -e "${RED}✗ 'password' not found in secret '$SECRET_ID'${NC}"; exit 1
 fi
+# URL-encode the password so special chars (>, %, #, ?, $) don't break the connection string
+DB_PASS_ENCODED=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$DB_PASS")
 echo -e "  ${GREEN}✓${NC} DB credentials fetched (user=$DB_USER)"
 
 echo -e "${YELLOW}→ Fetching SQS URLs from Terragrunt outputs...${NC}"
@@ -170,8 +172,8 @@ echo ""
 # ============================================================
 # DB names match init-rds-schema.sh convention
 ENV_NORM="${ENV//-/_}"
-TRIP_DB_URL="postgresql://${DB_USER}:${DB_PASS}@${RDS_HOST}:5432/drive_ops_${ENV_NORM}_trip?sslmode=require"
-DRIVER_DB_URL="postgresql://${DB_USER}:${DB_PASS}@${RDS_HOST}:5432/drive_ops_${ENV_NORM}_driver?sslmode=require"
+TRIP_DB_URL="postgresql://${DB_USER}:${DB_PASS_ENCODED}@${RDS_HOST}:5432/drive_ops_${ENV_NORM}_trip?sslmode=require"
+DRIVER_DB_URL="postgresql://${DB_USER}:${DB_PASS_ENCODED}@${RDS_HOST}:5432/drive_ops_${ENV_NORM}_driver?sslmode=require"
 
 # ============================================================
 # 3. Write SSM parameters
@@ -181,7 +183,7 @@ SSM_BASE="/${PROJECT}/${ENV}"
 
 # ---- trip-service ----
 echo -e "${BLUE}→ Writing trip-service parameters...${NC}"
-put_param "${SSM_BASE}/trip-service/database-url" "$TRIP_DB_URL" "SecureString" "postgresql://***@${RDS_HOST}/drive_ops_${ENV_NORM}_trip?sslmode=require"
+put_param "${SSM_BASE}/trip-service/db-url" "$TRIP_DB_URL" "SecureString" "postgresql://***@${RDS_HOST}/drive_ops_${ENV_NORM}_trip?sslmode=require"
 
 # ---- driver-service ----
 echo -e "${BLUE}→ Writing driver-service parameters...${NC}"
