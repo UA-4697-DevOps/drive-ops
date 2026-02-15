@@ -268,14 +268,23 @@ async def update_driver_location(driver_id: UUID, lat: float, lng: float):
 async def get_driver_inspection(driver_id: UUID):
     """
     Returns the vehicle verification and documents status for the driver.
-    Required for order eligibility.
+    Ensures the driver exists in memory before returning status.
     """
+    drivers_storage = app.state.drivers_storage
+    driver_key = str(driver_id)
+
+
+    if driver_key not in drivers_storage:
+        raise HTTPException(status_code=404, detail="Driver not found in memory storage")
+
     return {
         "driver_id": driver_id,
         "status": "approved",
         "last_inspection_date": "2026-02-15",
-        "inspection_type": "annual"
+        "inspection_type": "annual",
+        "is_mock_data": True
     }
+
 
 # ========== BOT USERS MANAGEMENT ==========
 
