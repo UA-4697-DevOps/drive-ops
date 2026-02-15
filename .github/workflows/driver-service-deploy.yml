@@ -75,7 +75,7 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/Training-GitHub-ECR-Push
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.SERVICE_NAME }}-github-actions-role
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Resolve image tag
@@ -206,7 +206,7 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/Training-GitHub-ECR-Push
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.SERVICE_NAME }}-github-actions-role
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy via SSM Document
@@ -276,7 +276,7 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/Training-GitHub-ECR-Push
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.SERVICE_NAME }}-github-actions-role
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Health check via SSM
@@ -459,7 +459,7 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/Training-GitHub-ECR-Push
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.SERVICE_NAME }}-github-actions-role
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Rollback to previous image
