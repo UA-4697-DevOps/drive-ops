@@ -77,6 +77,7 @@ resource "aws_iam_role_policy_attachment" "ecr_pull" {
 # --- 2. SSM Parameter Store Access ---
 
 resource "aws_iam_policy" "ssm_config_read" {
+  count       = 1
   name        = "${var.name}-ssm-read"
   description = "Allow EC2 to read app config from SSM Parameter Store"
 
@@ -90,7 +91,6 @@ resource "aws_iam_policy" "ssm_config_read" {
           "ssm:GetParameters",
           "ssm:GetParametersByPath"
         ]
-        # Changed .name to .id to fix the deprecation warning
         Resource = "arn:aws:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/${var.env}/*"
       }
     ]
@@ -99,8 +99,9 @@ resource "aws_iam_policy" "ssm_config_read" {
 }
 
 resource "aws_iam_role_policy_attachment" "ssm_config_read" {
+  count      = 1
   role       = aws_iam_role.ec2_ssm_role.name
-  policy_arn = aws_iam_policy.ssm_config_read.arn
+  policy_arn = aws_iam_policy.ssm_config_read[0].arn
 }
 
 # --- 3. Secrets Manager Access (Database) ---
@@ -170,4 +171,14 @@ moved {
 moved {
   from = aws_iam_role_policy_attachment.ecr_pull
   to   = aws_iam_role_policy_attachment.ecr_pull[0]
+}
+
+moved {
+  from = aws_iam_policy.ssm_config_read
+  to   = aws_iam_policy.ssm_config_read[0]
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.ssm_config_read
+  to   = aws_iam_role_policy_attachment.ssm_config_read[0]
 }

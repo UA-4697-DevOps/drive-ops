@@ -7,8 +7,18 @@ if not raw_url:
     print("❌ DATABASE_URL must be set", file=sys.stderr)
     sys.exit(1)
 
-# SQLAlchemy async requires the +asyncpg driver prefix
-DATABASE_URL = raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+# SQLAlchemy async requires the postgresql+asyncpg:// driver prefix.
+# Normalise both "postgresql://" and "postgres://" (Heroku-style) variants,
+# and skip substitution if the driver is already present.
+if "+asyncpg" in raw_url:
+    DATABASE_URL = raw_url
+elif raw_url.startswith("postgresql://"):
+    DATABASE_URL = "postgresql+asyncpg://" + raw_url[len("postgresql://"):]
+elif raw_url.startswith("postgres://"):
+    DATABASE_URL = "postgresql+asyncpg://" + raw_url[len("postgres://"):]
+else:
+    print(f"❌ DATABASE_URL has an unsupported scheme: {raw_url.split('://')[0]}://", file=sys.stderr)
+    sys.exit(1)
 
 try:
     engine = create_async_engine(DATABASE_URL, echo=True)

@@ -8,19 +8,31 @@ variable "name" {
 variable "project_name" {
   description = "The name of the project, used to construct SSM Parameter Store paths for config retrieval (e.g., drive-ops)"
   type        = string
-  default     = null
+
+  validation {
+    condition     = length(var.project_name) > 0
+    error_message = "project_name must not be empty — it is used in SSM Parameter Store paths and IAM policy ARNs."
+  }
 }
 
 variable "env" {
   description = "The deployment environment, used to construct SSM Parameter Store paths for config retrieval (e.g., dev)"
   type        = string
-  default     = null
+
+  validation {
+    condition     = length(var.env) > 0
+    error_message = "env must not be empty — it is used in SSM Parameter Store paths and IAM policy ARNs."
+  }
 }
 
 variable "service_name" {
   description = "Short service identifier for SSM Parameter Store path (e.g., trip-service, driver-service, client-gateway)"
   type        = string
-  default     = null
+
+  validation {
+    condition     = length(var.service_name) > 0
+    error_message = "service_name must not be empty — it is used in SSM Parameter Store paths (/${project_name}/${env}/${service_name}/)."
+  }
 }
 
 variable "tags" {
