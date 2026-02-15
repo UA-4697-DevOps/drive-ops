@@ -17,7 +17,8 @@ dependency "shared_infra" {
   config_path = "../shared-infra"
 
   # Allows planning even if shared-infra outputs are not yet available in the state
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy", "apply"]
+  # Removed "apply" to enforce using real outputs during deployment
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
   mock_outputs = {
     sqs_names = {
       trip_created = "mock-trip-created"
@@ -29,7 +30,7 @@ dependency "shared_infra" {
 
 dependency "rds" {
   config_path                             = "../rds"
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy", "apply"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
   mock_outputs = {
     db_instance_id = "mock-db-id"
   }
@@ -39,19 +40,19 @@ dependency "rds" {
 
 dependency "client_gateway" {
   config_path                             = "../client-gateway"
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy", "apply"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
   mock_outputs                            = { instance_id = "i-mock-client-gateway" }
 }
 
 dependency "driver_service" {
   config_path                             = "../driver-service"
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy", "apply"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
   mock_outputs                            = { instance_id = "i-mock-driver-service" }
 }
 
 dependency "trip_service" {
   config_path                             = "../trip-service"
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy", "apply"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
   mock_outputs                            = { instance_id = "i-mock-trip-service" }
 }
 
