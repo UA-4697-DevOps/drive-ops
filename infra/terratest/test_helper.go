@@ -1,4 +1,3 @@
-// Package infratests provides test helpers and utilities for Terratest infrastructure tests.
 package infratests
 
 import (
@@ -12,13 +11,10 @@ import (
 )
 
 const (
-	// DefaultAWSRegion is the default region for tests
 	DefaultAWSRegion = "us-east-2"
 
-	// TerraformModulesPath is the relative path to Terraform modules
 	TerraformModulesPath = "../terraform/modules"
 
-	// TerragruntEnvsPath is the relative path to Terragrunt environments
 	TerragruntEnvsPath = "../terragrunt/envs"
 
 	// MockProviderConfigTpl is the HCL template to force offline mode.
@@ -45,7 +41,6 @@ func GetModulePath(t *testing.T, moduleName string) string {
 	return absPath
 }
 
-// GetTerragruntPath returns the absolute path to a Terragrunt environment.
 func GetTerragruntPath(t *testing.T, env, component string) string {
 	t.Helper()
 	absPath, err := filepath.Abs(filepath.Join(TerragruntEnvsPath, env, component))
@@ -86,7 +81,8 @@ func SetupTestModule(t *testing.T, targetModuleName string, region string) strin
 }
 
 // CreateTerraformOptions creates Terraform options with the given variables and region.
-// Passing the region explicitly ensures that EnvVars match the Provider configuration.
+// It automatically adds environment variables to force offline/mock mode for AWS,
+// matching the configuration used in CI/CD.
 func CreateTerraformOptions(t *testing.T, modulePath string, vars map[string]interface{}, region string) *terraform.Options {
 	t.Helper()
 
@@ -97,10 +93,19 @@ func CreateTerraformOptions(t *testing.T, modulePath string, vars map[string]int
 		Vars:         vars,
 		NoColor:      true,
 		PlanFilePath: planFilePath,
-		// FIX: Use the provided region for environment variables to prevent region drift
+
+		// Centralized environment variables for offline testing.
+		// These prevent Terraform from attempting to contact real AWS STS/Metadata APIs.
 		EnvVars: map[string]string{
-			"AWS_DEFAULT_REGION": region,
-			"AWS_REGION":         region,
+			"AWS_DEFAULT_REGION":              region,
+			"AWS_REGION":                      region,
+			"AWS_ACCESS_KEY_ID":               "testing",
+			"AWS_SECRET_ACCESS_KEY":           "testing",
+			"AWS_SKIP_CREDENTIALS_VALIDATION": "true",
+			"AWS_SKIP_REQUESTING_ACCOUNT_ID":  "true",
+			"AWS_SKIP_METADATA_API_CHECK":     "true",
+			"AWS_SKIP_REGION_CHECK":           "true",
+			"AWS_EC2_METADATA_DISABLED":       "true",
 		},
 	}
 }
@@ -116,6 +121,7 @@ func VPCTestOptions(t *testing.T) *terraform.Options {
 	return CreateTerraformOptions(t, modulePath, map[string]interface{}{
 		"project_name": "drive-ops",
 		"env":          "test",
+		"account_id":   "123456789012",
 		"vpc_cidr":     "10.0.0.0/16",
 		"availability_zones": []string{
 			region + "a",
@@ -142,5 +148,65 @@ func SQSTestOptions(t *testing.T, queueName string) *terraform.Options {
 		"tags": map[string]string{
 			"Component": "test-queue",
 		},
+	}, region)
+}
+
+// SharedInfraTestOptions returns Terraform options configured for shared-infra module tests
+func SharedInfraTestOptions(t *testing.T) *terraform.Options {
+	t.Helper()
+	region := DefaultAWSRegion
+	modulePath := SetupTestModule(t, "shared-infra", region)
+
+	return CreateTerraformOptions(t, modulePath, map[string]interface{}{
+		"project_name": "drive-ops",
+		"env":          "test",
+		"cost_center":  "test",
+		"account_id":   "123456789012", // Dummy account ID for testing
+
+		"vpc_cidr":           "10.0.0.0/16",
+		"availability_zones": []string{"us-east-2a", "us-east-2b"},
+
+		// VPC Flow Logs
+		"enable_flow_logs":           false, // Disabled for tests
+		"flow_log_retention_in_days": 1,
+
+		// SQS settings
+		"enable_ha":         false,
+		"message_retention": 345600, // 4 days
+		"max_receive_count": 3,
+
+		"trip_created_visibility_timeout":    60,
+		"driver_assigned_visibility_timeout": 60,
+		"trip_completed_visibility_timeout":  60,
+
+		// --- NEW REQUIRED VARIABLE: Discord Webhook URL (Dummy value for validation) ---
+		"discord_webhook_url": "https://discord.com/api/webhooks/123456789/test-token",
+
+		// Variables added for module compatibility (ECR, RDS Secrets)
+		"github_repo":         "UA-4697-DevOps/drive-ops",
+		"db_identifier":       "drive-ops-test-db",
+		"rds_master_username": "test_admin",
+
+		"common_tags": map[string]string{
+			"Module": "shared-infra-test",
+			"Owner":  "DevOps Team",
+		},
+	}, region)
+}
+
+// SecretsTestOptions returns Terraform options configured for secrets module tests.
+func SecretsTestOptions(t *testing.T) *terraform.Options {
+	t.Helper()
+	region := DefaultAWSRegion
+	modulePath := SetupTestModule(t, "secrets", region)
+
+	return CreateTerraformOptions(t, modulePath, map[string]interface{}{
+		"project_name":        "drive-ops",
+		"env":                 "test",
+		"db_identifier":       "drive-ops-test-postgres",
+		"rds_master_username": "driveops_admin",
+
+		// --- NEW REQUIRED VARIABLE: Discord Webhook URL (Dummy value for validation) ---
+		"discord_webhook_url": "https://discord.com/api/webhooks/123456789/test-token",
 	}, region)
 }

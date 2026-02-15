@@ -1,35 +1,53 @@
 import os
+import sys
+from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
-# Try to read DATABASE_URL from environment
 raw_url = os.environ.get("DATABASE_URL")
-
 if not raw_url:
-    # Build DATABASE_URL from individual env vars (docker-compose passes these)
-    db_user = os.environ.get("DB_USER", "postgres")
-    db_password = os.environ.get("DB_PASSWORD", "postgres")
-    db_host = os.environ.get("DB_HOST", "localhost")
-    db_port = os.environ.get("DB_PORT", "5432")
-    db_name = os.environ.get("DRIVER_DB_NAME", "driver_db")
+    print("❌ DATABASE_URL must be set", file=sys.stderr)
+    sys.exit(1)
 
-    raw_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
-    print(f"✅ Built DATABASE_URL from env vars: postgresql://{db_user}:***@{db_host}:{db_port}/{db_name}")
+# SQLAlchemy async requires the postgresql+asyncpg:// driver prefix.
+# Normalise both "postgresql://" and "postgres://" (Heroku-style) variants,
+# and skip substitution if the driver is already present.
+if "+asyncpg" in raw_url:
+    DATABASE_URL = raw_url
+elif raw_url.startswith("postgresql://"):
+    DATABASE_URL = "postgresql+asyncpg://" + raw_url[len("postgresql://"):]
+elif raw_url.startswith("postgres://"):
+    DATABASE_URL = "postgresql+asyncpg://" + raw_url[len("postgres://"):]
 else:
-    print(f"✅ Using DATABASE_URL from environment")
+    print(f"❌ DATABASE_URL has an unsupported scheme: {raw_url.split('://')[0]}://", file=sys.stderr)
+    sys.exit(1)
 
-# Для асинхронної роботи SQLAlchemy потрібен драйвер +asyncpg
-DATABASE_URL = raw_url.replace("postgresql://", "postgresql+asyncpg://")
+# asyncpg does not accept the psycopg2-style 'sslmode' query parameter.
+# Strip it from the URL and map it to a connect_args ssl flag instead.
+_parsed = urlparse(DATABASE_URL)
+_qs = parse_qs(_parsed.query, keep_blank_values=True)
+_sslmode = _qs.pop("sslmode", [None])[0]
+_clean_url = urlunparse(_parsed._replace(query=urlencode({k: v[0] for k, v in _qs.items()})))
+DATABASE_URL = _clean_url
+
+_connect_args = {}
+if _sslmode and _sslmode != "disable":
+    # asyncpg ssl="require" encrypts the connection without verifying the
+    # server certificate, matching psycopg2's sslmode=require semantics.
+    # ssl=True would enforce full cert verification and fails against RDS
+    # which uses an AWS-managed CA not in Python's default trust store.
+    _connect_args["ssl"] = "require"
 
 try:
-    engine = create_async_engine(DATABASE_URL, echo=True)
+    engine = create_async_engine(DATABASE_URL, echo=True, connect_args=_connect_args)
     AsyncSessionLocal = async_sessionmaker(
-        bind=engine, 
-        class_=AsyncSession, 
+        bind=engine,
+        class_=AsyncSession,
         expire_on_commit=False
     )
 except Exception as e:
-    print(f"❌ Помилка ініціалізації бази даних: {e}")
+    print(f"❌ Database initialization error: {e}", file=sys.stderr)
     raise
+
 
 async def get_db():
     async with AsyncSessionLocal() as session:

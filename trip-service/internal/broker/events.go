@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,9 +22,10 @@ func BuildTripCreatedEvent(trip *domain.Trip, correlationID string) *domain.Trip
 
 	// Envelope Fields - Standardized for cross-service compatibility
 	event.EventID = uuid.New().String()
-	event.EventType = "trip.created" 
+	event.EventType = "trip.created"
 	event.EventVersion = "1.0"
-	event.CorrelationID = correlationID
+	// Standardize correlation ID format to `trip-{tripId}` while keeping JSON shape unchanged.
+	event.CorrelationID = fmt.Sprintf("trip-%s", correlationID)
 	event.Timestamp = time.Now().UTC()
 
 	// Payload Mapping

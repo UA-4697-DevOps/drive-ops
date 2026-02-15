@@ -22,8 +22,19 @@ logger = create_trip_request_logger()
 
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-TRIP_SERVICE_URL = os.getenv('TRIP_SERVICE_URL', 'http://localhost:8081')
-DRIVER_SERVICE_URL = os.getenv('DRIVER_SERVICE_URL', 'http://localhost:8082')
+TRIP_SERVICE_URL = os.getenv('TRIP_SERVICE_URL')
+DRIVER_SERVICE_URL = os.getenv('DRIVER_SERVICE_URL')
+
+_missing_vars = [
+    name for name, val in {
+        'BOT_TOKEN': BOT_TOKEN,
+        'TRIP_SERVICE_URL': TRIP_SERVICE_URL,
+        'DRIVER_SERVICE_URL': DRIVER_SERVICE_URL,
+    }.items()
+    if not val
+]
+if _missing_vars:
+    sys.exit(f"ERROR: Required environment variables not set: {', '.join(_missing_vars)}")
 # Parse HEALTH_CHECK_PORT with fallback to 8080 for invalid/missing values
 try:
     HEALTH_CHECK_PORT = int(os.getenv('HEALTH_CHECK_PORT', '8080'))
@@ -35,11 +46,6 @@ DEBUGGING = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
 logger.info("DEBUG env var: %s", os.getenv('DEBUG'), extra={'correlationId': 'STARTUP'})
 logger.info("DEBUGGING mode: %s", DEBUGGING, extra={'correlationId': 'STARTUP'})
 
-
-def ensure_bot_token():
-    if not BOT_TOKEN:
-        logger.error("BOT_TOKEN is not set in the environment or .env file.")
-        sys.exit("ERROR: BOT_TOKEN is not configured.")
 
 # Keep user_orders in memory for now (temporary state)
 user_orders = {}
@@ -1235,7 +1241,6 @@ async def run_telegram_bot(shutdown_event: asyncio.Event):
     Args:
         shutdown_event: Asyncio event signaled by main_async() on shutdown signal
     """
-    ensure_bot_token()
     # Suppress PTBUserWarning about mixing CallbackQueryHandler entry points
     warnings.filterwarnings(
         "ignore",
