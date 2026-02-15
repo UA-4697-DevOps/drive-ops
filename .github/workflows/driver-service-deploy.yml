@@ -294,8 +294,7 @@ jobs:
           echo ">>> Running health check against ${URL}..."
           for i in $(seq 1 $MAX_ATTEMPTS); do
             echo "  Attempt ${i}/${MAX_ATTEMPTS}..."
-            HTTP_CODE=$(curl -sf -o /tmp/health_body.json -w '%{http_code}' "${URL}" 2>/dev/null || echo "000")
-
+            HTTP_CODE=$(curl -s -o /tmp/health_body.json -w '%{http_code}' "${URL}" 2>/dev/null || echo "000")
             if [ "$HTTP_CODE" = "200" ]; then
               BODY=$(cat /tmp/health_body.json)
               echo ">>> Health check passed: ${BODY}"
@@ -303,7 +302,6 @@ jobs:
             else
               echo "  HTTP ${HTTP_CODE}"
             fi
-
             [ "$i" -lt "$MAX_ATTEMPTS" ] && sleep "$DELAY"
           done
 
@@ -476,7 +474,11 @@ jobs:
 
           # Extract tag from full image URI
           PREV_TAG="${PREV_IMAGE##*:}"
-          
+          if echo "$PREV_IMAGE" | grep -q '@sha256:'; then
+            echo "Previous image uses a digest reference — cannot extract a tag for rollback"
+            exit 1
+          fi          
+
           # Use SSM document for rollback
           SSM_DOC_NAME="Training-drive-ops-${{ env.DEPLOY_ENV }}-driver-service-deploy"
 
