@@ -12,7 +12,7 @@ from src.database import get_db
 from src.driver_models import Driver, BotUser
 from src.services.driver_repository import DriverRepository
 from src.services.bot_user_repository import BotUserRepository
-from src.schemas.driver_schemas import DriverCreate, DriverResponse
+from src.schemas.driver_schemas import DriverCreate, DriverResponse, LocationUpdate
 from src.schemas.bot_user_schemas import (
     BotUserCreate,
     BotUserUpdate,
@@ -247,21 +247,18 @@ async def update_driver_status(driver_id: UUID, is_active: bool, db: AsyncSessio
 
 
 @app.post("/drivers/{driver_id}/location", tags=["Drivers"], summary="Update driver GPS coordinates")
-async def update_driver_location(driver_id: UUID, lat: float, lng: float):
-    """
-    Updates the current location of the driver in memory.
-    Used for searching nearby drivers within a radius.
-    """
+async def update_driver_location(driver_id: UUID, location: LocationUpdate):
     drivers_storage = app.state.drivers_storage
     driver_key = str(driver_id)
 
-    if driver_key in drivers_storage:
-        drivers_storage[driver_key]["latitude"] = lat
-        drivers_storage[driver_key]["longitude"] = lng
-        logger.info(f"Driver {driver_id} location updated to {lat}, {lng}")
-        return {"status": "success", "driver_id": driver_id}
+    if driver_key not in drivers_storage:
+        raise HTTPException(status_code=404, detail="Driver not found in memory storage")
 
-    raise HTTPException(status_code=404, detail="Driver not found in memory storage")
+    drivers_storage[driver_key]["latitude"] = location.lat
+    drivers_storage[driver_key]["longitude"] = location.lng
+
+    logger.info(f"Driver {driver_id} location updated to {location.lat}, {location.lng}")
+    return {"status": "success", "driver_id": driver_id}
 
 
 @app.get("/drivers/{driver_id}/inspection", tags=["Drivers"], summary="Check vehicle inspection status")
@@ -272,7 +269,6 @@ async def get_driver_inspection(driver_id: UUID):
     """
     drivers_storage = app.state.drivers_storage
     driver_key = str(driver_id)
-
 
     if driver_key not in drivers_storage:
         raise HTTPException(status_code=404, detail="Driver not found in memory storage")
