@@ -1,4 +1,6 @@
+# ---------------------------------------------------------
 # Driver Service — Manual Deploy to AWS Dev
+# ---------------------------------------------------------
 # Deploys a specific image tag to the dev EC2 instance via
 # SSM Run Command, then validates health + SQS connectivity.
 # Rolls back automatically if post-deploy checks fail.
@@ -57,7 +59,9 @@ permissions:
   contents: read
 
 jobs:
+  # -------------------------------------------------------
   # 1. Resolve image tag and capture current (pre-deploy)
+  # -------------------------------------------------------
   prepare:
     name: Prepare Deployment
     runs-on: ubuntu-latest
@@ -189,7 +193,9 @@ jobs:
           echo "### 🔄 Previous image" >> "$GITHUB_STEP_SUMMARY"
           echo "Status: ${STATUS}" >> "$GITHUB_STEP_SUMMARY"
 
+  # -------------------------------------------------------
   # 2. Deploy — SSM Run Command using built-in SSM document
+  # -------------------------------------------------------
   deploy:
     name: Deploy to ${{ github.event.inputs.environment }}
     runs-on: ubuntu-latest
@@ -256,7 +262,9 @@ jobs:
             exit 1
           fi
 
+  # -------------------------------------------------------
   # 3. Verify — health check + SQS connectivity
+  # -------------------------------------------------------
   verify:
     name: Post-deploy Verification
     runs-on: ubuntu-latest
@@ -337,12 +345,13 @@ jobs:
             echo "$STDOUT" >> "$GITHUB_STEP_SUMMARY"
             echo "$STDERR" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
-            echo "Health check failed"
+            echo "::error::Health check failed"
             exit 1
           fi
 
       - name: SQS connectivity check
         id: sqs_check
+        continue-on-error: true
         run: |
           INSTANCE_ID="${{ needs.prepare.outputs.instance_id }}"
 
@@ -437,12 +446,14 @@ jobs:
             exit 1
           fi
 
-  # 4. Rollback — redeploy previous image if verify fails
+  # -------------------------------------------------------
+  # 4. Rollback — redeploy previous image if health fails
+  # -------------------------------------------------------
   rollback:
     name: Rollback
     runs-on: ubuntu-latest
     needs: [prepare, deploy, verify]
-    if: failure() && needs.deploy.result == 'success'
+    if: failure() && needs.deploy.result == 'success' && needs.verify.outputs.healthy == 'false'
     timeout-minutes: 10
     steps:
       - name: Configure AWS Credentials (OIDC)
