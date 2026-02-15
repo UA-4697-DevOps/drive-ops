@@ -246,37 +246,36 @@ async def update_driver_status(driver_id: UUID, is_active: bool, db: AsyncSessio
     return updated
 
 
-@app.post("/drivers/{driver_id}/location", tags=["Drivers"], summary="Оновлення GPS-координат водія")
+@app.post("/drivers/{driver_id}/location", tags=["Drivers"], summary="Update driver GPS coordinates")
 async def update_driver_location(driver_id: UUID, lat: float, lng: float):
-  """
-  Оновлює поточне місцезнаходження водія в пам'яті сервісу.
-  Використовується для пошуку найближчих водіїв у радіусі.
-  """
-  drivers_storage = app.state.drivers_storage
-  driver_key = str(driver_id)
+    """
+    Updates the current location of the driver in memory.
+    Used for searching nearby drivers within a radius.
+    """
+    drivers_storage = app.state.drivers_storage
+    driver_key = str(driver_id)
 
-  if driver_key in drivers_storage:
-    drivers_storage[driver_key]["latitude"] = lat
-    drivers_storage[driver_key]["longitude"] = lng
-    logger.info(f"Driver {driver_id} location updated to {lat}, {lng}")
-    return {"status": "success", "driver_id": driver_id}
+    if driver_key in drivers_storage:
+        drivers_storage[driver_key]["latitude"] = lat
+        drivers_storage[driver_key]["longitude"] = lng
+        logger.info(f"Driver {driver_id} location updated to {lat}, {lng}")
+        return {"status": "success", "driver_id": driver_id}
 
-  raise HTTPException(status_code=404, detail="Driver not found in memory storage")
+    raise HTTPException(status_code=404, detail="Driver not found in memory storage")
 
 
-@app.get("/drivers/{driver_id}/inspection", tags=["Drivers"], summary="Перевірка статусу техогляду")
+@app.get("/drivers/{driver_id}/inspection", tags=["Drivers"], summary="Check vehicle inspection status")
 async def get_driver_inspection(driver_id: UUID):
-  """
-  Повертає статус верифікації автомобіля та документів водія.
-  Необхідно для допуску до замовлень.
-  """
-  return {
-    "driver_id": driver_id,
-    "status": "approved",
-    "last_inspection_date": "2026-02-15",
-    "inspection_type": "annual"
-  }
-
+    """
+    Returns the vehicle verification and documents status for the driver.
+    Required for order eligibility.
+    """
+    return {
+        "driver_id": driver_id,
+        "status": "approved",
+        "last_inspection_date": "2026-02-15",
+        "inspection_type": "annual"
+    }
 
 # ========== BOT USERS MANAGEMENT ==========
 
