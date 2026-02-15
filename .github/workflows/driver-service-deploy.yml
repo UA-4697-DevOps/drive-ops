@@ -109,7 +109,7 @@ jobs:
                 TAG=$(aws ecr batch-get-image \
                   --repository-name "${{ env.ECR_REPOSITORY }}" \
                   --image-ids imageDigest="$IMAGE_DIGEST" \
-                  --query 'images[0].imageId.imageTag // images[0].imageId.imageDigest' \
+                  --query 'images[0].imageId.imageTag || images[0].imageId.imageDigest' \
                   --output text)
               fi
             fi
