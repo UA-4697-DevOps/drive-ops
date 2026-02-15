@@ -113,3 +113,10 @@ variable "rds_master_username" {
     error_message = "rds_master_username must be 1-16 characters, start with a letter, contain only alphanumeric characters and underscores, and not be a reserved word."
   }
 }
+
+variable "discord_webhook_url" {
+  description = "The Discord Webhook URL for alerting (passed from Terragrunt inputs)"
+  type        = string
+  sensitive   = true
+  default     = "https://discord.com/api/webhooks/PLACEHOLDER"
+}

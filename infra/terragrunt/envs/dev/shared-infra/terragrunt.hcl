@@ -17,7 +17,7 @@ locals {
 inputs = {
   # Global variables
   project_name = local.common_vars.project_name
-  env          = "dev"
+  env          = local.env_vars.env
   cost_center  = local.common_vars.cost_center
   account_id   = local.env_vars.account_id
 
@@ -44,7 +44,7 @@ inputs = {
 
   # --- RDS Secrets Configuration ---
   # These values are required for the secrets module to generate the master password
-  db_identifier       = "drive-ops-dev-db"
+  db_identifier       = "Training-${local.common_vars.project_name}-${local.env_vars.env}-db"
   rds_master_username = "drive_admin"
 
   # Common tags

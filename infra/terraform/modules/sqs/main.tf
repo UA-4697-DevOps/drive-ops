@@ -39,7 +39,6 @@ resource "aws_sqs_queue" "ha_queue" {
     maxReceiveCount     = var.max_receive_count
   })
 
-
   tags = merge(var.tags, {
     Project     = var.project_name
     Environment = var.env
@@ -68,7 +67,8 @@ resource "aws_sqs_queue" "dlq" {
 
 # IAM Policy for Consumers
 resource "aws_iam_policy" "consumer_policy" {
-  name        = "${var.queue_name}-consumer-policy-${var.env}"
+  # FIX: Added 'Training-' prefix to satisfy permission boundaries
+  name        = "Training-${var.queue_name}-consumer-policy-${var.env}"
   description = "Allow consuming messages from ${var.queue_name} queue"
 
   policy = jsonencode({
@@ -82,7 +82,11 @@ resource "aws_iam_policy" "consumer_policy" {
           "sqs:GetQueueAttributes",
           "sqs:ChangeMessageVisibility"
         ]
-        Resource = aws_sqs_queue.main_queue.arn
+        # FIX: Include HA queue in permissions if it exists
+        Resource = compact([
+          aws_sqs_queue.main_queue.arn,
+          length(aws_sqs_queue.ha_queue) > 0 ? aws_sqs_queue.ha_queue[0].arn : ""
+        ])
       }
     ]
   })
@@ -99,7 +103,8 @@ resource "aws_iam_policy" "consumer_policy" {
 
 # IAM Policy for Publishers
 resource "aws_iam_policy" "publisher_policy" {
-  name        = "${var.queue_name}-publisher-policy-${var.env}"
+  # FIX: Added 'Training-' prefix to satisfy permission boundaries
+  name        = "Training-${var.queue_name}-publisher-policy-${var.env}"
   description = "Allow publishing messages to ${var.queue_name} queue"
 
   policy = jsonencode({
@@ -111,7 +116,11 @@ resource "aws_iam_policy" "publisher_policy" {
           "sqs:SendMessage",
           "sqs:GetQueueUrl"
         ]
-        Resource = aws_sqs_queue.main_queue.arn
+        # FIX: Include HA queue in permissions if it exists
+        Resource = compact([
+          aws_sqs_queue.main_queue.arn,
+          length(aws_sqs_queue.ha_queue) > 0 ? aws_sqs_queue.ha_queue[0].arn : ""
+        ])
       }
     ]
   })
