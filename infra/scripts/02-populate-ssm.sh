@@ -8,6 +8,7 @@ set -euo pipefail
 # env config to SSM so the SSM deploy document can build .env files on EC2.
 #
 # Prerequisites:
+#   - 01-init-rds-schema.sh must have run successfully (databases must exist)
 #   - terragrunt apply done for shared-infra, rds, and all compute modules
 #   - aws CLI configured with sufficient permissions
 #   - BOT_TOKEN env var set (Telegram bot token)

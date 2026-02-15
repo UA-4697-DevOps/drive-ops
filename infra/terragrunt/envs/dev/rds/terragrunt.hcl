@@ -19,7 +19,7 @@ dependency "shared_infra" {
     rds_secret_arn     = "arn:aws:secretsmanager:us-east-2:123456789012:secret:mock-rds-secret"
   }
 
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
 }
 
 locals {

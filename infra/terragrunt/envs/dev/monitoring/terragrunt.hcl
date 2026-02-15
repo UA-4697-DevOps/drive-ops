@@ -14,6 +14,7 @@ locals {
 dependency "shared_infra" {
   config_path = "../shared-infra"
 
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
   mock_outputs = {
     sqs_names = {
       trip_created = "mock-trip-created"
@@ -24,6 +25,7 @@ dependency "shared_infra" {
 dependency "rds" {
   config_path = "../rds"
 
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
   mock_outputs = {
     db_instance_id = "mock-db-id"
   }

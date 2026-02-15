@@ -17,7 +17,7 @@ locals {
 dependency "shared_infra" {
   config_path = "../shared-infra"
 
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
   mock_outputs_merge_strategy_with_state  = "shallow"
 
   mock_outputs = {
@@ -41,7 +41,7 @@ dependency "shared_infra" {
 
 dependency "rds" {
   config_path                             = "../rds"
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init"]
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
   mock_outputs                            = {}
 }
 
