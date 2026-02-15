@@ -26,8 +26,8 @@ resource "aws_sns_topic_policy" "default" {
 # IAM policy document allowing CloudWatch to publish to the SNS topic
 data "aws_iam_policy_document" "sns_topic_policy" {
   statement {
-    actions   = ["SNS:Publish"]
-    effect    = "Allow"
+    actions = ["SNS:Publish"]
+    effect  = "Allow"
     principals {
       type        = "Service"
       identifiers = ["cloudwatch.amazonaws.com"]
@@ -51,9 +51,9 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
   threshold           = var.cpu_alarm_threshold
   alarm_description   = "RDS CPU > ${var.cpu_alarm_threshold}%"
   alarm_actions       = [aws_sns_topic.alerts.arn]
-  
+
   # Keeping OK actions for critical database recovery notifications
-  ok_actions          = [aws_sns_topic.alerts.arn]
+  ok_actions = [aws_sns_topic.alerts.arn]
 
   dimensions = { DBInstanceIdentifier = var.rds_instance_id }
 }
@@ -70,7 +70,7 @@ resource "aws_cloudwatch_metric_alarm" "sqs_old_messages" {
   statistic           = "Maximum"
   threshold           = var.sqs_delay_threshold
   alarm_actions       = [aws_sns_topic.alerts.arn]
-  
+
   # OK actions removed to reduce noise during system startup
   # ok_actions          = [aws_sns_topic.alerts.arn]
 
@@ -90,7 +90,7 @@ resource "aws_cloudwatch_metric_alarm" "ec2_cpu_high" {
   statistic           = "Average"
   threshold           = 85
   alarm_actions       = [aws_sns_topic.alerts.arn]
-  
+
   # OK actions removed to prevent alert storms for service recovery
   # ok_actions          = [aws_sns_topic.alerts.arn]
 
@@ -110,7 +110,7 @@ resource "aws_cloudwatch_metric_alarm" "ec2_status_check" {
   statistic           = "Maximum"
   threshold           = 0
   alarm_actions       = [aws_sns_topic.alerts.arn]
-  
+
   # Recovery notifications disabled for standard status checks
   # ok_actions          = [aws_sns_topic.alerts.arn]
 
