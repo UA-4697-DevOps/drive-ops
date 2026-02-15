@@ -161,6 +161,30 @@ resource "aws_iam_role_policy_attachment" "sqs_access" {
   policy_arn = aws_iam_policy.sqs_access[0].arn
 }
 
+# --- 5. RDS Discovery Access ---
+
+resource "aws_iam_policy" "rds_discovery" {
+  name        = "${var.name}-rds-discovery"
+  description = "Allow EC2 to discover RDS instance endpoints"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["rds:DescribeDBInstances"]
+        Resource = "*"
+      }
+    ]
+  })
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "rds_discovery" {
+  role       = aws_iam_role.ec2_ssm_role.name
+  policy_arn = aws_iam_policy.rds_discovery.arn
+}
+
 # --- State Migrations ---
 
 moved {
