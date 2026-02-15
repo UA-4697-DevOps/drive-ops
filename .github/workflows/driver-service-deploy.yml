@@ -111,7 +111,7 @@ jobs:
             fi
             
             if [ -z "$TAG" ] || [ "$TAG" = "None" ]; then
-              echo "::error::No images found in ECR repository ${{ env.ECR_REPOSITORY }}"
+              echo "No images found in ECR repository ${{ env.ECR_REPOSITORY }}"
               exit 1
             fi
           fi
@@ -127,7 +127,7 @@ jobs:
             --repository-name "${{ env.ECR_REPOSITORY }}" \
             --image-ids imageTag="${{ steps.resolve.outputs.image_tag }}" \
             > /dev/null 2>&1 \
-          || { echo "::error::Image tag ${{ steps.resolve.outputs.image_tag }} not found in ECR"; exit 1; }
+          || { echo "Image tag ${{ steps.resolve.outputs.image_tag }} not found in ECR"; exit 1; }
 
       - name: Find target EC2 instance
         id: instance
@@ -141,7 +141,7 @@ jobs:
             --output text)
 
           if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
-            echo "::error::No running EC2 instance found with tags Service=${{ env.SERVICE_NAME }}, Environment=${{ env.DEPLOY_ENV }}"
+            echo "No running EC2 instance found with tags Service=${{ env.SERVICE_NAME }}, Environment=${{ env.DEPLOY_ENV }}"
             exit 1
           fi
 
@@ -182,7 +182,7 @@ jobs:
               echo "previous_image=none" >> "$GITHUB_OUTPUT"
               ;;
             *)
-              echo "::error::Unexpected SSM invocation status: $STATUS"
+              echo "Unexpected SSM invocation status: $STATUS"
               exit 1
               ;;
           esac
@@ -252,7 +252,7 @@ jobs:
           fi
 
           if [ "$STATUS" != "Success" ]; then
-            echo "::error::SSM deploy command failed with status ${STATUS}"
+            echo "SSM deploy command failed with status ${STATUS}"
             exit 1
           fi
 
@@ -299,7 +299,7 @@ jobs:
             [ "$i" -lt "$MAX_ATTEMPTS" ] && sleep "$DELAY"
           done
 
-          echo "::error::Health check failed after ${MAX_ATTEMPTS} attempts"
+          echo "Health check failed after ${MAX_ATTEMPTS} attempts"
           exit 1
           HEALTH_EOF
 
@@ -337,7 +337,7 @@ jobs:
             echo "$STDOUT" >> "$GITHUB_STEP_SUMMARY"
             echo "$STDERR" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::Health check failed"
+            echo "Health check failed"
             exit 1
           fi
 
@@ -457,7 +457,7 @@ jobs:
           PREV_IMAGE="${{ needs.prepare.outputs.previous_image }}"
 
           if [ -z "$PREV_IMAGE" ] || [ "$PREV_IMAGE" = "none" ]; then
-            echo "::error::No previous image recorded — cannot rollback"
+            echo "No previous image recorded — cannot rollback"
             exit 1
           fi
 
@@ -500,7 +500,7 @@ jobs:
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             echo "$STDERR" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::Rollback failed — manual intervention required"
+            echo "Rollback failed — manual intervention required"
             exit 1
           fi
 
@@ -540,7 +540,7 @@ jobs:
             --query 'Status' --output text)
 
           if [ "$RESULT" != "Success" ]; then
-            echo "::error::Rollback health check failed — manual intervention required"
+            echo "Rollback health check failed — manual intervention required"
             exit 1
           fi
 
