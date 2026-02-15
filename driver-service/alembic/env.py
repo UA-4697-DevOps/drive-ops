@@ -34,11 +34,18 @@ if config.config_file_name is not None:
 
 
 def get_url():
-    """Отримує URL бази даних з оточення."""
+    """Отримує URL бази даних з оточення.
+
+    Alembic runs synchronously and requires psycopg2, not asyncpg.
+    Strip any async driver suffix so the URL uses the default psycopg2 dialect.
+    """
     url = os.getenv("DATABASE_URL")
     if not url:
         print("❌ DATABASE_URL must be set", file=sys.stderr)
         sys.exit(1)
+    # Normalise to synchronous psycopg2 dialect for Alembic
+    url = url.replace("postgresql+asyncpg://", "postgresql://")
+    url = url.replace("postgres+asyncpg://", "postgresql://")
     return url
 
 

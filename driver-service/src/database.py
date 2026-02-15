@@ -1,5 +1,6 @@
 import os
 import sys
+from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 raw_url = os.environ.get("DATABASE_URL")
@@ -20,8 +21,24 @@ else:
     print(f"❌ DATABASE_URL has an unsupported scheme: {raw_url.split('://')[0]}://", file=sys.stderr)
     sys.exit(1)
 
+# asyncpg does not accept the psycopg2-style 'sslmode' query parameter.
+# Strip it from the URL and map it to a connect_args ssl flag instead.
+_parsed = urlparse(DATABASE_URL)
+_qs = parse_qs(_parsed.query, keep_blank_values=True)
+_sslmode = _qs.pop("sslmode", [None])[0]
+_clean_url = urlunparse(_parsed._replace(query=urlencode({k: v[0] for k, v in _qs.items()})))
+DATABASE_URL = _clean_url
+
+_connect_args = {}
+if _sslmode and _sslmode != "disable":
+    # asyncpg ssl="require" encrypts the connection without verifying the
+    # server certificate, matching psycopg2's sslmode=require semantics.
+    # ssl=True would enforce full cert verification and fails against RDS
+    # which uses an AWS-managed CA not in Python's default trust store.
+    _connect_args["ssl"] = "require"
+
 try:
-    engine = create_async_engine(DATABASE_URL, echo=True)
+    engine = create_async_engine(DATABASE_URL, echo=True, connect_args=_connect_args)
     AsyncSessionLocal = async_sessionmaker(
         bind=engine,
         class_=AsyncSession,
