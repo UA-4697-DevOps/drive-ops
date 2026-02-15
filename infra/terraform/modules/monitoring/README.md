@@ -5,11 +5,9 @@ This module provides a centralized observability and notification system for the
 ## 🏗️ Architecture
 The monitoring stack consists of the following components:
 * **CloudWatch Log Groups**: Centralized storage for application and system logs.
-* **CloudWatch Alarms**: Monitors for critical resource metrics (RDS CPU, SQS message age, and ECS Service CPU).
+* **CloudWatch Alarms**: Monitors for critical resource metrics (RDS CPU, SQS message age, **EC2 Instance CPU**, and **System Status Checks**).
 * **SNS Topic**: A notification hub named `drive-ops-dev-alerts` that receives alarm state changes.
 * **Lambda Notifier**: A Python-based function that formats SNS messages and sends them to a Discord channel via a Webhook.
-
-
 
 ---
 

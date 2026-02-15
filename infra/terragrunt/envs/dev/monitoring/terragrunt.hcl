@@ -11,6 +11,8 @@ locals {
   env_vars    = yamldecode(file(find_in_parent_folders("env_vars.yaml")))
 }
 
+# --- Infrastructure Dependencies ---
+
 dependency "shared_infra" {
   config_path = "../shared-infra"
 
@@ -19,40 +21,57 @@ dependency "shared_infra" {
     sqs_names = {
       trip_created = "mock-trip-created"
     }
+    # NEW: Added mock for the secret ARN
+    discord_secret_arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:mock-discord"
   }
 }
 
 dependency "rds" {
-  config_path = "../rds"
-
+  config_path                             = "../rds"
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
   mock_outputs = {
     db_instance_id = "mock-db-id"
   }
 }
 
-#dependency "compute" {
-#  config_path = "../compute" 
-#  
-#  mock_outputs = {
-#    cluster_name = "mock-cluster"
-#  }
-#}
+# --- Compute Dependencies ---
+dependency "client_gateway" {
+  config_path                             = "../client-gateway"
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
+  mock_outputs                            = { instance_id = "i-mock-client-gateway" }
+}
+
+dependency "driver_service" {
+  config_path                             = "../driver-service"
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
+  mock_outputs                            = { instance_id = "i-mock-driver-service" }
+}
+
+dependency "trip_service" {
+  config_path                             = "../trip-service"
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
+  mock_outputs                            = { instance_id = "i-mock-trip-service" }
+}
+
+# --- Inputs ---
 
 inputs = {
-  # General Project Variables (matching VPC module)
+  # General Project Variables
   project_name = local.common_vars.project_name
   env          = local.env_vars.env
   account_id   = local.env_vars.account_id
 
-  # Monitoring Specifics
   service_names = ["client-gateway", "driver-service", "trip-service"]
 
-  # Infrastructure Dependencies
-  rds_instance_id  = dependency.rds.outputs.db_instance_id
-  sqs_queue_name   = dependency.shared_infra.outputs.sqs_names["trip_created"]
-  ecs_cluster_name = "tbd-cluster-name" # Placeholder until compute is ready
+  rds_instance_id = dependency.rds.outputs.db_instance_id
+  sqs_queue_name  = dependency.shared_infra.outputs.sqs_names["trip_created"]
 
-  # Secrets
-  discord_webhook_url = get_env("DISCORD_WEBHOOK_URL")
+  ec2_instances = {
+    "client-gateway" = dependency.client_gateway.outputs.instance_id
+    "driver-service" = dependency.driver_service.outputs.instance_id
+    "trip-service"   = dependency.trip_service.outputs.instance_id
+  }
+
+  # --- FIX: Pass the Secret ARN instead of raw URL env var ---
+  discord_webhook_secret_arn = dependency.shared_infra.outputs.discord_secret_arn
 }

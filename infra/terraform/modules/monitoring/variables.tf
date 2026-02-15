@@ -27,9 +27,10 @@ variable "rds_instance_id" {
   type        = string
 }
 
-variable "ecs_cluster_name" {
-  description = "The name of the ECS Cluster to monitor"
-  type        = string
+# --- UPDATED: Replaced ECS Cluster with EC2 Instances Map ---
+variable "ec2_instances" {
+  description = "Map of service names to EC2 Instance IDs for monitoring (e.g., { trip-service = 'i-0123456789abcdef0' })"
+  type        = map(string)
 }
 
 variable "sqs_queue_name" {
@@ -37,15 +38,9 @@ variable "sqs_queue_name" {
   type        = string
 }
 
-variable "discord_webhook_url" {
-  description = "The sensitive Discord Webhook URL for alerts"
+variable "discord_webhook_secret_arn" {
+  description = "The ARN of the Secrets Manager secret containing the Discord Webhook URL"
   type        = string
-  sensitive   = true
-
-  validation {
-    condition     = length(var.discord_webhook_url) > 0
-    error_message = "The discord_webhook_url variable cannot be empty. Did you forget to 'export DISCORD_WEBHOOK_URL=...'?"
-  }
 }
 
 # --- Alarm Thresholds & Settings ---
