@@ -134,6 +134,11 @@ docker run -p 8082:8082 --env-file .env driver-service
 ```
 
 ## API Documentation
+### Interactive Swagger UI (OAS 3.1)
+Для полегшення тестування та інтеграції, Driver Service надає самодокументований API:
+- **Локально**: [http://localhost:8082/docs](http://localhost:8082/docs)
+- **AWS Dev**: `http://<aws-dev-host>:8082/docs` (Доступно при `DEBUG=True`)
+- **OpenAPI Spec**: `/openapi.json`
 
 ### Endpoints
 
