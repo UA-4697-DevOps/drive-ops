@@ -1,17 +1,42 @@
 import urllib3
 import json
 import os
+import boto3
 
 # Initialize PoolManager outside the handler to reuse connections across executions
 http = urllib3.PoolManager()
-url = os.environ.get('DISCORD_WEBHOOK_URL')
+
+def get_secret(secret_arn):
+    """
+    Fetches the secret value from AWS Secrets Manager at runtime.
+    """
+    try:
+        client = boto3.client('secretsmanager')
+        response = client.get_secret_value(SecretId=secret_arn)
+        
+        # Parse the JSON string stored in Secrets Manager
+        secret_data = json.loads(response['SecretString'])
+        return secret_data.get('url')
+    except Exception as e:
+        print(f"ERROR: Failed to retrieve secret from Secrets Manager: {e}")
+        return None
 
 def lambda_handler(event, context):
     print(f"Received event: {json.dumps(event)}")
     
-    if not url:
-        print("ERROR: DISCORD_WEBHOOK_URL environment variable is missing.")
+    # Get the Secret ARN from environment variables
+    secret_arn = os.environ.get('DISCORD_SECRET_ARN')
+    
+    if not secret_arn:
+        print("ERROR: DISCORD_SECRET_ARN environment variable is missing.")
         return {"status": 400}
+
+    # Retrieve the actual Webhook URL from Secrets Manager
+    webhook_url = get_secret(secret_arn)
+    
+    if not webhook_url:
+        print("ERROR: Could not resolve Discord Webhook URL.")
+        return {"status": 500}
 
     try:
         # 1. Defensive Check: Ensure this is an SNS event
@@ -65,13 +90,12 @@ def lambda_handler(event, context):
         
         encoded_data = json.dumps(payload).encode('utf-8')
 
-        # --- CodeRabbitAI Improvements ---
         # Set timeouts: 5s to connect, 10s to read (prevents Lambda hanging)
         timeout = urllib3.Timeout(connect=5.0, read=10.0)
 
         resp = http.request(
             'POST', 
-            url, 
+            webhook_url, 
             body=encoded_data, 
             headers={'Content-Type': 'application/json'},
             timeout=timeout

@@ -93,7 +93,7 @@ func CreateTerraformOptions(t *testing.T, modulePath string, vars map[string]int
 		Vars:         vars,
 		NoColor:      true,
 		PlanFilePath: planFilePath,
-		
+
 		// Centralized environment variables for offline testing.
 		// These prevent Terraform from attempting to contact real AWS STS/Metadata APIs.
 		EnvVars: map[string]string{
@@ -179,6 +179,14 @@ func SharedInfraTestOptions(t *testing.T) *terraform.Options {
 		"driver_assigned_visibility_timeout": 60,
 		"trip_completed_visibility_timeout":  60,
 
+		// --- NEW REQUIRED VARIABLE: Discord Webhook URL (Dummy value for validation) ---
+		"discord_webhook_url": "https://discord.com/api/webhooks/123456789/test-token",
+
+		// Variables added for module compatibility (ECR, RDS Secrets)
+		"github_repo":         "UA-4697-DevOps/drive-ops",
+		"db_identifier":       "drive-ops-test-db",
+		"rds_master_username": "test_admin",
+
 		"common_tags": map[string]string{
 			"Module": "shared-infra-test",
 			"Owner":  "DevOps Team",
@@ -186,6 +194,7 @@ func SharedInfraTestOptions(t *testing.T) *terraform.Options {
 	}, region)
 }
 
+// SecretsTestOptions returns Terraform options configured for secrets module tests.
 func SecretsTestOptions(t *testing.T) *terraform.Options {
 	t.Helper()
 	region := DefaultAWSRegion
@@ -196,5 +205,8 @@ func SecretsTestOptions(t *testing.T) *terraform.Options {
 		"env":                 "test",
 		"db_identifier":       "drive-ops-test-postgres",
 		"rds_master_username": "driveops_admin",
+
+		// --- NEW REQUIRED VARIABLE: Discord Webhook URL (Dummy value for validation) ---
+		"discord_webhook_url": "https://discord.com/api/webhooks/123456789/test-token",
 	}, region)
 }

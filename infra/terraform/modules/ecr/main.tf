@@ -10,9 +10,9 @@ resource "aws_ecr_repository" "service_repository" {
 
 # --- IAM Role for GitHub Actions (Strict Main Branch Only) ---
 resource "aws_iam_role" "github_actions" {
-  name = "${var.repository_name}-github-actions-role"
+  # FIX: Added 'Training-' prefix to satisfy account permissions boundary
+  name = "Training-${var.repository_name}-github-actions-role"
 
-  # Satisfies environment constraints for restricted IAM creation
   permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
 
   assume_role_policy = jsonencode({
@@ -25,7 +25,6 @@ resource "aws_iam_role" "github_actions" {
           Federated = "arn:aws:iam::${var.account_id}:oidc-provider/token.actions.githubusercontent.com"
         }
         Condition = {
-          # MENTOR'S RULE: Only the main branch is authorized to assume this role
           StringEquals = {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
             "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:ref:refs/heads/main"
@@ -38,7 +37,8 @@ resource "aws_iam_role" "github_actions" {
 
 # 1. ECR Push Policy (Least Privilege for Docker images)
 resource "aws_iam_policy" "ecr_push_policy" {
-  name        = "${var.repository_name}-ecr-push-policy"
+  # FIX: Added 'Training-' prefix
+  name        = "Training-${var.repository_name}-ecr-push-policy"
   description = "Minimal permissions to push images to ${var.repository_name}"
 
   policy = jsonencode({
@@ -67,10 +67,9 @@ resource "aws_iam_policy" "ecr_push_policy" {
 }
 
 # --- 2. Terraform Backend Access Policy ---
-# Required permissions for successful pipeline execution in the main branch.
-# This allows Terraform to check the state file and locking table.
 resource "aws_iam_policy" "terraform_backend_policy" {
-  name        = "${var.repository_name}-terraform-backend-policy"
+  # FIX: Added 'Training-' prefix
+  name        = "Training-${var.repository_name}-terraform-backend-policy"
   description = "Permissions for GitHub Actions to manage Terraform State"
 
   policy = jsonencode({
@@ -100,7 +99,8 @@ resource "aws_iam_policy" "terraform_backend_policy" {
           "dynamodb:PutItem",
           "dynamodb:DeleteItem"
         ]
-        Resource = "arn:aws:dynamodb:*:*:table/drive-ops-dev-terraform-state-lock"
+        # FIX: Corrected table name suffix from '-state-lock' to '-locks' to match root.hcl
+        Resource = "arn:aws:dynamodb:*:*:table/drive-ops-dev-terraform-locks"
       }
     ]
   })

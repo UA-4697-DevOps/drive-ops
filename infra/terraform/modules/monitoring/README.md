@@ -5,11 +5,9 @@ This module provides a centralized observability and notification system for the
 ## 🏗️ Architecture
 The monitoring stack consists of the following components:
 * **CloudWatch Log Groups**: Centralized storage for application and system logs.
-* **CloudWatch Alarms**: Monitors for critical resource metrics (RDS CPU, SQS message age, and ECS Service CPU).
+* **CloudWatch Alarms**: Monitors for critical resource metrics (RDS CPU, SQS message age, **EC2 Instance CPU**, and **System Status Checks**).
 * **SNS Topic**: A notification hub named `drive-ops-dev-alerts` that receives alarm state changes.
 * **Lambda Notifier**: A Python-based function that formats SNS messages and sends them to a Discord channel via a Webhook.
-
-
 
 ---
 
@@ -45,12 +43,12 @@ aws cloudwatch set-alarm-state \
 This module is compliant with the `DevOpsBound` permissions boundary. 
 
 * **Naming Convention**: All IAM roles must start with the **`Training-`** prefix (e.g., `Training-drive-ops-dev-lambda-discord-role`) to satisfy `iam:PassRole` and `iam:CreateRole` restrictions.
-* **Secrets**: The Discord Webhook URL must be provided via the `DISCORD_WEBHOOK_URL` environment variable and is handled as a sensitive value.
+* **Secrets**: The Discord Webhook URL is securely retrieved from **AWS Secrets Manager** using the `discord_webhook_secret_arn` variable. This ensures that sensitive URLs are never exposed in plain text within environment variables or logs.
 
 ## 💰 Cost Optimization (Caution)
 
 To minimize AWS costs during the MVP phase, this module implements:
 
 * **Short Retention**: Log retention is set to **3 days** to stay within the CloudWatch Free Tier limits.
-* **Minimal Metrics**: Only essential health metrics (CPU and Queue Age) are monitored.
+* **Minimal Metrics**: Only essential health metrics (**CPU**, **Queue Age**, and **System Status Checks**) are monitored to keep costs low while ensuring high availability.
 * **Lambda Memory**: Restricted to **128MB** to minimize execution costs.

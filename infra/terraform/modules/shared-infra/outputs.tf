@@ -95,3 +95,8 @@ output "rds_secret_name" {
   description = "Friendly name of the RDS secret"
   value       = module.rds_secrets.rds_master_secret_name
 }
+
+output "discord_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing the Discord Webhook URL"
+  value       = module.rds_secrets.discord_secret_arn
+}

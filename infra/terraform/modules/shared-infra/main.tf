@@ -130,6 +130,7 @@ module "rds_secrets" {
   env                 = var.env
   db_identifier       = var.db_identifier
   rds_master_username = var.rds_master_username
+  discord_webhook_url = var.discord_webhook_url
 
   tags = merge(var.common_tags, {
     Component = "secrets-manager"

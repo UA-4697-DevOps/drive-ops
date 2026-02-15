@@ -12,3 +12,9 @@ output "rds_master_secret_id" {
   description = "ID of the Secrets Manager secret. Use this for referencing the secret in other Terraform resources."
   value       = aws_secretsmanager_secret.rds_credentials.id
 }
+
+# --- Discord Output (NEW) ---
+output "discord_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing the Discord Webhook URL"
+  value       = aws_secretsmanager_secret.discord_webhook.arn
+}
