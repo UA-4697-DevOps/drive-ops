@@ -52,10 +52,11 @@ dependency "rds" {
 # --- Inputs ---
 
 inputs = {
-  # Context - FIXED: Added Training- prefix to comply with Permissions Boundary
+  # Context
   name         = "Training-${local.common_vars.project_name}-${local.env_vars.env}-trip-service"
   project_name = local.common_vars.project_name
   env          = local.env_vars.env
+  service_name = "trip-service"
   account_id   = local.env_vars.account_id
 
   # EC2 Configuration

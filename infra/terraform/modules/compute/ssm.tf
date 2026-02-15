@@ -40,11 +40,11 @@ resource "aws_ssm_document" "deploy_service" {
           # Install jq if missing (required for parsing AWS CLI JSON output)
           "command -v jq >/dev/null 2>&1 || apt-get install -y jq",
 
-          # Get all parameters under /project/env/trip-service/
-          # jq transforms /drive-ops/dev/trip-service/db-host -> DB_HOST=value
+          # Get all parameters under /project/env/service-name/
+          # jq transforms /drive-ops/dev/driver-service/database-url -> DATABASE_URL=value
           # It splits by '/', takes the last part, uppercases it, and replaces hyphens with underscores
           "aws ssm get-parameters-by-path \\",
-          "  --path /${var.project_name}/${var.env}/trip-service/ \\",
+          "  --path /${var.project_name}/${var.env}/${var.service_name}/ \\",
           "  --recursive \\",
           "  --with-decryption \\",
           "  --query \"Parameters[*].{Name:Name,Value:Value}\" \\",

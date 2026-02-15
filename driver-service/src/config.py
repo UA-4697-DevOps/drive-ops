@@ -32,23 +32,24 @@ class Settings(BaseSettings):
     SQS_DRIVER_ASSIGNED_URL: Optional[str] = None
     SQS_TRIP_COMPLETED_URL: Optional[str] = None
 
+    # --- Client Gateway ---
+    CLIENT_GATEWAY_URL: Optional[str] = None
+    GATEWAY_TIMEOUT: int = 10
+
     @model_validator(mode="after")
-    def require_sqs_urls(self) -> "Settings":
+    def require_runtime_vars(self) -> "Settings":
         missing = [
             name for name, val in {
                 "SQS_TRIP_CREATED_URL": self.SQS_TRIP_CREATED_URL,
                 "SQS_DRIVER_ASSIGNED_URL": self.SQS_DRIVER_ASSIGNED_URL,
                 "SQS_TRIP_COMPLETED_URL": self.SQS_TRIP_COMPLETED_URL,
+                "CLIENT_GATEWAY_URL": self.CLIENT_GATEWAY_URL,
             }.items()
             if not val
         ]
         if missing:
-            raise ValueError(f"❌ Required SQS URLs not set: {', '.join(missing)}")
+            raise ValueError(f"❌ Required env vars not set: {', '.join(missing)}")
         return self
-    
-    # --- Client Gateway ---
-    CLIENT_GATEWAY_URL: str = "http://client-gateway:8080" 
-    GATEWAY_TIMEOUT: int = 10
     
     # --- Driver Business Logic Settings ---
     MAX_RETRY_ATTEMPTS: int = 3

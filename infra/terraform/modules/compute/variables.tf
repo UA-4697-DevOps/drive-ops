@@ -17,6 +17,12 @@ variable "env" {
   default     = null
 }
 
+variable "service_name" {
+  description = "Short service identifier for SSM Parameter Store path (e.g., trip-service, driver-service, client-gateway)"
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)
