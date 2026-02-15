@@ -47,6 +47,9 @@ inputs = {
   db_identifier       = "Training-${local.common_vars.project_name}-${local.env_vars.env}-db"
   rds_master_username = "drive_admin"
 
+  # --- Monitoring & Alerting (Discord) ---
+  discord_webhook_url = get_env("TF_VAR_discord_webhook_url")
+
   # Common tags
   common_tags = {
     Module      = "shared-infra"

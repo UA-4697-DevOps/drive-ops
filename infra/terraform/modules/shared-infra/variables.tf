@@ -114,9 +114,17 @@ variable "rds_master_username" {
   }
 }
 
+# --- Monitoring & Alerting ---
+
 variable "discord_webhook_url" {
-  description = "The Discord Webhook URL for alerting (passed from Terragrunt inputs)"
+  description = "The Discord Webhook URL for alerting (required input from Terragrunt)"
   type        = string
   sensitive   = true
-  default     = "https://discord.com/api/webhooks/PLACEHOLDER"
+  # FIX: Removed the PLACEHOLDER default to prevent invalid secrets.
+
+  validation {
+    # Ensures the URL matches the standard Discord webhook format and is not a placeholder.
+    condition     = can(regex("^https://discord\\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$", var.discord_webhook_url))
+    error_message = "The discord_webhook_url must be a valid Discord webhook URL. Placeholder values or empty strings are not permitted."
+  }
 }
