@@ -176,8 +176,10 @@ fi
 
 DRIVER_NAME="Training-${PROJECT}-${ENV}-driver-service"
 
-# Encode the migration script in base64 to avoid quoting issues in SSM
-DRIVER_MIGRATION_SCRIPT=$(base64 <<SCRIPT
+# Encode the migration script in base64 to avoid quoting issues in SSM.
+# Pipe through tr -d '\n' to produce a single-line string (macOS base64
+# wraps at 76 chars by default; Linux base64 -w0 is not portable).
+DRIVER_MIGRATION_SCRIPT=$(base64 <<SCRIPT | tr -d '\n'
 #!/bin/sh
 set -e
 ID=\$(sudo docker ps -q --filter name=${DRIVER_NAME})
