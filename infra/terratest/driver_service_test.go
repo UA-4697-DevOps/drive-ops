@@ -37,6 +37,10 @@ func TestDriverServiceInfra(t *testing.T) {
 		"common_tags": map[string]string{
 			"Test": "true",
 		},
+		"github_repo":         "UA-4697-DevOps/drive-ops",
+		"db_identifier":       "drive-ops-test-db",
+		"rds_master_username": "test_admin",
+		"discord_webhook_url": "https://discord.com/api/webhooks/123456789/test-token",
 	}, region)
 
 	planStruct := terraform.InitAndPlanAndShowWithStruct(t, terraformOptions)
