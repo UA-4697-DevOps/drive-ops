@@ -102,6 +102,10 @@ jobs:
     name: Terragrunt Validate
     runs-on: ubuntu-latest
     needs: terraform-fmt
+
+    env:
+      # This satisfies the regex validation in variables.tf without hardcoding it in HCL
+      TF_VAR_discord_webhook_url: "https://discord.com/api/webhooks/1234567890/mock-token-for-ci"
     
     # Permissions required for OIDC authentication
     permissions:
