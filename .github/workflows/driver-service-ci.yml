@@ -60,6 +60,44 @@ jobs:
       - name: Syntax check
         run: python -m compileall -q src
 
+  infra-tests:
+    name: Infrastructure Tests
+    runs-on: ubuntu-latest
+    env:
+      GO_VERSION: '1.25.6'
+      TERRAFORM_VERSION: '1.10.0'
+      TERRAGRUNT_VERSION: '0.68.0'
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: infra/terratest/go.sum
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Setup Terragrunt
+        run: |
+          curl -sL https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64 -o terragrunt
+          chmod +x terragrunt
+          sudo mv terragrunt /usr/local/bin/
+
+      - name: Run Driver Service Infra Tests
+        working-directory: infra/terratest
+        run: go test -v -timeout 10m -run TestDriverServiceInfra
+        env:
+          TG_SKIP_AWS_VALIDATION: "true"
+          AWS_ACCESS_KEY_ID: "testing"
+          AWS_SECRET_ACCESS_KEY: "testing"
+          AWS_DEFAULT_REGION: "us-east-2"
+
   docker:
     needs: test
     runs-on: ubuntu-latest
