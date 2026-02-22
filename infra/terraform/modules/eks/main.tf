@@ -104,6 +104,7 @@ resource "aws_security_group_rule" "nodes_ingress_cluster_443" {
 resource "aws_cloudwatch_log_group" "eks" {
   name              = "/aws/eks/${local.cluster_name}/cluster"
   retention_in_days = var.cluster_log_retention_in_days
+  kms_key_id        = aws_kms_key.eks_secrets.arn
   tags              = var.tags
 }
 
@@ -154,6 +155,25 @@ resource "aws_kms_key_policy" "eks_secrets" {
         ]
         Resource = "*"
       }
+      +      {
+        Sid    = "AllowCloudWatchLogs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${data.aws_region.current.name}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${data.aws_region.current.name}:${var.account_id}:*"
+          }
+        }
+      }
     ]
   })
 }
@@ -195,6 +215,7 @@ resource "aws_eks_cluster" "this" {
     aws_iam_role_policy_attachment.eks_vpc_resource_controller,
     aws_cloudwatch_log_group.eks,
     aws_kms_key.eks_secrets,
+    aws_kms_key_policy.eks_secrets,
   ]
 }
 
@@ -217,6 +238,7 @@ resource "aws_launch_template" "eks_nodes" {
       volume_size           = var.node_disk_size
       volume_type           = "gp3"
       delete_on_termination = true
+      encrypted             = true
     }
   }
 
