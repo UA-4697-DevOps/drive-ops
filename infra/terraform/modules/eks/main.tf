@@ -104,78 +104,7 @@ resource "aws_security_group_rule" "nodes_ingress_cluster_443" {
 resource "aws_cloudwatch_log_group" "eks" {
   name              = "/aws/eks/${local.cluster_name}/cluster"
   retention_in_days = var.cluster_log_retention_in_days
-  kms_key_id        = aws_kms_key.eks_secrets.arn
   tags              = var.tags
-}
-
-# ------------------------------------------------------------------------------
-# 4. KMS KEY FOR EKS SECRETS ENCRYPTION (Checkov CKV_AWS_58)
-# ------------------------------------------------------------------------------
-
-resource "aws_kms_key" "eks_secrets" {
-  description             = "KMS key for EKS envelope encryption of Kubernetes secrets"
-  deletion_window_in_days = 7
-  enable_key_rotation     = true
-  tags                    = var.tags
-}
-
-resource "aws_kms_alias" "eks_secrets" {
-  name          = "alias/${local.cluster_name}-eks-secrets"
-  target_key_id = aws_kms_key.eks_secrets.key_id
-}
-
-resource "aws_kms_key_policy" "eks_secrets" {
-  key_id = aws_kms_key.eks_secrets.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "EnableRootAccountAccess"
-        Effect = "Allow"
-        Principal = {
-          AWS = "arn:aws:iam::${var.account_id}:root"
-        }
-        Action   = "kms:*"
-        Resource = "*"
-      },
-      {
-        Sid    = "AllowEKSClusterRole"
-        Effect = "Allow"
-        Principal = {
-          AWS = aws_iam_role.eks_cluster.arn
-        }
-        Action = [
-          "kms:Encrypt",
-          "kms:Decrypt",
-          "kms:GenerateDataKey*",
-          "kms:DescribeKey",
-          "kms:ReEncrypt*",
-          "kms:CreateGrant"
-        ]
-        Resource = "*"
-      },
-      {
-        Sid    = "AllowCloudWatchLogs"
-        Effect = "Allow"
-        Principal = {
-          Service = "logs.${data.aws_region.current.name}.amazonaws.com"
-        }
-        Action = [
-          "kms:Encrypt",
-          "kms:Decrypt",
-          "kms:GenerateDataKey*",
-          "kms:DescribeKey"
-        ]
-        Resource = "*"
-        Condition = {
-          ArnLike = {
-            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${data.aws_region.current.name}:${var.account_id}:*"
-          }
-        }
-      }
-    ]
-  })
 }
 
 # ------------------------------------------------------------------------------
@@ -195,10 +124,10 @@ resource "aws_eks_cluster" "this" {
     public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
   }
 
-  # Envelope encryption for Kubernetes secrets (Checkov CKV_AWS_58)
+  # Envelope encryption for Kubernetes secrets
   encryption_config {
     provider {
-      key_arn = aws_kms_key.eks_secrets.arn
+      key_arn = "arn:aws:kms:${data.aws_region.current.name}:${var.account_id}:alias/aws/eks"
     }
     resources = ["secrets"]
   }
@@ -214,8 +143,6 @@ resource "aws_eks_cluster" "this" {
     aws_iam_role_policy_attachment.eks_cluster_policy,
     aws_iam_role_policy_attachment.eks_vpc_resource_controller,
     aws_cloudwatch_log_group.eks,
-    aws_kms_key.eks_secrets,
-    aws_kms_key_policy.eks_secrets,
   ]
 }
 
