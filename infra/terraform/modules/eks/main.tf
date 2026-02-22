@@ -104,11 +104,12 @@ resource "aws_security_group_rule" "nodes_ingress_cluster_443" {
 resource "aws_cloudwatch_log_group" "eks" {
   name              = "/aws/eks/${local.cluster_name}/cluster"
   retention_in_days = var.cluster_log_retention_in_days
+  kms_key_id        = var.kms_key_arn
   tags              = var.tags
 }
 
 # ------------------------------------------------------------------------------
-# 5. EKS CLUSTER
+# 4. EKS CLUSTER
 # ------------------------------------------------------------------------------
 
 resource "aws_eks_cluster" "this" {
@@ -124,12 +125,15 @@ resource "aws_eks_cluster" "this" {
     public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
   }
 
-  # Envelope encryption for Kubernetes secrets
-  encryption_config {
-    provider {
-      key_arn = "arn:aws:kms:${data.aws_region.current.name}:${var.account_id}:alias/aws/eks"
+  # Envelope encryption for Kubernetes secrets (only when a CMK ARN is supplied)
+  dynamic "encryption_config" {
+    for_each = var.kms_key_arn != null ? [var.kms_key_arn] : []
+    content {
+      provider {
+        key_arn = encryption_config.value
+      }
+      resources = ["secrets"]
     }
-    resources = ["secrets"]
   }
 
   enabled_cluster_log_types = var.enabled_cluster_log_types
@@ -138,7 +142,7 @@ resource "aws_eks_cluster" "this" {
     Name = local.cluster_name
   })
 
-  # Ensure IAM roles, log group, and KMS key are created before the cluster
+  # Ensure IAM roles and log group are created before the cluster
   depends_on = [
     aws_iam_role_policy_attachment.eks_cluster_policy,
     aws_iam_role_policy_attachment.eks_vpc_resource_controller,
@@ -147,7 +151,7 @@ resource "aws_eks_cluster" "this" {
 }
 
 # ------------------------------------------------------------------------------
-# 6. NODE LAUNCH TEMPLATE
+# 5. NODE LAUNCH TEMPLATE
 # ------------------------------------------------------------------------------
 
 resource "aws_launch_template" "eks_nodes" {
@@ -190,7 +194,7 @@ resource "aws_launch_template" "eks_nodes" {
 }
 
 # ------------------------------------------------------------------------------
-# 7. MANAGED NODE GROUP
+# 6. MANAGED NODE GROUP
 # ------------------------------------------------------------------------------
 
 resource "aws_eks_node_group" "default" {

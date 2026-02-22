@@ -109,6 +109,13 @@ variable "cluster_log_retention_in_days" {
   default     = 7
 }
 
+variable "kms_key_arn" {
+  description = "ARN of the customer-managed KMS key used to encrypt EKS secrets (encryption_config) and the CloudWatch log group. Set to null to disable envelope encryption."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 # --- Node Group Configuration ---
 
 variable "node_instance_types" {
