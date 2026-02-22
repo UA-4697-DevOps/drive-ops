@@ -157,11 +157,12 @@ resource "aws_launch_template" "eks_nodes" {
     }
   }
 
-  # IMDSv2 required; hop_limit=2 so pods inside containers can reach IMDS (needed for IRSA)
+  # IMDSv2 required; IRSA uses projected service account tokens, not instance IMDS.
+  # Reducing hop_limit to 1 prevents pods from reaching instance IMDS (Checkov CKV_AWS_341).
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
-    http_put_response_hop_limit = 2
+    http_put_response_hop_limit = 1
   }
 
   tag_specifications {
