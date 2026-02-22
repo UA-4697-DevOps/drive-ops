@@ -22,6 +22,9 @@ resource "aws_security_group" "eks_cluster" {
   })
 }
 
+# Allow unrestricted egress from cluster to reach AWS services and external APIs.
+# NOTE: This is an accepted trade-off for NAT-less/public-subnet deployments.
+# TODO: Migrate to private subnets with NAT gateway per #239 for egress control.
 resource "aws_security_group_rule" "cluster_egress" {
   type              = "egress"
   from_port         = 0
@@ -57,6 +60,9 @@ resource "aws_security_group" "eks_nodes" {
   })
 }
 
+# Allow unrestricted egress from nodes to reach AWS services, container registries, and external APIs.
+# NOTE: This is an accepted trade-off for NAT-less/public-subnet deployments.
+# TODO: Migrate to private subnets with NAT gateway per #239 for egress control.
 resource "aws_security_group_rule" "nodes_egress" {
   type              = "egress"
   from_port         = 0
@@ -117,6 +123,7 @@ resource "aws_eks_cluster" "this" {
   version  = var.cluster_version
   role_arn = aws_iam_role.eks_cluster.arn
 
+  # NOTE: Public API endpoint exposure is tracked in #239; restrict via cluster_endpoint_public_access_cidrs in production.
   vpc_config {
     subnet_ids              = local.cluster_subnet_ids
     security_group_ids      = [aws_security_group.eks_cluster.id]
@@ -220,7 +227,12 @@ resource "aws_eks_node_group" "default" {
   }
 
   update_config {
-    max_unavailable = 1
+    max_unavailable = var.node_update_max_unavailable
+  }
+
+  # Ignore changes to desired_size to prevent Terraform from overwriting autoscaler/Karpenter decisions.
+  lifecycle {
+    ignore_changes = [scaling_config[0].desired_size]
   }
 
   tags = merge(var.tags, {

@@ -86,9 +86,9 @@ variable "cluster_endpoint_public_access" {
 }
 
 variable "cluster_endpoint_public_access_cidrs" {
-  description = "List of CIDR blocks allowed to access the public EKS API endpoint. Only applies when cluster_endpoint_public_access is true. Restrict to known IPs (e.g., bastion/VPN) for production."
+  description = "List of CIDR blocks allowed to access the public EKS API endpoint. Only applies when cluster_endpoint_public_access is true. Restrict to known IPs (e.g., bastion/VPN) for production. Set to [] to disable public access; must be explicitly set for public access."
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = []
 }
 
 variable "cluster_endpoint_private_access" {
@@ -110,10 +110,15 @@ variable "cluster_log_retention_in_days" {
 }
 
 variable "kms_key_arn" {
-  description = "ARN of the customer-managed KMS key used to encrypt EKS secrets (encryption_config) and the CloudWatch log group. Set to null to disable envelope encryption."
+  description = "ARN of the customer-managed KMS key used to encrypt EKS secrets (encryption_config) and the CloudWatch log group. Set to null to disable envelope encryption. Must be a key ARN (arn:aws:kms:...), not an alias ARN."
   type        = string
   default     = null
   nullable    = true
+
+  validation {
+    condition     = var.kms_key_arn == null || (!can(regex(":alias/", var.kms_key_arn)) && can(regex("^arn:aws:kms:", var.kms_key_arn)))
+    error_message = "kms_key_arn must be a key ARN (e.g., arn:aws:kms:region:account:key/id), not an alias ARN (e.g., arn:aws:kms:region:account:alias/...). Set to null to disable encryption."
+  }
 }
 
 # --- Node Group Configuration ---
@@ -163,6 +168,11 @@ variable "node_ami_type" {
   description = "AMI type for EKS worker nodes (AL2023_x86_64_STANDARD, AL2_x86_64, etc.)"
   type        = string
   default     = "AL2023_x86_64_STANDARD"
+
+  validation {
+    condition     = contains(["AL2023_x86_64_STANDARD", "AL2023_ARM_64_STANDARD", "AL2023_x86_64_NEURON", "AL2023_x86_64_NVIDIA", "AL2023_ARM_64_NVIDIA", "AL2_x86_64", "AL2_x86_64_GPU", "AL2_ARM_64", "BOTTLEROCKET_ARM_64", "BOTTLEROCKET_x86", "WINDOWS_CORE_2022_x86_64", "WINDOWS_CORE_2025_x86_64", "WINDOWS_CORE_2025_x86_64_2004", "CUSTOM"], var.node_ami_type)
+    error_message = "Invalid node_ami_type: must be one of AL2023_x86_64_STANDARD, AL2023_ARM_64_STANDARD, AL2023_x86_64_NEURON, AL2023_x86_64_NVIDIA, AL2023_ARM_64_NVIDIA, AL2_x86_64, AL2_x86_64_GPU, AL2_ARM_64, BOTTLEROCKET_ARM_64, BOTTLEROCKET_x86, WINDOWS_CORE_2022_x86_64, WINDOWS_CORE_2025_x86_64, WINDOWS_CORE_2025_x86_64_2004, or CUSTOM."
+  }
 }
 
 variable "node_subnet_ids" {
@@ -175,4 +185,15 @@ variable "node_associate_public_ip_address" {
   description = "Assign a public IP to each worker node. Required when nodes are placed in public subnets in a NATless VPC."
   type        = bool
   default     = false
+}
+
+variable "node_update_max_unavailable" {
+  description = "Maximum number of worker nodes that can be unavailable during node group updates. Configurable to support different availability and update strategies."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.node_update_max_unavailable >= 1
+    error_message = "node_update_max_unavailable must be at least 1."
+  }
 }
