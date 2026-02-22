@@ -10,7 +10,7 @@ locals {
   node_group_name = "${local.cluster_name}-nodes"
 
   # Permissions boundary required by the DevOpsBound policy in this account
-  permissions_boundary = var.account_id != null ? "arn:aws:iam::${var.account_id}:policy/DevOpsBound" : null
+  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
 
   # All subnets (public + private) for EKS cluster networking
   cluster_subnet_ids = concat(var.public_subnet_ids, var.private_subnet_ids)

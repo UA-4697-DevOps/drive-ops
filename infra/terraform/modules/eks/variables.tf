@@ -27,6 +27,11 @@ variable "env" {
 variable "account_id" {
   description = "AWS Account ID (used for permissions boundary and IAM ARNs)"
   type        = string
+
+  validation {
+    condition     = can(regex("^\\d{12}$", var.account_id))
+    error_message = "account_id must be a non-empty 12-digit AWS account ID."
+  }
 }
 
 variable "tags" {
@@ -58,7 +63,7 @@ variable "public_subnet_ids" {
 variable "cluster_version" {
   description = "Kubernetes version for the EKS cluster"
   type        = string
-  default     = "1.31"
+  default     = "1.35"
 }
 
 variable "cluster_endpoint_public_access" {
