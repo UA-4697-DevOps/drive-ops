@@ -40,6 +40,12 @@ variable "tags" {
   default     = {}
 }
 
+variable "cluster_name_prefix" {
+  description = "Prefix for the EKS cluster name. Override to customise the naming convention."
+  type        = string
+  default     = "Training-"
+}
+
 # --- Networking ---
 
 variable "vpc_id" {
@@ -61,7 +67,14 @@ variable "public_subnet_ids" {
 # --- Cluster Configuration ---
 
 variable "cluster_version" {
-  description = "Kubernetes version for the EKS cluster"
+  description = <<-EOT
+    Kubernetes version for the EKS cluster.
+    NOTE (v1.35+): cgroup v1 is deprecated; nodes using cgroup v1 may fail to
+    start. AL2023 (the default AMI) uses cgroup v2, so no action is needed for
+    the default AMI. Custom AMIs must be migrated to cgroup v2 before upgrading.
+    Also consider evaluating a migration from Ingress NGINX (retired) to Gateway
+    API or an alternative ingress controller.
+  EOT
   type        = string
   default     = "1.35"
 }
@@ -70,6 +83,12 @@ variable "cluster_endpoint_public_access" {
   description = "Whether the EKS API endpoint is publicly accessible"
   type        = bool
   default     = true
+}
+
+variable "cluster_endpoint_public_access_cidrs" {
+  description = "List of CIDR blocks allowed to access the public EKS API endpoint. Only applies when cluster_endpoint_public_access is true. Restrict to known IPs (e.g., bastion/VPN) for production."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
 }
 
 variable "cluster_endpoint_private_access" {
@@ -81,7 +100,7 @@ variable "cluster_endpoint_private_access" {
 variable "enabled_cluster_log_types" {
   description = "List of EKS control plane log types to enable (api, audit, authenticator, controllerManager, scheduler)"
   type        = list(string)
-  default     = ["audit"]
+  default     = ["audit", "api", "authenticator"]
 }
 
 variable "cluster_log_retention_in_days" {

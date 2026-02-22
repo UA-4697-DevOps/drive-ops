@@ -69,6 +69,8 @@ resource "aws_security_group_rule" "nodes_egress" {
 
 resource "aws_security_group_rule" "nodes_internal" {
   type                     = "ingress"
+  from_port                = 0
+  to_port                  = 0
   protocol                 = "-1"
   source_security_group_id = aws_security_group.eks_nodes.id
   security_group_id        = aws_security_group.eks_nodes.id
@@ -106,7 +108,58 @@ resource "aws_cloudwatch_log_group" "eks" {
 }
 
 # ------------------------------------------------------------------------------
-# 4. EKS CLUSTER
+# 4. KMS KEY FOR EKS SECRETS ENCRYPTION (Checkov CKV_AWS_58)
+# ------------------------------------------------------------------------------
+
+resource "aws_kms_key" "eks_secrets" {
+  description             = "KMS key for EKS envelope encryption of Kubernetes secrets"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+  tags                    = var.tags
+}
+
+resource "aws_kms_alias" "eks_secrets" {
+  name          = "alias/${local.cluster_name}-eks-secrets"
+  target_key_id = aws_kms_key.eks_secrets.key_id
+}
+
+resource "aws_kms_key_policy" "eks_secrets" {
+  key_id = aws_kms_key.eks_secrets.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "EnableRootAccountAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${var.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowEKSClusterRole"
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_iam_role.eks_cluster.arn
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey",
+          "kms:ReEncrypt*",
+          "kms:CreateGrant"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# ------------------------------------------------------------------------------
+# 5. EKS CLUSTER
 # ------------------------------------------------------------------------------
 
 resource "aws_eks_cluster" "this" {
@@ -119,6 +172,15 @@ resource "aws_eks_cluster" "this" {
     security_group_ids      = [aws_security_group.eks_cluster.id]
     endpoint_public_access  = var.cluster_endpoint_public_access
     endpoint_private_access = var.cluster_endpoint_private_access
+    public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
+  }
+
+  # Envelope encryption for Kubernetes secrets (Checkov CKV_AWS_58)
+  encryption_config {
+    provider {
+      key_arn = aws_kms_key.eks_secrets.arn
+    }
+    resources = ["secrets"]
   }
 
   enabled_cluster_log_types = var.enabled_cluster_log_types
@@ -127,16 +189,17 @@ resource "aws_eks_cluster" "this" {
     Name = local.cluster_name
   })
 
-  # Ensure IAM roles and log group are created before the cluster
+  # Ensure IAM roles, log group, and KMS key are created before the cluster
   depends_on = [
     aws_iam_role_policy_attachment.eks_cluster_policy,
     aws_iam_role_policy_attachment.eks_vpc_resource_controller,
     aws_cloudwatch_log_group.eks,
+    aws_kms_key.eks_secrets,
   ]
 }
 
 # ------------------------------------------------------------------------------
-# 5. NODE LAUNCH TEMPLATE
+# 6. NODE LAUNCH TEMPLATE
 # ------------------------------------------------------------------------------
 
 resource "aws_launch_template" "eks_nodes" {
@@ -178,7 +241,7 @@ resource "aws_launch_template" "eks_nodes" {
 }
 
 # ------------------------------------------------------------------------------
-# 6. MANAGED NODE GROUP
+# 7. MANAGED NODE GROUP
 # ------------------------------------------------------------------------------
 
 resource "aws_eks_node_group" "default" {

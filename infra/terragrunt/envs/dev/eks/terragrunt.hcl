@@ -60,11 +60,12 @@ inputs = {
   public_subnet_ids  = dependency.shared_infra.outputs.public_subnet_ids
 
   # Cluster
-  cluster_version                 = "1.35"
-  cluster_endpoint_public_access  = true
-  cluster_endpoint_private_access = true
-  enabled_cluster_log_types       = ["audit"]
-  cluster_log_retention_in_days   = 7
+  cluster_version                        = "1.35"
+  cluster_endpoint_public_access         = true
+  cluster_endpoint_private_access        = true
+  cluster_endpoint_public_access_cidrs   = ["0.0.0.0/0"] # TODO: restrict to bastion/VPN CIDRs after next task
+  enabled_cluster_log_types              = ["audit", "api", "authenticator"]
+  cluster_log_retention_in_days          = 7
 
   # Node Group
   node_instance_types = ["t3.small"]

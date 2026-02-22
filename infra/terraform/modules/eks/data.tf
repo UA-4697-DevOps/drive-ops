@@ -6,7 +6,7 @@ data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
 locals {
-  cluster_name    = "Training-${var.project_name}-${var.env}-eks"
+  cluster_name    = "${var.cluster_name_prefix}${var.project_name}-${var.env}-eks"
   node_group_name = "${local.cluster_name}-nodes"
 
   # Permissions boundary required by the DevOpsBound policy in this account
