@@ -121,32 +121,39 @@ func TestVPCSubnetCIDRAllocation(t *testing.T) {
 	assert.Equal(t, 2, privateSubnets, "Should have 2 private subnets")
 }
 
-// TestVPCPrivateSubnetIsolation validates that private subnets have no direct internet route.
+// TestVPCPrivateSubnetIsolation validates that private subnets have no DIRECT internet route.
+// When NAT Gateway is enabled, a route to 0.0.0.0/0 via NAT GW is acceptable (not via IGW).
 func TestVPCPrivateSubnetIsolation(t *testing.T) {
-	t.Parallel()
+    t.Parallel()
 
-	terraformOptions := VPCTestOptions(t)
+    terraformOptions := VPCTestOptions(t)
 
-	planStruct := terraform.InitAndPlanAndShowWithStruct(t, terraformOptions)
-	require.NotNil(t, planStruct.RawPlan.PlannedValues)
+    planStruct := terraform.InitAndPlanAndShowWithStruct(t, terraformOptions)
+    require.NotNil(t, planStruct.RawPlan.PlannedValues)
 
-	// Find the private route table and verify it has no internet gateway route
-	for _, resource := range planStruct.RawPlan.PlannedValues.RootModule.Resources {
-		if resource.Type == "aws_route_table" && resource.Name == "private" {
-			values := resource.AttributeValues
+    // Find the private route table and verify it has no internet gateway route
+    for _, resource := range planStruct.RawPlan.PlannedValues.RootModule.Resources {
+        if resource.Type == "aws_route" && resource.Name == "private_nat" {
+            // NAT route is acceptable — it goes through NAT GW, not IGW
+            continue
+        }
+        if resource.Type == "aws_route_table" && resource.Name == "private" {
+            values := resource.AttributeValues
 
-			// Private route table should not have any routes to 0.0.0.0/0
-			routes, ok := values["route"].([]interface{})
-			if ok {
-				for _, route := range routes {
-					routeMap, ok := route.(map[string]interface{})
-					if ok {
-						cidr := routeMap["cidr_block"]
-						assert.NotEqual(t, "0.0.0.0/0", cidr,
-							"Private route table should not have a route to 0.0.0.0/0")
-					}
-				}
-			}
-		}
-	}
+            routes, ok := values["route"].([]interface{})
+            if ok {
+                for _, route := range routes {
+                    routeMap, ok := route.(map[string]interface{})
+                    if ok {
+                        // Ensure no INLINE route to IGW exists
+                        if gw, hasGW := routeMap["gateway_id"]; hasGW && gw != "" {
+                            cidr := routeMap["cidr_block"]
+                            assert.NotEqual(t, "0.0.0.0/0", cidr,
+                                "Private route table should not have a direct IGW route to 0.0.0.0/0")
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

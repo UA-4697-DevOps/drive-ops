@@ -41,3 +41,10 @@ variable "account_id" {
   description = "The AWS Account ID"
   type        = string
 }
+
+
+variable "enable_nat_gateway" {
+  description = "Whether to create a NAT Gateway for private subnet internet access."
+  type        = bool
+  default     = false
+}

@@ -29,6 +29,9 @@ inputs = {
   enable_flow_logs           = true
   flow_log_retention_in_days = 3
 
+  #NAT Gateway
+  enable_nat_gateway = true
+
   # SQS settings
   enable_ha         = false
   message_retention = 345600

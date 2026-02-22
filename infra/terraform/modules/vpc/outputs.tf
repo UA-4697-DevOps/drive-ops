@@ -22,3 +22,13 @@ output "sg_db_id" {
   description = "The ID of the security group for database workloads"
   value       = aws_security_group.db.id
 }
+
+output "nat_gateway_id" {
+  description = "The ID of the NAT Gateway (null if disabled)"
+  value       = var.enable_nat_gateway ? aws_nat_gateway.nat[0].id : null
+}
+
+output "nat_gateway_public_ip" {
+  description = "The public IP address of the NAT Gateway (null if disabled)"
+  value       = var.enable_nat_gateway ? aws_eip.nat[0].public_ip : null
+}
