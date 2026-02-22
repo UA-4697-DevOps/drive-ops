@@ -154,8 +154,8 @@ resource "aws_kms_key_policy" "eks_secrets" {
           "kms:CreateGrant"
         ]
         Resource = "*"
-      }
-      +      {
+      },
+      {
         Sid    = "AllowCloudWatchLogs"
         Effect = "Allow"
         Principal = {
