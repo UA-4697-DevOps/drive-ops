@@ -5,7 +5,9 @@ metadata:
   labels:
     {{- include "driver-service.labels" . | nindent 4 }}
 spec:
+  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
       app: {{ include "driver-service.name" . }}
@@ -15,12 +17,24 @@ spec:
         app: {{ include "driver-service.name" . }}
     spec:
       serviceAccountName: {{ include "driver-service.name" . }}-sa
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
         - name: {{ include "driver-service.name" . }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsUser: 10001
+            capabilities:
+              drop:
+                - ALL
+
           env:
             - name: PYTHONUNBUFFERED
               value: "1"
@@ -56,6 +70,7 @@ spec:
                 configMapKeyRef:
                   name: {{ include "driver-service.name" . }}-config
                   key: client-gateway-url
+
           resources:
             requests:
               cpu: {{ .Values.resources.requests.cpu }}
@@ -63,6 +78,7 @@ spec:
             limits:
               cpu: {{ .Values.resources.limits.cpu }}
               memory: {{ .Values.resources.limits.memory }}
+
           livenessProbe:
             httpGet:
               path: /health
@@ -70,6 +86,7 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 15
             failureThreshold: 3
+
           readinessProbe:
             httpGet:
               path: /health

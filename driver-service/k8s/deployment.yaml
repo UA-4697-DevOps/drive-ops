@@ -18,14 +18,29 @@ spec:
         version: "1.0.0"
     spec:
       serviceAccountName: driver-service-sa
-      imagePullSecrets:
-        - name: ecr-registry-helper
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
         - name: driver-service
           image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/driver-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8082
+          securityContext:
+            runAsUser: 10001
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
           env:
             - name: PYTHONUNBUFFERED
               value: "1"
@@ -61,6 +76,7 @@ spec:
                 configMapKeyRef:
                   name: driver-service-config
                   key: client-gateway-url
+
           resources:
             requests:
               cpu: 100m
@@ -68,6 +84,11 @@ spec:
             limits:
               cpu: 300m
               memory: 512Mi
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
           livenessProbe:
             httpGet:
               path: /health
@@ -75,6 +96,7 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 15
             failureThreshold: 3
+
           readinessProbe:
             httpGet:
               path: /health
@@ -82,3 +104,7 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
             failureThreshold: 3
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
