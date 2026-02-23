@@ -1,0 +1,21 @@
+replicaCount: 2
+
+image:
+  tag: v1.0.0
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+gateway:
+  url: "http://client-gateway.prod.svc.cluster.local:8080"
