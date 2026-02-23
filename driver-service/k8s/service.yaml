@@ -10,6 +10,6 @@ spec:
     app: driver-service
   ports:
     - protocol: TCP
-      port: 82
+      port: 80
       targetPort: 8082
   type: ClusterIP

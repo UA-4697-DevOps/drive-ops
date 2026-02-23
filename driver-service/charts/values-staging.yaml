@@ -16,3 +16,11 @@ autoscaling:
 
 gateway:
   url: "http://client-gateway.staging.svc.cluster.local:8080"
+
+sqs:
+  tripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/<ACCOUNT_ID>/trip-created-staging.fifo"
+  driverAssignedUrl: "https://sqs.us-east-2.amazonaws.com/<ACCOUNT_ID>/driver-assigned-staging.fifo"
+  tripCompletedUrl: "https://sqs.us-east-2.amazonaws.com/<ACCOUNT_ID>/trip-completed-staging.fifo"
+
+database:
+  url: ""  # Inject at deploy time via --set or external secrets
