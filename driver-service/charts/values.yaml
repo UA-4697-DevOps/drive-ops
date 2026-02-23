@@ -1,0 +1,42 @@
+replicaCount: 1
+
+image:
+  repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/driver-service
+  tag: latest
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8082
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 300m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+serviceAccount:
+  iamRoleArn: arn:aws:iam::969283154407:role/driver-service-role
+
+aws:
+  region: us-east-2
+
+sqs:
+  tripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-dev.fifo"
+  driverAssignedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-dev.fifo"
+  tripCompletedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-dev.fifo"
+
+gateway:
+  url: "http://client-gateway.dev.svc.cluster.local:8080"
+
+database:
+  url: ""

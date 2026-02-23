@@ -1,0 +1,18 @@
+replicaCount: 2
+
+image:
+  tag: staging
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 300m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+
+gateway:
+  url: "http://client-gateway.staging.svc.cluster.local:8080"
