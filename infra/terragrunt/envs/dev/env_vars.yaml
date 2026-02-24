@@ -9,7 +9,7 @@ account_id: "969283154407"
 enable_ha: false
 
 # Enable OpenVPN on the bastion host (set to false to save costs in dev)
-# Override with TG_VAR_OPENVPN_ENABLED or .env_vars.local.yaml for production-like deployments
+# Override with TG_VAR_ENABLE_OPENVPN or .env_vars.local.yaml for production-like deployments
 enable_openvpn: false
 
 # Environment-specific tags

@@ -41,15 +41,21 @@ resource "aws_security_group_rule" "openvpn_ingress" {
   description       = "OpenVPN from allowlisted CIDRs"
 }
 
-# --- Egress: all outbound ---
+# --- Egress: restricted outbound (configurable) ---
+
+locals {
+  _cidr_blocks = length(var.egress_allowed_cidrs) > 0 ? var.egress_allowed_cidrs : (var.vpc_cidr != "" ? [var.vpc_cidr] : ["0.0.0.0/0"])
+  _ipv6_blocks = length(var.egress_allowed_ipv6) > 0 ? var.egress_allowed_ipv6 : []
+}
 
 resource "aws_security_group_rule" "all_egress" {
   type              = "egress"
   from_port         = 0
   to_port           = 0
   protocol          = "-1"
-  cidr_blocks       = ["0.0.0.0/0"]
-  ipv6_cidr_blocks  = ["::/0"]
+  cidr_blocks       = local._cidr_blocks
+  ipv6_cidr_blocks  = local._ipv6_blocks
+  prefix_list_ids   = var.egress_allowed_prefix_list_ids
   security_group_id = aws_security_group.bastion.id
-  description       = "All outbound traffic (IPv4 and IPv6)"
+  description       = "Outbound traffic allowed to configured CIDRs / prefix lists"
 }

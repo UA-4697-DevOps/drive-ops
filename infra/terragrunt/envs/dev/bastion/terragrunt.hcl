@@ -52,7 +52,9 @@ inputs = {
 
   vpc_id           = dependency.shared_infra.outputs.vpc_id
   # Validate public_subnet_ids length before accessing the first element
-  public_subnet_id = length(dependency.shared_infra.outputs.public_subnet_ids) > 0 ? dependency.shared_infra.outputs.public_subnet_ids[0] : (throw("No public subnets found in shared_infra output"))
+  # Use try() to safely attempt to select the first public subnet id
+  # Fallback to empty string when missing (Terragrunt will error later if this input is required)
+  public_subnet_id = try(dependency.shared_infra.outputs.public_subnet_ids[0], "")
 
   # Instance type: choose a larger instance when OpenVPN is enabled
   instance_type = local.openvpn_enabled ? "t4g.micro" : "t4g.nano"

@@ -145,14 +145,49 @@ func TestVPCPrivateSubnetIsolation(t *testing.T) {
                 for _, route := range routes {
                     routeMap, ok := route.(map[string]interface{})
                     if ok {
-                        // Ensure no INLINE route to IGW exists
-                        if gw, hasGW := routeMap["gateway_id"]; hasGW {
-                            if gwStr, ok := gw.(string); ok && gwStr != "" {
-                                cidr := routeMap["cidr_block"]
-                                assert.NotEqual(t, "0.0.0.0/0", cidr,
-                                    "Private route table should not have a direct IGW route to 0.0.0.0/0")
-                            }
-                        }
+						// Ensure no INLINE route to IGW exists. Treat computed/unknown values
+						// (Terraform plan after_unknown maps) as presence of a gateway so they
+						// cannot bypass the assertion.
+						if gw, hasGW := routeMap["gateway_id"]; hasGW {
+							gwPresent := false
+							switch v := gw.(type) {
+							case string:
+								if v != "" {
+									gwPresent = true
+								}
+							case map[string]interface{}:
+								// A non-empty map indicates a computed/unknown value (after_unknown)
+								if len(v) > 0 {
+									gwPresent = true
+								}
+							default:
+								// Any other non-nil value indicates presence
+								if v != nil {
+									gwPresent = true
+								}
+							}
+
+							if gwPresent {
+								// Coerce cidr_block to a comparable string before asserting
+								cidrStr := ""
+								if s, ok := routeMap["cidr_block"].(string); ok {
+									cidrStr = s
+								} else if m, ok := routeMap["cidr_block"].(map[string]interface{}); ok {
+									// If plan shows after_unknown, treat as non-equal to 0.0.0.0/0
+									if au, hasAU := m["after_unknown"]; hasAU {
+										if auBool, ok := au.(bool); ok && auBool {
+											cidrStr = "<after_unknown>"
+										}
+									}
+									if cidrStr == "" {
+										cidrStr = "<computed>"
+									}
+								}
+
+								assert.NotEqual(t, "0.0.0.0/0", cidrStr,
+									"Private route table should not have a direct IGW route to 0.0.0.0/0")
+							}
+						}
                     }
                 }
             }

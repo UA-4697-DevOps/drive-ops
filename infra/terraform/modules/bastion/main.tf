@@ -371,6 +371,12 @@ CLIENTEOF
     Name = "${var.project_name}-${var.env}-bastion"
   })
 
+  depends_on = [
+    aws_iam_role_policy.bastion_secrets,
+    aws_iam_role_policy_attachment.bastion_ssm,
+    aws_iam_instance_profile.bastion,
+  ]
+
   lifecycle {
     ignore_changes = [ami]
   }
