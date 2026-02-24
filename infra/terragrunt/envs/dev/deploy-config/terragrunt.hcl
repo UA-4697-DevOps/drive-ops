@@ -68,25 +68,55 @@ dependency "ec2" {
 # provided by root.hcl's global inputs block — no need to redeclare them.
 
 inputs = {
-  # Database config (wired from RDS module outputs)
-  db_host = dependency.rds.outputs.db_address
-  db_port = dependency.rds.outputs.db_port
-  db_name = dependency.rds.outputs.db_name
-  db_user = dependency.rds.outputs.db_username
+  # --- SSM Parameters (single map drives all aws_ssm_parameter resources) ---
+  ssm_parameters = {
+    "trip-service/db-host" = {
+      description = "RDS endpoint hostname for TripService"
+      type        = "String"
+      value       = dependency.rds.outputs.db_address
+    }
+    "trip-service/db-port" = {
+      description = "RDS port for TripService"
+      type        = "String"
+      value       = tostring(dependency.rds.outputs.db_port)
+    }
+    "trip-service/db-name" = {
+      description = "Database name for TripService"
+      type        = "String"
+      value       = dependency.rds.outputs.db_name
+    }
+    "trip-service/db-user" = {
+      description = "Database username for TripService"
+      type        = "SecureString"
+      value       = dependency.rds.outputs.db_username
+    }
+    "sqs/trip-created-url" = {
+      description = "SQS FIFO queue URL for trip-created events"
+      type        = "String"
+      value       = dependency.shared_infra.outputs.sqs_urls.trip_created
+    }
+    "sqs/driver-assigned-url" = {
+      description = "SQS FIFO queue URL for driver-assigned events"
+      type        = "String"
+      value       = dependency.shared_infra.outputs.sqs_urls.driver_assigned
+    }
+    "sqs/trip-completed-url" = {
+      description = "SQS FIFO queue URL for trip-completed events"
+      type        = "String"
+      value       = dependency.shared_infra.outputs.sqs_urls.trip_completed
+    }
+    "infra/ec2-instance-id" = {
+      description = "EC2 instance ID for SSM Run Command targeting"
+      type        = "String"
+      value       = dependency.ec2.outputs.instance_id
+    }
+  }
 
-  # RDS secret ARN (from secrets module)
-  rds_secret_arn = dependency.secrets.outputs.rds_master_secret_arn
-
-  # SQS queue URLs (from shared-infra module)
-  sqs_trip_created_url    = dependency.shared_infra.outputs.sqs_urls.trip_created
-  sqs_driver_assigned_url = dependency.shared_infra.outputs.sqs_urls.driver_assigned
-  sqs_trip_completed_url  = dependency.shared_infra.outputs.sqs_urls.trip_completed
-
-  # ECR / GitHub Actions role (from shared-infra ECR outputs)
+  # --- IAM / Deploy Configuration ---
+  rds_secret_arn           = dependency.secrets.outputs.rds_master_secret_arn
   service_name             = "trip-service"
   repository_name          = "trip-service"
   ecr_repo_arn             = dependency.shared_infra.outputs.ecr_repository_arns.trip_service
   github_actions_role_name = dependency.shared_infra.outputs.ecr_iam_role_names.trip_service
-
-  ec2_instance_id = dependency.ec2.outputs.instance_id
+  ec2_instance_id          = dependency.ec2.outputs.instance_id
 }

@@ -1,77 +1,12 @@
-# --- SSM Parameters: Database Configuration ---
+# --- SSM Parameters (created via for_each from input map) ---
 
-resource "aws_ssm_parameter" "db_host" {
-  name        = "/${var.project_name}/${var.env}/trip-service/db-host"
-  description = "RDS endpoint hostname for TripService"
-  type        = "String"
-  value       = var.db_host
+resource "aws_ssm_parameter" "this" {
+  for_each = var.ssm_parameters
 
-  tags = var.tags
-}
-
-resource "aws_ssm_parameter" "db_port" {
-  name        = "/${var.project_name}/${var.env}/trip-service/db-port"
-  description = "RDS port for TripService"
-  type        = "String"
-  value       = tostring(var.db_port)
-
-  tags = var.tags
-}
-
-resource "aws_ssm_parameter" "db_name" {
-  name        = "/${var.project_name}/${var.env}/trip-service/db-name"
-  description = "Database name for TripService"
-  type        = "String"
-  value       = var.db_name
-
-  tags = var.tags
-}
-
-resource "aws_ssm_parameter" "db_user" {
-  name        = "/${var.project_name}/${var.env}/trip-service/db-user"
-  description = "Database username for TripService"
-  type        = "SecureString"
-  value       = var.db_user
-
-  tags = var.tags
-}
-
-# --- SSM Parameters: SQS Queue URLs ---
-
-resource "aws_ssm_parameter" "sqs_trip_created_url" {
-  name        = "/${var.project_name}/${var.env}/sqs/trip-created-url"
-  description = "SQS FIFO queue URL for trip-created events"
-  type        = "String"
-  value       = var.sqs_trip_created_url
-
-  tags = var.tags
-}
-
-resource "aws_ssm_parameter" "sqs_driver_assigned_url" {
-  name        = "/${var.project_name}/${var.env}/sqs/driver-assigned-url"
-  description = "SQS FIFO queue URL for driver-assigned events"
-  type        = "String"
-  value       = var.sqs_driver_assigned_url
-
-  tags = var.tags
-}
-
-resource "aws_ssm_parameter" "sqs_trip_completed_url" {
-  name        = "/${var.project_name}/${var.env}/sqs/trip-completed-url"
-  description = "SQS FIFO queue URL for trip-completed events"
-  type        = "String"
-  value       = var.sqs_trip_completed_url
-
-  tags = var.tags
-}
-
-# --- SSM Parameter: EC2 Instance ID (for SSM Run Command targeting) ---
-
-resource "aws_ssm_parameter" "ec2_instance_id" {
-  name        = "/${var.project_name}/${var.env}/infra/ec2-instance-id"
-  description = "EC2 instance ID for SSM Run Command targeting"
-  type        = "String"
-  value       = var.ec2_instance_id
+  name        = "/${var.project_name}/${var.env}/${each.key}"
+  description = each.value.description
+  type        = each.value.type
+  value       = each.value.value
 
   tags = var.tags
 }

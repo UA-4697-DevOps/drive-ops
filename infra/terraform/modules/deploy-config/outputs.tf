@@ -12,7 +12,7 @@ output "ssm_parameter_prefix" {
   value       = "/${var.project_name}/${var.env}"
 }
 
-output "ssm_trip_service_prefix" {
-  description = "SSM Parameter Store path prefix for TripService config"
-  value       = "/${var.project_name}/${var.env}/trip-service"
+output "ssm_parameter_arns" {
+  description = "Map of all created SSM parameter ARNs, keyed by path suffix"
+  value       = { for k, v in aws_ssm_parameter.this : k => v.arn }
 }

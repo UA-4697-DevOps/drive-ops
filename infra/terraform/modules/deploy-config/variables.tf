@@ -19,52 +19,30 @@ variable "account_id" {
   type        = string
 }
 
-# --- Database Configuration (from RDS module outputs) ---
+# --- SSM Parameters (DRY: single map drives all SSM resources) ---
 
-variable "db_host" {
-  description = "RDS instance hostname (from rds module db_address output)"
-  type        = string
+variable "ssm_parameters" {
+  description = <<-EOT
+    Map of SSM parameters to create. Each key is the parameter path suffix
+    (appended to /<project_name>/<env>/), and the value is an object with:
+      - description: Human-readable description of the parameter
+      - type:        SSM parameter type ("String" or "SecureString")
+      - value:       The parameter value
+  EOT
+
+  type = map(object({
+    description = string
+    type        = string
+    value       = string
+  }))
 }
 
-variable "db_port" {
-  description = "RDS instance port (from rds module db_port output)"
-  type        = number
-}
-
-variable "db_name" {
-  description = "Database name (from rds module db_name output)"
-  type        = string
-}
-
-variable "db_user" {
-  description = "Database master username (from rds module db_username output)"
-  type        = string
-  sensitive   = true
-}
+# --- IAM / Deploy Configuration ---
 
 variable "rds_secret_arn" {
   description = "ARN of Secrets Manager secret containing RDS credentials (from secrets module)"
   type        = string
 }
-
-# --- SQS Queue URLs (from shared-infra module outputs) ---
-
-variable "sqs_trip_created_url" {
-  description = "SQS FIFO queue URL for trip-created events"
-  type        = string
-}
-
-variable "sqs_driver_assigned_url" {
-  description = "SQS FIFO queue URL for driver-assigned events"
-  type        = string
-}
-
-variable "sqs_trip_completed_url" {
-  description = "SQS FIFO queue URL for trip-completed events"
-  type        = string
-}
-
-# --- ECR / GitHub Actions (from ecr module outputs) ---
 
 variable "repository_name" {
   description = "ECR repository name (e.g., trip-service)"
@@ -82,14 +60,12 @@ variable "github_actions_role_name" {
 }
 
 variable "service_name" {
-  description = "Service name used to scope SSM parameter paths (e.g., trip-service)"
+  description = "Service name used to scope SSM parameter read paths in IAM (e.g., trip-service)"
   type        = string
 }
 
-# --- EC2 Instance ---
-
 variable "ec2_instance_id" {
-  description = "EC2 instance ID for SSM Run Command targeting"
+  description = "EC2 instance ID for SSM Run Command IAM scoping"
   type        = string
 }
 
@@ -120,4 +96,3 @@ variable "owner" {
   type        = string
   default     = ""
 }
-
