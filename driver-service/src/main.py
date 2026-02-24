@@ -12,7 +12,7 @@ from src.database import get_db
 from src.driver_models import Driver, BotUser
 from src.services.driver_repository import DriverRepository
 from src.services.bot_user_repository import BotUserRepository
-from src.schemas.driver_schemas import DriverCreate, DriverResponse
+from src.schemas.driver_schemas import DriverCreate, DriverResponse, LocationUpdate
 from src.schemas.bot_user_schemas import (
     BotUserCreate,
     BotUserUpdate,
@@ -40,7 +40,7 @@ trip_requests = {}
 # Global services references
 gateway_client = None
 notification_service = None
-sqs_publisher = None 
+sqs_publisher = None
 response_service = None
 
 # Background Task references for graceful shutdown
@@ -102,12 +102,12 @@ async def lifespan(app: FastAPI):
         try:
             from src.consumers.trip_sqs_consumer import TripSQSConsumer
             logger.info(f"Starting TripSQSConsumer for queue: {settings.SQS_TRIP_CREATED_URL}")
-            
+
             trip_sqs_consumer = TripSQSConsumer(
                 notification_service=notification_service,
                 trip_requests_storage=trip_requests
             )
-            
+
             # SQS consumer is native async, managed directly by the event loop
             trip_sqs_consumer_task = asyncio.create_task(trip_sqs_consumer.start())
             logger.info("Trip SQS Consumer background task successfully started")
@@ -139,9 +139,17 @@ async def lifespan(app: FastAPI):
     logger.info("Driver Service stopped gracefully")
 
 app = FastAPI(
-    title="DriverService",
-    version="0.1.0",
-    lifespan=lifespan
+  title="Driver Service API",
+  description="""
+      Driver Service for ride-hailing platform.
+      """,
+  version="1.0.0",
+
+  docs_url="/docs" if settings.DEBUG else None,
+  redoc_url="/redoc" if settings.DEBUG else None,
+  openapi_url="/openapi.json" if settings.DEBUG else None,
+
+  lifespan=lifespan
 )
 
 # Helper for dependency injection
@@ -159,10 +167,10 @@ async def get_online_drivers(db: AsyncSession = Depends(get_db)):
     """
     repo = DriverRepository(db)
     drivers_list = await repo.list_all()
-    
+
     # Filter by is_active field
     online_drivers = [d for d in drivers_list if getattr(d, 'is_active', False)]
-    
+
     logger.info(f"🔍 Debug: Found {len(online_drivers)} online drivers")
     return online_drivers
 
@@ -236,6 +244,43 @@ async def update_driver_status(driver_id: UUID, is_active: bool, db: AsyncSessio
         logger.info(f"Driver {driver_id} created in in-memory storage with status {'ONLINE' if is_active else 'OFFLINE'}")
 
     return updated
+
+
+@app.post("/drivers/{driver_id}/location", tags=["Drivers"], summary="Update driver GPS coordinates")
+async def update_driver_location(driver_id: UUID, location: LocationUpdate):
+    drivers_storage = app.state.drivers_storage
+    driver_key = str(driver_id)
+
+    if driver_key not in drivers_storage:
+        raise HTTPException(status_code=404, detail="Driver not found in memory storage")
+
+    drivers_storage[driver_key]["latitude"] = location.lat
+    drivers_storage[driver_key]["longitude"] = location.lng
+
+    logger.info(f"Driver {driver_id} location updated to {location.lat}, {location.lng}")
+    return {"status": "success", "driver_id": driver_id}
+
+
+@app.get("/drivers/{driver_id}/inspection", tags=["Drivers"], summary="Check vehicle inspection status")
+async def get_driver_inspection(driver_id: UUID):
+    """
+    Returns the vehicle verification and documents status for the driver.
+    Ensures the driver exists in memory before returning status.
+    """
+    drivers_storage = app.state.drivers_storage
+    driver_key = str(driver_id)
+
+    if driver_key not in drivers_storage:
+        raise HTTPException(status_code=404, detail="Driver not found in memory storage")
+
+    return {
+        "driver_id": driver_id,
+        "status": "approved",
+        "last_inspection_date": "2026-02-15",
+        "inspection_type": "annual",
+        "is_mock_data": True
+    }
+
 
 # ========== BOT USERS MANAGEMENT ==========
 
@@ -426,7 +471,7 @@ async def update_bot_user_driver_status(
     # Sync with in-memory storage (Critical for SQS Radius Search)
     drivers_storage = app.state.drivers_storage
     driver_key = str(bot_user.driver_id)
-    
+
     if driver_key in drivers_storage:
         drivers_storage[driver_key]["status"] = "ONLINE" if is_online else "OFFLINE"
     else:
@@ -438,7 +483,7 @@ async def update_bot_user_driver_status(
             "latitude": 50.4501,  # Default to Kyiv center
             "longitude": 30.5234
         }
-        
+
     logger.info(f"Bot user {chat_id} driver status changed to {new_status} (SQS Discovery Sync)")
     return bot_user
 
@@ -481,16 +526,16 @@ async def send_trip_request(
         driver_id=notification.driver_id,
         notification=notification
     )
-    
+
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Driver unavailable or notification failed"
         )
-    
+
     # Track trip request in storage for upcoming SQS Accept/Reject processing
     trip_requests_storage = app.state.trip_requests_storage
-    
+
     if notification.trip_id not in trip_requests_storage:
         trip_requests_storage[notification.trip_id] = {
             "status": "pending",
@@ -505,9 +550,9 @@ async def send_trip_request(
         trip_record = trip_requests_storage[notification.trip_id]
         if notification.driver_id not in trip_record.get("notified_drivers", []):
             trip_record.setdefault("notified_drivers", []).append(notification.driver_id)
-            
+
     logger.info(f"Notification recorded for Trip {notification.trip_id} -> Driver {notification.driver_id}")
-    
+
     return {
         "message": "Trip request sent successfully",
         "trip_id": notification.trip_id,
@@ -600,7 +645,7 @@ async def accept_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(g
         driver_uuid = UUID(driver_id)
         repo = DriverRepository(db)
         driver = await repo.get_by_id(driver_uuid)
-        
+
         if not driver:
             raise HTTPException(status_code=404, detail="Driver not found in DB")
 
@@ -643,7 +688,7 @@ async def accept_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(g
 @app.post("/drivers/{driver_id}/trips/{trip_id}/reject", tags=["Driver Operations"])
 async def reject_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(get_db)):
     """
-    Driver rejects trip request. 
+    Driver rejects trip request.
     Triggers rejection logic via SQS and updates local state.
     """
     from uuid import UUID
@@ -661,7 +706,7 @@ async def reject_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends(g
         driver_uuid = UUID(driver_id)
         repo = DriverRepository(db)
         driver = await repo.get_by_id(driver_uuid)
-        
+
         if not driver:
             raise HTTPException(status_code=404, detail="Driver not found in database")
 
@@ -715,7 +760,7 @@ async def complete_trip(driver_id: str, trip_id: str, db: AsyncSession = Depends
         driver_uuid = UUID(driver_id)
         repo = DriverRepository(db)
         driver = await repo.get_by_id(driver_uuid)
-        
+
         if not driver:
             raise HTTPException(status_code=404, detail="Driver not found in database")
 
