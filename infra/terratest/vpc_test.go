@@ -161,19 +161,45 @@ func TestVPCPrivateSubnetIsolation(t *testing.T) {
 
     foundPrivateNatRoute := false
 
-    // SECOND PASS: Validate routes using the extracted privateRouteTableAddress
+    // SECOND PASS: Validate NAT route configuration
     for _, resource := range planStruct.RawPlan.PlannedValues.RootModule.Resources {
         if resource.Type == "aws_route" && resource.Name == "private_nat_instance" {
             foundPrivateNatRoute = true
             attributes := resource.AttributeValues
 
-            // Assert that the route targets a NAT instance ENI or instance ID, not an IGW
-            gwStr, _ := attributes["gateway_id"].(string)
+            // Safe extraction of gateway_id
+            gwStr := ""
+            if gwVal, hasGW := attributes["gateway_id"]; hasGW {
+                var ok bool
+                gwStr, ok = gwVal.(string)
+                if !ok {
+                    gwStr = ""
+                }
+            }
 
             // gateway_id should be empty/absent for NAT routes
             assert.Equal(t, "", gwStr, "NAT route should not target an Internet Gateway (gateway_id must be empty)")
+            
             // Plan-time check: Ensure network_interface_id or instance_id is planned to be set
-            assert.True(t, attributes["network_interface_id"].(map[string]interface{})["after_unknown"].(bool) || attributes["instance_id"].(map[string]interface{})["after_unknown"].(bool),
+            niAfterUnknown := false
+            if niVal, hasNI := attributes["network_interface_id"]; hasNI {
+                if niMap, ok := niVal.(map[string]interface{}); ok {
+                    if auVal, hasAU := niMap["after_unknown"]; hasAU {
+                        niAfterUnknown, _ = auVal.(bool)
+                    }
+                }
+            }
+            
+            instAfterUnknown := false
+            if instVal, hasInst := attributes["instance_id"]; hasInst {
+                if instMap, ok := instVal.(map[string]interface{}); ok {
+                    if auVal, hasAU := instMap["after_unknown"]; hasAU {
+                        instAfterUnknown, _ = auVal.(bool)
+                    }
+                }
+            }
+            
+            assert.True(t, niAfterUnknown || instAfterUnknown,
                 "NAT route must plan to target a NAT instance ENI or instance ID")
         }
     }

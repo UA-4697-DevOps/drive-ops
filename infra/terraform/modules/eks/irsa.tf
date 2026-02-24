@@ -9,15 +9,19 @@
 # without embedding long-lived credentials in pods.
 # ==============================================================================
 
-# IAM auto-manages the OIDC thumbprint, so no explicit TLS certificate fetch is needed.
+# Fetch the OIDC issuer certificate to extract the thumbprint for AWS provider 5.0+
+data "tls_certificate" "eks_oidc" {
+  url = aws_eks_cluster.this.identity[0].oidc[0].issuer
+}
 
 # ------------------------------------------------------------------------------
 # OIDC IDENTITY PROVIDER
 # ------------------------------------------------------------------------------
 
 resource "aws_iam_openid_connect_provider" "eks" {
-  url            = aws_eks_cluster.this.identity[0].oidc[0].issuer
-  client_id_list = ["sts.amazonaws.com"]
+  url             = aws_eks_cluster.this.identity[0].oidc[0].issuer
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = [data.tls_certificate.eks_oidc.certificates[0].sha1_fingerprint]
 
   tags = merge(var.tags, {
     Name = "${local.cluster_name}-oidc"

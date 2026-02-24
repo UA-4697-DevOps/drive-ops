@@ -73,3 +73,25 @@ variable "vpn_client_cidr" {
   type        = string
   default     = "10.8.0.0/24"
 }
+
+variable "account_id" {
+  description = "AWS account ID — used to scope least-privilege IAM policies to Secrets Manager ARNs for this account"
+  type        = string
+}
+
+variable "aws_region" {
+  description = "AWS region where the bastion is deployed — used in Secrets Manager ARNs and AWS CLI calls inside user_data"
+  type        = string
+  default     = "us-east-2"
+}
+
+variable "kms_key_arn" {
+  description = "ARN of the customer-managed KMS key used to encrypt OpenVPN PKI and client-config secrets in Secrets Manager. Set to null to use the AWS-managed default key."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.kms_key_arn == null || can(regex("^arn:aws:kms:", var.kms_key_arn))
+    error_message = "kms_key_arn must be a valid KMS key ARN (arn:aws:kms:...) or null."
+  }
+}

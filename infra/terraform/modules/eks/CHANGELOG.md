@@ -10,5 +10,3 @@
 - **Warning:** Upgrading without setting `cluster_endpoint_public_access = true` will cause operator lockout if no private connectivity (VPN/Direct Connect/bastion/VPC peering) exists. Ensure `cluster_endpoint_public_access_cidrs` is set alongside `cluster_endpoint_public_access` to explicitly allow the desired public CIDRs.
 
 ---
-
----

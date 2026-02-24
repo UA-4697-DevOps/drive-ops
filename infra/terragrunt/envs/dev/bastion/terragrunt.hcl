@@ -29,7 +29,7 @@ locals {
   env_vars    = yamldecode(file(find_in_parent_folders("env_vars.yaml")))
   # Whether to enable OpenVPN on the bastion. Prefer explicit setting in env_vars.yaml,
   # otherwise default to true for this dev stack.
-  openvpn_enabled = coalesce(local.env_vars.enable_openvpn, true)
+  openvpn_enabled = try(local.env_vars.enable_openvpn, true)
 }
 
 dependency "shared_infra" {
@@ -42,6 +42,7 @@ dependency "shared_infra" {
     vpc_id            = "vpc-mock-id"
     vpc_cidr          = "10.0.0.0/16"
     public_subnet_ids = ["subnet-mock-pub-1", "subnet-mock-pub-2"]
+    kms_key_arn       = "arn:aws:kms:us-east-2:123456789012:key/mock-key-id"
   }
 }
 
@@ -66,6 +67,13 @@ inputs = {
   # OpenVPN server for secure administrative VPN access to private resources
   enable_openvpn = local.openvpn_enabled
   vpc_cidr       = dependency.shared_infra.outputs.vpc_cidr
+
+  # Required for IAM policy scoping and Secrets Manager ARN construction
+  account_id = local.env_vars.account_id
+  aws_region = local.common_vars.aws_region
+
+  # Customer-managed KMS key for encrypting OpenVPN PKI and client .ovpn secrets
+  kms_key_arn = dependency.shared_infra.outputs.kms_key_arn
 
   tags = {
     Component = "bastion"

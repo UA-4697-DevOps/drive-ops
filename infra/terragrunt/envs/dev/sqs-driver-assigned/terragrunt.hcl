@@ -18,6 +18,6 @@ inputs = {
 
   tags = {
     Component = "sqs-driver-assigned"
-    EventType = "trip.event.driver_assigned"
+    EventType = "trip.event.driver_assigned.dev"
   }
 }

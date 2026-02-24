@@ -144,7 +144,7 @@ Private Route Table:
 | `flow_log_retention_in_days` | Number of days to retain VPC Flow Logs in CloudWatch. | `number` | `7` | No |
 | `use_nat_instance` | Whether to use NAT Instance (t4g.nano ARM/Graviton) for private subnet outbound. Defaults to `false` — must be set to `true` to enable outbound internet for private subnets. | `bool` | `false` | No |
 | `nat_instance_type` | Instance type for NAT Instance. | `string` | `"t4g.nano"` | No |
-| `nat_instance_key_name` | Optional SSH key name for NAT Instance troubleshooting. | `string` | `""` | No |
+| `nat_instance_key_name` | Optional SSH key name for NAT Instance (for troubleshooting only). When `null`, SSH key access is disabled. | `string` | `null` | No |
 
 ## Outputs
 
