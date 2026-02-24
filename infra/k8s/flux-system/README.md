@@ -5,8 +5,8 @@ This directory contains the GitOps engine configuration for our **Production** e
 ## 🛠 Prerequisites
 * A running Kubernetes cluster.
 * The `kubectl` CLI installed.
-* The `flux` CLI installed (`curl -s https://fluxcd.io/install.sh | sudo bash`).
-* A GitHub Personal Access Token (Classic) with `repo` permissions.
+* The `flux` CLI installed (refer to the [official Flux installation guide](https://fluxcd.io/flux/installation/#install-the-flux-cli) for secure, checksum-verified methods).
+* A **Fine-grained GitHub Personal Access Token** scoped specifically to the `drive-ops` repository with **Contents: Read and Write** permissions.
 
 ## 🚀 Step 1: Bootstrap Flux (Installation)
 Unlike traditional manifests, Flux is installed and connected to the repository via the CLI. It generates its own manifests and commits them directly to this repository.
