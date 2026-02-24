@@ -82,4 +82,5 @@ go.work
 *.bak
 
 # Kubernetes secrets
-driver-service/k8s/secret.yaml
+**/k8s/secret*.yaml
+**/k8s/secret*.yml
