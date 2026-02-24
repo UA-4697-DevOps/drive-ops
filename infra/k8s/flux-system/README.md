@@ -15,12 +15,13 @@ Unlike traditional manifests, Flux is installed and connected to the repository 
    ```bash
    export GITHUB_TOKEN="ghp_your_token_here"
    ```
+
 2. Run the bootstrap command (configured for token authentication to bypass organization SSH key restrictions):
    ```bash
    flux bootstrap github \
   --owner=UA-4697-DevOps \
   --repository=drive-ops \
-  --branch=feat/flux-setup \
+  --branch=main \
   --path=infra/k8s/flux-system \
   --personal=false \
   --token-auth

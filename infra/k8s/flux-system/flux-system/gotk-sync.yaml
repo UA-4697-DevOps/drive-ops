@@ -8,7 +8,7 @@ metadata:
 spec:
   interval: 1m0s
   ref:
-    branch: feat/flux-setup
+    branch: main
   secretRef:
     name: flux-system
   url: https://github.com/UA-4697-DevOps/drive-ops.git
