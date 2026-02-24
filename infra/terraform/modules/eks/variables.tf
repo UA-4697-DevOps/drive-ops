@@ -132,10 +132,10 @@ variable "kms_key_arn" {
 variable "custom_security_group_rules" {
   description = "Additional custom security group rules to apply to the EKS cluster and nodes. Each rule must specify the security_group_id it applies to."
   type = map(object({
-    type              = string           # "ingress" or "egress"
+    type              = string # "ingress" or "egress"
     from_port         = number
     to_port           = number
-    protocol          = string           # "tcp", "udp", "-1" (all), etc.
+    protocol          = string # "tcp", "udp", "-1" (all), etc.
     cidr_blocks       = optional(list(string))
     source_sg_id      = optional(string) # Security group ID (alternative to cidr_blocks)
     security_group_id = string           # Which SG to apply the rule to

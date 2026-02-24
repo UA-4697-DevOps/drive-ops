@@ -188,7 +188,7 @@ resource "aws_eks_cluster" "this" {
 
 resource "aws_launch_template" "eks_nodes" {
   for_each = var.node_groups
-  
+
   name_prefix = "${local.cluster_name}-${each.key}-lt-"
 
   network_interfaces {
