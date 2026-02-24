@@ -73,20 +73,20 @@ variable "egress_allowed_cidrs" {
     List of IPv4 CIDR blocks allowed for outbound traffic from the bastion.
     If empty, `var.vpc_cidr` will be used when set; otherwise falls back to global egress.
   EOT
-  type    = list(string)
-  default = []
+  type        = list(string)
+  default     = []
 }
 
 variable "egress_allowed_ipv6" {
   description = "List of IPv6 CIDR blocks allowed for outbound traffic from the bastion."
-  type    = list(string)
-  default = []
+  type        = list(string)
+  default     = []
 }
 
 variable "egress_allowed_prefix_list_ids" {
   description = "Optional list of AWS prefix list IDs (for service endpoints) allowed for outbound traffic."
-  type    = list(string)
-  default = []
+  type        = list(string)
+  default     = []
 }
 
 variable "vpn_client_cidr" {

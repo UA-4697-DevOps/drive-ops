@@ -54,7 +54,7 @@ variable "nat_instance_type" {
   type        = string
   default     = "t4g.nano"
   validation {
-    condition = can(regex("^(?:t|m|c|r|a)\\d+g\\.[a-z0-9]+$", var.nat_instance_type))
+    condition     = can(regex("^(?:t|m|c|r|a)\\d+g\\.[a-z0-9]+$", var.nat_instance_type))
     error_message = "nat_instance_type must be an ARM/Graviton family instance (e.g., t4g.nano, m6g.large). The NAT AMI lookup (data.aws_ami.nat_instance) is ARM64-only and will fail for x86 types like t3.nano."
   }
 }
