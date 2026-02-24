@@ -64,6 +64,12 @@ variable "public_subnet_ids" {
   default     = []
 }
 
+variable "node_subnet_ids" {
+  description = "List of subnet IDs for EKS worker nodes. If not provided, private_subnet_ids will be used. Use this to deploy nodes to public subnets in NATless VPCs."
+  type        = list(string)
+  default     = []
+}
+
 # --- Cluster Configuration ---
 
 variable "cluster_version" {

@@ -51,19 +51,15 @@ output "node_security_group_id" {
 
 # --- Node Group ---
 
-output "node_group_name" {
-  description = "Name of the managed node group"
-  value       = aws_eks_node_group.default.node_group_name
-}
-
-output "node_group_arn" {
-  description = "ARN of the managed node group"
-  value       = aws_eks_node_group.default.arn
-}
-
-output "node_group_status" {
-  description = "Status of the managed node group"
-  value       = aws_eks_node_group.default.status
+output "node_groups" {
+  description = "Map of EKS managed node groups with their attributes"
+  value = {
+    for k, ng in aws_eks_node_group.this : k => {
+      name   = ng.node_group_name
+      arn    = ng.arn
+      status = ng.status
+    }
+  }
 }
 
 # --- IAM ---
