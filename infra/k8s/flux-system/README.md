@@ -15,7 +15,6 @@ Unlike traditional manifests, Flux is installed and connected to the repository 
    ```bash
    export GITHUB_TOKEN="ghp_your_token_here"
    ```
-
 2. Run the bootstrap command (configured for token authentication to bypass organization SSH key restrictions):
    ```bash
    flux bootstrap github \
@@ -47,7 +46,7 @@ To verify that Flux is actively protecting the Production environment:
 3. Immediately check again (or force reconciliation):
    ```bash
    flux reconcile kustomization apps-sync --with-source
-kubectl get configmap gitops-test-prod
+   kubectl get configmap gitops-test-prod
    ```
 Flux ensures the cluster strictly matches the Git source of truth!
 
