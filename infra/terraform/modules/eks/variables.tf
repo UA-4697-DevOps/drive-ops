@@ -123,77 +123,34 @@ variable "kms_key_arn" {
 
 # --- Node Group Configuration ---
 
-variable "node_instance_types" {
-  description = "List of EC2 instance types for the managed node group"
-  type        = list(string)
-  default     = ["t3.small"]
+variable "custom_security_group_rules" {
+  description = "Additional custom security group rules to apply to the EKS cluster and nodes. Each rule must specify the security_group_id it applies to."
+  type = map(object({
+    type              = string           # "ingress" or "egress"
+    from_port         = number
+    to_port           = number
+    protocol          = string           # "tcp", "udp", "-1" (all), etc.
+    cidr_blocks       = optional(list(string))
+    source_sg_id      = optional(string) # Security group ID (alternative to cidr_blocks)
+    security_group_id = string           # Which SG to apply the rule to
+    description       = string
+  }))
+  default = {}
 }
 
-variable "node_desired_size" {
-  description = "Desired number of worker nodes"
-  type        = number
-  default     = 2
-}
-
-variable "node_min_size" {
-  description = "Minimum number of worker nodes"
-  type        = number
-  default     = 2
-}
-
-variable "node_max_size" {
-  description = "Maximum number of worker nodes"
-  type        = number
-  default     = 4
-}
-
-variable "node_disk_size" {
-  description = "Disk size in GiB for worker nodes"
-  type        = number
-  default     = 20
-}
-
-variable "node_capacity_type" {
-  description = "Capacity type for the node group (ON_DEMAND or SPOT)"
-  type        = string
-  default     = "ON_DEMAND"
-
-  validation {
-    condition     = contains(["ON_DEMAND", "SPOT"], var.node_capacity_type)
-    error_message = "node_capacity_type must be ON_DEMAND or SPOT."
-  }
-}
-
-variable "node_ami_type" {
-  description = "AMI type for EKS worker nodes (AL2023_x86_64_STANDARD, AL2_x86_64, etc.)"
-  type        = string
-  default     = "AL2023_x86_64_STANDARD"
-
-  validation {
-    condition     = contains(["AL2023_x86_64_STANDARD", "AL2023_ARM_64_STANDARD", "AL2023_x86_64_NEURON", "AL2023_x86_64_NVIDIA", "AL2023_ARM_64_NVIDIA", "AL2_x86_64", "AL2_x86_64_GPU", "AL2_ARM_64", "BOTTLEROCKET_ARM_64", "BOTTLEROCKET_x86", "WINDOWS_CORE_2022_x86_64", "WINDOWS_CORE_2025_x86_64", "WINDOWS_CORE_2025_x86_64_2004", "CUSTOM"], var.node_ami_type)
-    error_message = "Invalid node_ami_type: must be one of AL2023_x86_64_STANDARD, AL2023_ARM_64_STANDARD, AL2023_x86_64_NEURON, AL2023_x86_64_NVIDIA, AL2023_ARM_64_NVIDIA, AL2_x86_64, AL2_x86_64_GPU, AL2_ARM_64, BOTTLEROCKET_ARM_64, BOTTLEROCKET_x86, WINDOWS_CORE_2022_x86_64, WINDOWS_CORE_2025_x86_64, WINDOWS_CORE_2025_x86_64_2004, or CUSTOM."
-  }
-}
-
-variable "node_subnet_ids" {
-  description = "Subnet IDs for worker nodes. Defaults to private_subnet_ids when empty. Pass public_subnet_ids for NATless VPCs."
-  type        = list(string)
-  default     = []
-}
-
-variable "node_associate_public_ip_address" {
-  description = "Assign a public IP to each worker node. Required when nodes are placed in public subnets in a NATless VPC."
-  type        = bool
-  default     = false
-}
-
-variable "node_update_max_unavailable" {
-  description = "Maximum number of worker nodes that can be unavailable during node group updates. Configurable to support different availability and update strategies."
-  type        = number
-  default     = 1
-
-  validation {
-    condition     = var.node_update_max_unavailable >= 1
-    error_message = "node_update_max_unavailable must be at least 1."
-  }
+variable "node_groups" {
+  description = "Map of EKS managed node group configurations. Each node group can have different instance types, capacity types, scaling parameters, and disk sizes."
+  type = map(object({
+    instance_types         = list(string)
+    ami_type               = string
+    capacity_type          = string
+    desired_size           = number
+    min_size               = number
+    max_size               = number
+    disk_size              = number
+    update_max_unavailable = number
+    associate_public_ip    = bool
+    tags                   = optional(map(string), {})
+  }))
+  default = {}
 }

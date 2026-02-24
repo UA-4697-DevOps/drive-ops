@@ -3,13 +3,14 @@
 # ==============================================================================
 # Creates:
 #   1. Security group for the EKS cluster (control-plane ↔ node communication)
-#   2. EKS cluster (managed control plane)
-#   3. CloudWatch log group for control-plane logs
-#   4. Managed node group with autoscaling
+#   2. CloudWatch log group for control-plane logs
+#   3. EKS cluster (managed control plane)
+#   4. Node launch template for worker instances
+#   5. Managed node group with autoscaling
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# 1. EKS CLUSTER SECURITY GROUP
+# 1. EKS CLUSTER AND NODE SECURITY GROUP
 # ------------------------------------------------------------------------------
 
 resource "aws_security_group" "eks_cluster" {
@@ -22,33 +23,100 @@ resource "aws_security_group" "eks_cluster" {
   })
 }
 
+# --- Default Security Group Rules ---
+locals {
+  default_security_group_rules = {
+    cluster_egress = {
+      type              = "egress"
+      from_port         = 0
+      to_port           = 0
+      protocol          = "-1"
+      cidr_blocks       = ["0.0.0.0/0"]
+      source_sg_id      = null
+      security_group_id = aws_security_group.eks_cluster.id
+      description       = "Allow all outbound traffic from control plane"
+    }
+    cluster_ingress_nodes = {
+      type              = "ingress"
+      from_port         = 443
+      to_port           = 443
+      protocol          = "tcp"
+      cidr_blocks       = null
+      source_sg_id      = aws_security_group.eks_nodes.id
+      security_group_id = aws_security_group.eks_cluster.id
+      description       = "Allow worker nodes to reach the API server"
+    }
+    nodes_egress = {
+      type              = "egress"
+      from_port         = 0
+      to_port           = 0
+      protocol          = "-1"
+      cidr_blocks       = ["0.0.0.0/0"]
+      source_sg_id      = null
+      security_group_id = aws_security_group.eks_nodes.id
+      description       = "Allow all outbound traffic from worker nodes"
+    }
+    nodes_internal = {
+      type              = "ingress"
+      from_port         = 0
+      to_port           = 0
+      protocol          = "-1"
+      cidr_blocks       = null
+      source_sg_id      = aws_security_group.eks_nodes.id
+      security_group_id = aws_security_group.eks_nodes.id
+      description       = "Allow node-to-node communication (all protocols including UDP and ICMP for CoreDNS and PMTU)"
+    }
+    nodes_ingress_cluster = {
+      type              = "ingress"
+      from_port         = 1025
+      to_port           = 65535
+      protocol          = "tcp"
+      cidr_blocks       = null
+      source_sg_id      = aws_security_group.eks_cluster.id
+      security_group_id = aws_security_group.eks_nodes.id
+      description       = "Allow control plane to reach worker nodes (kubelet, kube-proxy)"
+    }
+    nodes_ingress_cluster_443 = {
+      type              = "ingress"
+      from_port         = 443
+      to_port           = 443
+      protocol          = "tcp"
+      cidr_blocks       = null
+      source_sg_id      = aws_security_group.eks_cluster.id
+      security_group_id = aws_security_group.eks_nodes.id
+      description       = "Allow control plane to reach webhook endpoints on nodes"
+    }
+  }
+
+  # Merge default rules with user-provided custom rules
+  all_security_group_rules = merge(
+    local.default_security_group_rules,
+    var.custom_security_group_rules
+  )
+}
+
+# --- Consolidated Security Group Rules ---
 # Allow unrestricted egress from cluster to reach AWS services and external APIs.
 # NOTE: This is an accepted trade-off for NAT-less/public-subnet deployments.
 # TODO: Migrate to private subnets with NAT gateway per #239 for egress control.
-resource "aws_security_group_rule" "cluster_egress" {
-  type              = "egress"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = aws_security_group.eks_cluster.id
-  description       = "Allow all outbound traffic from control plane"
-}
+resource "aws_security_group_rule" "this" {
+  for_each = local.all_security_group_rules
 
-# Allow worker nodes to communicate with the cluster API
-resource "aws_security_group_rule" "cluster_ingress_nodes" {
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.eks_nodes.id
-  security_group_id        = aws_security_group.eks_cluster.id
-  description              = "Allow worker nodes to reach the API server"
-}
+  type              = each.value.type
+  from_port         = each.value.from_port
+  to_port           = each.value.to_port
+  protocol          = each.value.protocol
+  cidr_blocks       = each.value.cidr_blocks
+  security_group_id = each.value.security_group_id
+  description       = each.value.description
 
-# ------------------------------------------------------------------------------
-# 2. NODE SECURITY GROUP
-# ------------------------------------------------------------------------------
+  # Conditionally set source_security_group_id only if provided
+  source_security_group_id = each.value.source_sg_id
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
 
 resource "aws_security_group" "eks_nodes" {
   name        = "${local.cluster_name}-node-sg"
@@ -60,51 +128,8 @@ resource "aws_security_group" "eks_nodes" {
   })
 }
 
-# Allow unrestricted egress from nodes to reach AWS services, container registries, and external APIs.
-# NOTE: This is an accepted trade-off for NAT-less/public-subnet deployments.
-# TODO: Migrate to private subnets with NAT gateway per #239 for egress control.
-resource "aws_security_group_rule" "nodes_egress" {
-  type              = "egress"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = aws_security_group.eks_nodes.id
-  description       = "Allow all outbound traffic from worker nodes"
-}
-
-resource "aws_security_group_rule" "nodes_internal" {
-  type                     = "ingress"
-  from_port                = 0
-  to_port                  = 0
-  protocol                 = "-1"
-  source_security_group_id = aws_security_group.eks_nodes.id
-  security_group_id        = aws_security_group.eks_nodes.id
-  description              = "Allow node-to-node communication (all protocols including UDP and ICMP for CoreDNS and PMTU)"
-}
-
-resource "aws_security_group_rule" "nodes_ingress_cluster" {
-  type                     = "ingress"
-  from_port                = 1025
-  to_port                  = 65535
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.eks_cluster.id
-  security_group_id        = aws_security_group.eks_nodes.id
-  description              = "Allow control plane to reach worker nodes (kubelet, kube-proxy)"
-}
-
-resource "aws_security_group_rule" "nodes_ingress_cluster_443" {
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.eks_cluster.id
-  security_group_id        = aws_security_group.eks_nodes.id
-  description              = "Allow control plane to reach webhook endpoints on nodes"
-}
-
 # ------------------------------------------------------------------------------
-# 3. CLOUDWATCH LOG GROUP (CONTROL PLANE LOGS)
+# 2. CLOUDWATCH LOG GROUP (CONTROL PLANE LOGS)
 # ------------------------------------------------------------------------------
 
 resource "aws_cloudwatch_log_group" "eks" {
@@ -115,7 +140,7 @@ resource "aws_cloudwatch_log_group" "eks" {
 }
 
 # ------------------------------------------------------------------------------
-# 4. EKS CLUSTER
+# 3. EKS CLUSTER
 # ------------------------------------------------------------------------------
 
 resource "aws_eks_cluster" "this" {
@@ -158,14 +183,16 @@ resource "aws_eks_cluster" "this" {
 }
 
 # ------------------------------------------------------------------------------
-# 5. NODE LAUNCH TEMPLATE
+# 4. NODE LAUNCH TEMPLATE
 # ------------------------------------------------------------------------------
 
 resource "aws_launch_template" "eks_nodes" {
-  name_prefix = "${local.node_group_name}-lt-"
+  for_each = var.node_groups
+  
+  name_prefix = "${local.cluster_name}-${each.key}-lt-"
 
   network_interfaces {
-    associate_public_ip_address = var.node_associate_public_ip_address
+    associate_public_ip_address = each.value.associate_public_ip
     security_groups             = [aws_security_group.eks_nodes.id]
     delete_on_termination       = true
   }
@@ -173,7 +200,7 @@ resource "aws_launch_template" "eks_nodes" {
   block_device_mappings {
     device_name = "/dev/xvda"
     ebs {
-      volume_size           = var.node_disk_size
+      volume_size           = each.value.disk_size
       volume_type           = "gp3"
       delete_on_termination = true
       encrypted             = true
@@ -190,7 +217,7 @@ resource "aws_launch_template" "eks_nodes" {
 
   tag_specifications {
     resource_type = "instance"
-    tags          = merge(var.tags, { Name = local.node_group_name })
+    tags          = merge(var.tags, { Name = "${local.cluster_name}-${each.key}" })
   }
 
   tags = var.tags
@@ -201,42 +228,42 @@ resource "aws_launch_template" "eks_nodes" {
 }
 
 # ------------------------------------------------------------------------------
-# 6. MANAGED NODE GROUP
+# 5. MANAGED NODE GROUP
 # ------------------------------------------------------------------------------
 
-resource "aws_eks_node_group" "default" {
+resource "aws_eks_node_group" "this" {
+  for_each = var.node_groups
+
   cluster_name    = aws_eks_cluster.this.name
-  node_group_name = local.node_group_name
+  node_group_name = "${local.cluster_name}-${each.key}"
   node_role_arn   = aws_iam_role.node_group.arn
   subnet_ids      = local.resolved_node_subnet_ids
 
-  instance_types = var.node_instance_types
-  ami_type       = var.node_ami_type
-  capacity_type  = var.node_capacity_type
-  # disk_size is managed by the launch template block_device_mappings
+  instance_types = each.value.instance_types
+  ami_type       = each.value.ami_type
+  capacity_type  = each.value.capacity_type
 
   launch_template {
-    id      = aws_launch_template.eks_nodes.id
-    version = aws_launch_template.eks_nodes.latest_version
+    id      = aws_launch_template.eks_nodes[each.key].id
+    version = aws_launch_template.eks_nodes[each.key].latest_version
   }
 
   scaling_config {
-    desired_size = var.node_desired_size
-    min_size     = var.node_min_size
-    max_size     = var.node_max_size
+    desired_size = each.value.desired_size
+    min_size     = each.value.min_size
+    max_size     = each.value.max_size
   }
 
   update_config {
-    max_unavailable = var.node_update_max_unavailable
+    max_unavailable = each.value.update_max_unavailable
   }
 
-  # Ignore changes to desired_size to prevent Terraform from overwriting autoscaler/Karpenter decisions.
   lifecycle {
     ignore_changes = [scaling_config[0].desired_size]
   }
 
-  tags = merge(var.tags, {
-    Name = local.node_group_name
+  tags = merge(var.tags, each.value.tags, {
+    Name = "${local.cluster_name}-${each.key}"
   })
 
   depends_on = [

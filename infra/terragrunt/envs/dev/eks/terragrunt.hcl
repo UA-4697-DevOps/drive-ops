@@ -67,17 +67,23 @@ inputs = {
   enabled_cluster_log_types              = ["audit", "api", "authenticator"]
   cluster_log_retention_in_days          = 7
 
-  # Node Group
-  node_instance_types = ["t3.small"]
-  node_desired_size   = 2
-  node_min_size       = 2
-  node_max_size       = 4
-  node_disk_size      = 20
-  node_capacity_type  = "ON_DEMAND"
-  # Place nodes in public subnets and assign public IPs so they can reach the
-  # EKS control plane and AWS APIs without a NAT gateway (NATless VPC design).
-  node_subnet_ids                 = dependency.shared_infra.outputs.public_subnet_ids
-  node_associate_public_ip_address = true
+  # Node Groups
+  node_groups = {
+    "default" = {
+      instance_types         = ["t3.small"]
+      ami_type               = "AL2023_x86_64_STANDARD"
+      capacity_type          = "ON_DEMAND"
+      desired_size           = 2
+      min_size               = 2
+      max_size               = 4
+      disk_size              = 20
+      update_max_unavailable = 1
+      # Place nodes in public subnets and assign public IPs so they can reach the
+      # EKS control plane and AWS APIs without a NAT gateway (NATless VPC design).
+      associate_public_ip = true
+      tags                = {}
+    }
+  }
 
   tags = {
     Component = "eks"
