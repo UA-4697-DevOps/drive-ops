@@ -8,11 +8,17 @@ class DriverBase(BaseModel):
     is_active: bool = True
 
 class DriverCreate(DriverBase):
-    """Схема для створення нового водія"""
+    """Schema for creating a new driver"""
     pass
 
 class DriverResponse(DriverBase):
-    """Схема для повернення даних про водія (з ID)"""
+    """Schema for returning driver data (including ID)"""
     id: UUID
 
     model_config = ConfigDict(from_attributes=True)
+
+class LocationUpdate(BaseModel):
+    """Schema for updating driver GPS coordinates with validation"""
+    lat: float = Field(..., ge=-90, le=90, description="Latitude (-90 to 90)")
+    lng: float = Field(..., ge=-180, le=180, description="Longitude (-180 to 180)")
+
