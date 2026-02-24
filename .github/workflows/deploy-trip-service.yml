@@ -32,6 +32,12 @@ jobs:
 
     steps:
       # ---------------------------------------------------------------
+      # Step 0: Checkout (required for local composite actions)
+      # ---------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------
       # Step 1: Authenticate to AWS via OIDC
       # ---------------------------------------------------------------
       - name: Configure AWS credentials (OIDC)
@@ -88,295 +94,141 @@ jobs:
       # Step 4: Capture current image tag for rollback
       # ---------------------------------------------------------------
       - name: Capture current image tag for rollback
+        id: capture-tag
+        uses: ./.github/actions/ssm-run-command
+        with:
+          instance-id: ${{ steps.ssm-config.outputs.instance_id }}
+          command: |
+            docker inspect trip-service --format='{{.Config.Image}}' 2>/dev/null \
+              | awk -F: '{print $2}' || echo "none"
+          comment: "Capture current TripService image tag"
+          timeout-seconds: 60
+
+      - name: Set current tag for rollback
         id: current-tag
         run: |
-          echo "📸 Capturing current TripService image tag for rollback..."
-
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "${{ steps.ssm-config.outputs.instance_id }}" \
-            --document-name "AWS-RunShellScript" \
-            --parameters 'commands=["docker inspect trip-service --format={{.Config.Image}} 2>/dev/null | awk -F: \"{print \\$2}\" || echo \"none\""]' \
-            --query "Command.CommandId" --output text)
-
-          # Wait for command to complete
-          echo "Waiting for SSM command ${COMMAND_ID}..."
-          aws ssm wait command-executed \
-            --command-id "${COMMAND_ID}" \
-            --instance-id "${{ steps.ssm-config.outputs.instance_id }}" 2>/dev/null || true
-
-          CURRENT_TAG=$(aws ssm get-command-invocation \
-            --command-id "${COMMAND_ID}" \
-            --instance-id "${{ steps.ssm-config.outputs.instance_id }}" \
-            --query "StandardOutputContent" --output text | tr -d '[:space:]')
-
+          CURRENT_TAG=$(echo "${{ steps.capture-tag.outputs.stdout }}" | tr -d '[:space:]')
           echo "current_tag=${CURRENT_TAG}" >> $GITHUB_OUTPUT
-          echo "✅ Current image tag: ${CURRENT_TAG}"
+          echo "📸 Current image tag: ${CURRENT_TAG}"
 
       # ---------------------------------------------------------------
       # Step 5: Deploy new image via SSM Run Command
       # ---------------------------------------------------------------
       - name: Deploy TripService via SSM Run Command
         id: deploy
-        run: |
-          echo "🚀 Deploying TripService with image tag '${{ inputs.image_tag }}'..."
+        uses: ./.github/actions/ssm-run-command
+        with:
+          instance-id: ${{ steps.ssm-config.outputs.instance_id }}
+          working-directory: /opt/drive-ops
+          command: |
+            set -euo pipefail
 
-          DEPLOY_SCRIPT=$(cat <<'DEPLOY_EOF'
-          set -euo pipefail
+            echo "=== TripService Deployment ==="
+            echo "Registry: ${{ steps.ssm-config.outputs.ecr_registry }}"
+            echo "Image Tag: ${{ inputs.image_tag }}"
+            echo "Region: ${{ env.AWS_REGION }}"
 
-          ECR_REGISTRY="__ECR_REGISTRY__"
-          IMAGE_TAG="__IMAGE_TAG__"
-          AWS_REGION="__AWS_REGION__"
+            echo "Step 1/4: Authenticating Docker to ECR..."
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+              docker login --username AWS --password-stdin ${{ steps.ssm-config.outputs.ecr_registry }}
 
-          echo "=== TripService Deployment ==="
-          echo "Registry: ${ECR_REGISTRY}"
-          echo "Image Tag: ${IMAGE_TAG}"
-          echo "Region: ${AWS_REGION}"
+            echo "Step 2/4: Pulling image..."
+            docker pull ${{ steps.ssm-config.outputs.ecr_registry }}/trip-service:${{ inputs.image_tag }}
 
-          # 1. Authenticate Docker to ECR
-          echo "Step 1/4: Authenticating Docker to ECR..."
-          aws ecr get-login-password --region ${AWS_REGION} | \
-            docker login --username AWS --password-stdin ${ECR_REGISTRY}
+            echo "Step 3/4: Updating image reference..."
+            export TRIP_SERVICE_IMAGE="${{ steps.ssm-config.outputs.ecr_registry }}/trip-service:${{ inputs.image_tag }}"
 
-          # 2. Pull the new image
-          echo "Step 2/4: Pulling image..."
-          docker pull ${ECR_REGISTRY}/trip-service:${IMAGE_TAG}
+            echo "Step 4/4: Restarting TripService..."
+            docker compose up -d --no-deps --force-recreate trip-service
 
-          # 3. Update .env with new image reference
-          echo "Step 3/4: Updating image reference..."
-          cd /opt/drive-ops
-
-          # Set the image override for docker compose
-          export TRIP_SERVICE_IMAGE="${ECR_REGISTRY}/trip-service:${IMAGE_TAG}"
-
-          # 4. Restart only trip-service (--no-deps = don't touch DB or other services)
-          echo "Step 4/4: Restarting TripService..."
-          docker compose up -d --no-deps --force-recreate trip-service
-
-          echo "=== Deployment command completed ==="
-          DEPLOY_EOF
-          )
-
-          # Replace placeholders
-          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__ECR_REGISTRY__/${{ steps.ssm-config.outputs.ecr_registry }}}"
-          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__IMAGE_TAG__/${{ inputs.image_tag }}}"
-          DEPLOY_SCRIPT="${DEPLOY_SCRIPT//__AWS_REGION__/${{ env.AWS_REGION }}}"
-
-          B64_DEPLOY=$(echo "${DEPLOY_SCRIPT}" | base64 -w0)
-
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "${{ steps.ssm-config.outputs.instance_id }}" \
-            --document-name "AWS-RunShellScript" \
-            --parameters "commands=[\"echo ${B64_DEPLOY} | base64 -d | bash\"]" \
-            --timeout-seconds 300 \
-            --comment "Deploy TripService:${{ inputs.image_tag }}" \
-            --query "Command.CommandId" --output text)
-
-          echo "command_id=${COMMAND_ID}" >> $GITHUB_OUTPUT
-
-          # Wait for deployment to finish
-          echo "⏳ Waiting for deployment (command: ${COMMAND_ID})..."
-          for i in $(seq 1 60); do
-            STATUS=$(aws ssm get-command-invocation \
-              --command-id "${COMMAND_ID}" \
-              --instance-id "${{ steps.ssm-config.outputs.instance_id }}" \
-              --query "Status" --output text 2>/dev/null || echo "Pending")
-
-            if [ "${STATUS}" = "Success" ]; then
-              echo "✅ Deployment command completed successfully"
-              # Print output
-              aws ssm get-command-invocation \
-                --command-id "${COMMAND_ID}" \
-                --instance-id "${{ steps.ssm-config.outputs.instance_id }}" \
-                --query "StandardOutputContent" --output text
-              break
-            elif [ "${STATUS}" = "Failed" ] || [ "${STATUS}" = "TimedOut" ] || [ "${STATUS}" = "Cancelled" ]; then
-              echo "❌ Deployment failed with status: ${STATUS}"
-              aws ssm get-command-invocation \
-                --command-id "${COMMAND_ID}" \
-                --instance-id "${{ steps.ssm-config.outputs.instance_id }}" \
-                --query "StandardErrorContent" --output text
-              exit 1
-            fi
-
-            echo "  Status: ${STATUS} (attempt ${i}/60)..."
-            sleep 5
-          done
-
-          # Fail if the loop completed without Success
-          if [ "${STATUS}" != "Success" ]; then
-            echo "❌ Deployment timed out after 300s (last status: ${STATUS})"
-            exit 1
-          fi
+            echo "=== Deployment command completed ==="
+          comment: "Deploy TripService:${{ inputs.image_tag }}"
+          timeout-seconds: 300
 
       # ---------------------------------------------------------------
       # Step 6: Post-deploy smoke checks
       # ---------------------------------------------------------------
       - name: Run smoke checks
         id: smoke-checks
-        run: |
-          echo "🏥 Running post-deploy smoke checks..."
+        uses: ./.github/actions/ssm-run-command
+        with:
+          instance-id: ${{ steps.ssm-config.outputs.instance_id }}
+          command: |
+            set -euo pipefail
 
-          SMOKE_SCRIPT=$(cat <<'SMOKE_EOF'
-          set -euo pipefail
+            echo "=== Smoke Check 1: Health Endpoint ==="
+            for i in $(seq 1 12); do
+              if curl -sf http://localhost:${{ env.SERVICE_PORT }}/health; then
+                echo ""
+                echo "✅ Health check passed"
+                break
+              fi
+              if [ $i -eq 12 ]; then
+                echo "❌ Health check failed after 60s"
+                docker logs trip-service --tail 50
+                exit 1
+              fi
+              echo "  Waiting for service... (attempt ${i}/12)"
+              sleep 5
+            done
 
-          echo "=== Smoke Check 1: Health Endpoint ==="
-          # Wait for service to be ready (up to 60s)
-          for i in $(seq 1 12); do
-            if curl -sf http://localhost:__PORT__/health; then
-              echo ""
-              echo "✅ Health check passed"
-              break
-            fi
-            if [ $i -eq 12 ]; then
-              echo "❌ Health check failed after 60s"
+            echo ""
+            echo "=== Smoke Check 2: DB Connectivity (GET /trips) ==="
+            HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:${{ env.SERVICE_PORT }}/trips 2>/dev/null || echo "000")
+            if [ "${HTTP_CODE}" = "200" ]; then
+              echo "✅ DB connectivity check passed (HTTP ${HTTP_CODE})"
+            else
+              echo "❌ DB connectivity check failed (HTTP ${HTTP_CODE})"
               docker logs trip-service --tail 50
               exit 1
             fi
-            echo "  Waiting for service... (attempt ${i}/12)"
-            sleep 5
-          done
 
-          echo ""
-          echo "=== Smoke Check 2: DB Connectivity (GET /trips) ==="
-          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:__PORT__/trips 2>/dev/null || echo "000")
-          if [ "${HTTP_CODE}" = "200" ]; then
-            echo "✅ DB connectivity check passed (HTTP ${HTTP_CODE})"
-          else
-            echo "❌ DB connectivity check failed (HTTP ${HTTP_CODE})"
-            docker logs trip-service --tail 50
-            exit 1
-          fi
-
-          echo ""
-          echo "=== All smoke checks passed ✅ ==="
-          SMOKE_EOF
-          )
-
-          SMOKE_SCRIPT="${SMOKE_SCRIPT//__PORT__/${{ env.SERVICE_PORT }}}"
-
-          B64_SMOKE=$(echo "${SMOKE_SCRIPT}" | base64 -w0)
-
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "${{ steps.ssm-config.outputs.instance_id }}" \
-            --document-name "AWS-RunShellScript" \
-            --parameters "commands=[\"echo ${B64_SMOKE} | base64 -d | bash\"]" \
-            --timeout-seconds 120 \
-            --comment "Smoke checks for TripService:${{ inputs.image_tag }}" \
-            --query "Command.CommandId" --output text)
-
-          # Wait for smoke checks
-          echo "⏳ Waiting for smoke checks..."
-          for i in $(seq 1 30); do
-            STATUS=$(aws ssm get-command-invocation \
-              --command-id "${COMMAND_ID}" \
-              --instance-id "${{ steps.ssm-config.outputs.instance_id }}" \
-              --query "Status" --output text 2>/dev/null || echo "Pending")
-
-            if [ "${STATUS}" = "Success" ]; then
-              echo "✅ All smoke checks passed"
-              aws ssm get-command-invocation \
-                --command-id "${COMMAND_ID}" \
-                --instance-id "${{ steps.ssm-config.outputs.instance_id }}" \
-                --query "StandardOutputContent" --output text
-              exit 0
-            elif [ "${STATUS}" = "Failed" ] || [ "${STATUS}" = "TimedOut" ] || [ "${STATUS}" = "Cancelled" ]; then
-              echo "❌ Smoke checks failed with status: ${STATUS}"
-              aws ssm get-command-invocation \
-                --command-id "${COMMAND_ID}" \
-                --instance-id "${{ steps.ssm-config.outputs.instance_id }}" \
-                --query "StandardErrorContent" --output text
-              exit 1
-            fi
-
-            sleep 5
-          done
-
-          echo "❌ Smoke checks timed out"
-          exit 1
+            echo ""
+            echo "=== All smoke checks passed ✅ ==="
+          comment: "Smoke checks for TripService:${{ inputs.image_tag }}"
+          timeout-seconds: 120
 
       # ---------------------------------------------------------------
       # Step 7: Rollback on failure
       # ---------------------------------------------------------------
       - name: Rollback to previous version
         if: failure() && steps.current-tag.outputs.current_tag != 'none' && steps.current-tag.outputs.current_tag != ''
-        run: |
-          PREVIOUS_TAG="${{ steps.current-tag.outputs.current_tag }}"
-          echo "🔄 Rolling back to previous image tag: ${PREVIOUS_TAG}"
+        uses: ./.github/actions/ssm-run-command
+        with:
+          instance-id: ${{ steps.ssm-config.outputs.instance_id }}
+          working-directory: /opt/drive-ops
+          command: |
+            set -euo pipefail
 
-          ROLLBACK_SCRIPT=$(cat <<'ROLLBACK_EOF'
-          set -euo pipefail
+            PREVIOUS_TAG="${{ steps.current-tag.outputs.current_tag }}"
+            ECR_REGISTRY="${{ steps.ssm-config.outputs.ecr_registry }}"
 
-          ECR_REGISTRY="__ECR_REGISTRY__"
-          PREVIOUS_TAG="__PREVIOUS_TAG__"
-          AWS_REGION="__AWS_REGION__"
+            echo "=== TripService Rollback ==="
+            echo "Rolling back to: ${ECR_REGISTRY}/trip-service:${PREVIOUS_TAG}"
 
-          echo "=== TripService Rollback ==="
-          echo "Rolling back to: ${ECR_REGISTRY}/trip-service:${PREVIOUS_TAG}"
+            # Re-authenticate to ECR
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+              docker login --username AWS --password-stdin ${ECR_REGISTRY}
 
-          # Re-authenticate to ECR
-          aws ecr get-login-password --region ${AWS_REGION} | \
-            docker login --username AWS --password-stdin ${ECR_REGISTRY}
+            # Pull and restart with previous image
+            docker pull ${ECR_REGISTRY}/trip-service:${PREVIOUS_TAG}
+            export TRIP_SERVICE_IMAGE="${ECR_REGISTRY}/trip-service:${PREVIOUS_TAG}"
+            docker compose up -d --no-deps --force-recreate trip-service
 
-          # Pull and restart with previous image
-          cd /opt/drive-ops
-          docker pull ${ECR_REGISTRY}/trip-service:${PREVIOUS_TAG}
-          export TRIP_SERVICE_IMAGE="${ECR_REGISTRY}/trip-service:${PREVIOUS_TAG}"
-          docker compose up -d --no-deps --force-recreate trip-service
+            # Wait for health
+            for i in $(seq 1 12); do
+              if curl -sf http://localhost:${{ env.SERVICE_PORT }}/health > /dev/null; then
+                echo "✅ Rollback successful — service is healthy"
+                exit 0
+              fi
+              echo "  Waiting for rollback health check... (${i}/12)"
+              sleep 5
+            done
 
-          # Wait for health
-          for i in $(seq 1 12); do
-            if curl -sf http://localhost:__PORT__/health > /dev/null; then
-              echo "✅ Rollback successful — service is healthy"
-              exit 0
-            fi
-            echo "  Waiting for rollback health check... (${i}/12)"
-            sleep 5
-          done
-
-          echo "⚠️  Rollback deployed but health check is not passing"
-          exit 1
-          ROLLBACK_EOF
-          )
-
-          ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT//__ECR_REGISTRY__/${{ steps.ssm-config.outputs.ecr_registry }}}"
-          ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT//__PREVIOUS_TAG__/${PREVIOUS_TAG}}"
-          ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT//__AWS_REGION__/${{ env.AWS_REGION }}}"
-          ROLLBACK_SCRIPT="${ROLLBACK_SCRIPT//__PORT__/${{ env.SERVICE_PORT }}}"
-
-          B64_ROLLBACK=$(echo "${ROLLBACK_SCRIPT}" | base64 -w0)
-
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "${{ steps.ssm-config.outputs.instance_id }}" \
-            --document-name "AWS-RunShellScript" \
-            --parameters "commands=[\"echo ${B64_ROLLBACK} | base64 -d | bash\"]" \
-            --timeout-seconds 300 \
-            --comment "Rollback TripService to ${PREVIOUS_TAG}" \
-            --query "Command.CommandId" --output text)
-
-          echo "⏳ Waiting for rollback..."
-          for i in $(seq 1 60); do
-            STATUS=$(aws ssm get-command-invocation \
-              --command-id "${COMMAND_ID}" \
-              --instance-id "${{ steps.ssm-config.outputs.instance_id }}" \
-              --query "Status" --output text 2>/dev/null || echo "Pending")
-
-            if [ "${STATUS}" = "Success" ]; then
-              echo "✅ Rollback completed"
-              aws ssm get-command-invocation \
-                --command-id "${COMMAND_ID}" \
-                --instance-id "${{ steps.ssm-config.outputs.instance_id }}" \
-                --query "StandardOutputContent" --output text
-              break
-            elif [ "${STATUS}" = "Failed" ] || [ "${STATUS}" = "TimedOut" ] || [ "${STATUS}" = "Cancelled" ]; then
-              echo "❌ Rollback failed!"
-              aws ssm get-command-invocation \
-                --command-id "${COMMAND_ID}" \
-                --instance-id "${{ steps.ssm-config.outputs.instance_id }}" \
-                --query "StandardErrorContent" --output text
-              break
-            fi
-            sleep 5
-          done
+            echo "⚠️  Rollback deployed but health check is not passing"
+            exit 1
+          comment: "Rollback TripService to ${{ steps.current-tag.outputs.current_tag }}"
+          timeout-seconds: 300
 
       - name: Deployment summary
         if: always()
