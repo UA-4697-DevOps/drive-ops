@@ -307,15 +307,15 @@ resource "aws_eip" "nat_instance" {
 
 # NAT Instance (EC2) - using fck-nat AMI (pre-configured, no user-data needed)
 resource "aws_instance" "nat_instance" {
-  count               = var.use_nat_instance ? 1 : 0
-  ami                 = data.aws_ami.nat_instance[0].id
-  instance_type       = var.nat_instance_type
-  subnet_id           = aws_subnet.public[0].id
-  vpc_security_group_ids = [aws_security_group.nat_instance[0].id]
-  iam_instance_profile = aws_iam_instance_profile.nat_instance[0].name
-  key_name            = var.nat_instance_key_name
+  count                       = var.use_nat_instance ? 1 : 0
+  ami                         = data.aws_ami.nat_instance[0].id
+  instance_type               = var.nat_instance_type
+  subnet_id                   = aws_subnet.public[0].id
+  vpc_security_group_ids      = [aws_security_group.nat_instance[0].id]
+  iam_instance_profile        = aws_iam_instance_profile.nat_instance[0].name
+  key_name                    = var.nat_instance_key_name
   associate_public_ip_address = true
-  source_dest_check   = false  # Critical: allows instance to forward traffic
+  source_dest_check           = false # Critical: allows instance to forward traffic
 
   # fck-nat AMI is pre-configured with:
   # - IP forwarding enabled

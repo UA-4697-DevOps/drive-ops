@@ -179,7 +179,7 @@ variable "node_ami_type" {
   default     = "AL2023_x86_64_STANDARD"
 
   validation {
-    condition     = contains([
+    condition = contains([
       "AL2023_x86_64_STANDARD",
       "AL2023_ARM_64_STANDARD",
       "AL2023_x86_64_NEURON",
