@@ -24,7 +24,7 @@ resource "aws_lambda_function" "tag_auditor" {
   tags = { Name = "${var.project_name}-${var.env}-tag-auditor" }
 }
 
-# IAM Role 
+# IAM Role
 resource "aws_iam_role" "tag_auditor_exec" {
   name                 = "Training-${var.project_name}-${var.env}-lambda-tag-auditor-role"
   permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
@@ -61,6 +61,18 @@ resource "aws_iam_role_policy" "tag_auditor_policy" {
         Resource = "*"
       },
       {
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeInstances",
+          "rds:DescribeDBInstances",
+          "sqs:ListQueues",
+          "sqs:GetQueueAttributes",
+          "secretsmanager:ListSecrets",
+          "sts:GetCallerIdentity"
+        ]
+        Resource = "*"
+      },
+      {
         Effect   = "Allow"
         Action   = ["sns:Publish"]
         Resource = [var.sns_topic_arn]
@@ -68,7 +80,6 @@ resource "aws_iam_role_policy" "tag_auditor_policy" {
     ]
   })
 }
-
 
 resource "aws_cloudwatch_event_rule" "daily_audit" {
   name                = "${var.project_name}-${var.env}-tag-auditor-schedule"
