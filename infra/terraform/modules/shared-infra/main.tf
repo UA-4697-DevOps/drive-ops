@@ -18,11 +18,14 @@ module "vpc" {
   account_id   = var.account_id
   env          = var.env
 
-  vpc_cidr                   = var.vpc_cidr
-  availability_zones         = var.availability_zones
-  enable_flow_logs           = var.enable_flow_logs
-  flow_log_retention_in_days = var.flow_log_retention_in_days
-  enable_nat_gateway         = var.enable_nat_gateway
+  vpc_cidr                      = var.vpc_cidr
+  availability_zones            = var.availability_zones
+  enable_flow_logs              = var.enable_flow_logs
+  flow_log_retention_in_days    = var.flow_log_retention_in_days
+  use_nat_instance              = var.use_nat_instance
+  nat_instance_type             = var.nat_instance_type
+  nat_instance_key_name         = var.nat_instance_key_name
+  nat_bastion_allowed_ssh_cidrs = var.nat_bastion_allowed_ssh_cidrs
 }
 
 # ------------------------------------------------------------------------------

@@ -129,9 +129,27 @@ variable "discord_webhook_url" {
   }
 }
 
-# ---- NAT Gateway Variables ---
-variable "enable_nat_gateway" {
-  description = "Whether to create a NAT Gateway for private subnet internet access"
+# ---- NAT Instance Variables ---
+variable "use_nat_instance" {
+  description = "Whether to use a NAT Instance (fck-nat EC2) for private subnet outbound internet access"
   type        = bool
   default     = false
+}
+
+variable "nat_instance_type" {
+  description = "Instance type for NAT Instance (t4g.nano recommended for cost optimization - ARM/Graviton)"
+  type        = string
+  default     = "t4g.nano"
+}
+
+variable "nat_instance_key_name" {
+  description = "Optional SSH key name for NAT Instance (for troubleshooting only). When null, SSH key access is disabled."
+  type        = string
+  default     = null
+}
+
+variable "nat_bastion_allowed_ssh_cidrs" {
+  description = "List of CIDR blocks allowed to SSH to the NAT Instance (e.g., bastion security group CIDR). When empty, SSH ingress is not configured. Example: [\"10.0.1.0/24\"]"
+  type        = list(string)
+  default     = []
 }
