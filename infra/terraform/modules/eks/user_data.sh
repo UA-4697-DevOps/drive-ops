@@ -19,9 +19,13 @@ echo "Configuring kubelet with extra arguments: ${kubelet_extra_args} (drop-in: 
 mkdir -p /etc/systemd/system/kubelet.service.d
 
 # Create a drop-in configuration file with extra kubelet arguments
+# Escape double-quote characters in kubelet_extra_args so the resulting
+# `Environment="KUBELET_EXTRA_ARGS=..."` line is valid for systemd parsing.
+escaped_kubelet_extra_args="${kubelet_extra_args//\"/\\\"}"
+
 cat > /etc/systemd/system/kubelet.service.d/99-kubelet-extra-args.conf <<EOF
 [Service]
-Environment="KUBELET_EXTRA_ARGS=${kubelet_extra_args}"
+Environment="KUBELET_EXTRA_ARGS=${escaped_kubelet_extra_args}"
 EOF
 
 # Reload systemd and restart kubelet to apply changes
