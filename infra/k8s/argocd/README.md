@@ -42,15 +42,15 @@ To verify that GitOps is working and protecting the cluster from manual interven
 
 1. Check for the presence of the test config pulled from Git:
    ```bash
-   kubectl get configmap gitops-test
+   kubectl get configmap gitops-test-dev
    ```
 2. Simulate a failure by manually deleting it:
    ```bash
-   kubectl delete configmap gitops-test
+   kubectl delete configmap gitops-test-dev
    ```
 3. Immediately check again:
    ```bash
-   kubectl get configmap gitops-test
+   kubectl get configmap gitops-test-dev
    ```
 Argo CD should automatically restore it within a few seconds!
 
