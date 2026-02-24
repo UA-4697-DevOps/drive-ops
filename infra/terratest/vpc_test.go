@@ -133,13 +133,11 @@ func TestVPCPrivateSubnetIsolation(t *testing.T) {
     require.NotNil(t, planStruct.RawPlan.PlannedValues)
 
     foundPrivateRouteTable := false
-    privateRouteTableAddress := ""
 
-    // FIRST PASS: Locate the private route table and extract its address
+    // FIRST PASS: Locate the private route table
     for _, resource := range planStruct.RawPlan.PlannedValues.RootModule.Resources {
         if resource.Type == "aws_route_table" && strings.Contains(resource.Address, "private") {
             foundPrivateRouteTable = true
-            privateRouteTableAddress = resource.Address
 
             values := resource.AttributeValues
             routes, ok := values["route"].([]interface{})
@@ -171,8 +169,6 @@ func TestVPCPrivateSubnetIsolation(t *testing.T) {
 
             // Assert that the route targets a NAT instance ENI or instance ID, not an IGW
             gwStr, _ := attributes["gateway_id"].(string)
-            niStr, _ := attributes["network_interface_id"].(string)
-            instStr, _ := attributes["instance_id"].(string)
 
             // gateway_id should be empty/absent for NAT routes
             assert.Equal(t, "", gwStr, "NAT route should not target an Internet Gateway (gateway_id must be empty)")
