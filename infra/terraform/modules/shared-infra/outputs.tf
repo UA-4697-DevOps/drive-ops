@@ -90,6 +90,17 @@ output "ecr_iam_role_arns" {
   }
 }
 
+# --- Encryption (KMS) ---
+output "kms_key_arn" {
+  description = "ARN of the customer-managed KMS key used for encrypting sensitive data (EKS secrets, CloudWatch Logs, etc.)"
+  value       = aws_kms_key.cmk.arn
+}
+
+output "kms_key_id" {
+  description = "ID of the customer-managed KMS key"
+  value       = aws_kms_key.cmk.key_id
+}
+
 # --- Secrets ---
 output "rds_secret_arn" {
   description = "ARN of the Secrets Manager secret for RDS credentials"
