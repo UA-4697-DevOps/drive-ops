@@ -13,6 +13,7 @@ resource "aws_secretsmanager_secret" "rds_credentials" {
   name        = "${var.project_name}/${var.env}/rds/credentials-v2"
   description = "RDS master credentials for ${var.project_name} ${var.env}"
   tags        = var.tags
+
   lifecycle {
     create_before_destroy = true
   }
@@ -32,6 +33,7 @@ resource "aws_secretsmanager_secret" "discord_webhook" {
   name        = "${var.project_name}/${var.env}/monitoring/discord-v2"
   description = "Discord Webhook URL for alerting"
   tags        = var.tags
+
   lifecycle {
     create_before_destroy = true
   }
