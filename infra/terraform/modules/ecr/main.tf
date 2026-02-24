@@ -9,7 +9,7 @@ resource "aws_ecr_repository" "service_repository" {
 }
 
 # --- IAM Role for GitHub Actions (Strict Main Branch Only) ---
-resource "aws_iam_role" "github_actions" {
+resource "aws_iam_role" "role" {
   # FIX: Added 'Training-' prefix to satisfy account permissions boundary
   name = "Training-${var.repository_name}-github-actions-role"
 
