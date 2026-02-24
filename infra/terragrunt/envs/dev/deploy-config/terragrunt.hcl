@@ -25,11 +25,13 @@ dependency "shared_infra" {
   config_path = "../shared-infra"
 
   mock_outputs = {
-    trip_created_queue_url    = "https://sqs.us-east-2.amazonaws.com/123456789012/trip-created-dev.fifo"
-    driver_assigned_queue_url = "https://sqs.us-east-2.amazonaws.com/123456789012/driver-assigned-dev.fifo"
-    trip_completed_queue_url  = "https://sqs.us-east-2.amazonaws.com/123456789012/trip-completed-dev.fifo"
+    sqs_urls = {
+      trip_created    = "https://sqs.us-east-2.amazonaws.com/123456789012/trip-created-dev.fifo"
+      driver_assigned = "https://sqs.us-east-2.amazonaws.com/123456789012/driver-assigned-dev.fifo"
+      trip_completed  = "https://sqs.us-east-2.amazonaws.com/123456789012/trip-completed-dev.fifo"
+    }
     ecr_iam_role_names = {
-      trip_service = "trip-service-github-actions-role"
+      trip_service = "Training-trip-service-github-actions-role"
     }
     ecr_repository_arns = {
       trip_service = "arn:aws:ecr:us-east-2:123456789012:repository/trip-service"
@@ -76,9 +78,9 @@ inputs = {
   rds_secret_arn = dependency.secrets.outputs.rds_master_secret_arn
 
   # SQS queue URLs (from shared-infra module)
-  sqs_trip_created_url    = dependency.shared_infra.outputs.trip_created_queue_url
-  sqs_driver_assigned_url = dependency.shared_infra.outputs.driver_assigned_queue_url
-  sqs_trip_completed_url  = dependency.shared_infra.outputs.trip_completed_queue_url
+  sqs_trip_created_url    = dependency.shared_infra.outputs.sqs_urls.trip_created
+  sqs_driver_assigned_url = dependency.shared_infra.outputs.sqs_urls.driver_assigned
+  sqs_trip_completed_url  = dependency.shared_infra.outputs.sqs_urls.trip_completed
 
   # ECR / GitHub Actions role (from shared-infra ECR outputs)
   service_name             = "trip-service"
