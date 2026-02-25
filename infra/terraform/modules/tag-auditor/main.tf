@@ -64,6 +64,7 @@ resource "aws_iam_role_policy" "tag_auditor_policy" {
         Effect = "Allow"
         Action = [
           "ec2:DescribeInstances",
+          "ec2:TerminateInstances",
           "rds:DescribeDBInstances",
           "sqs:ListQueues",
           "sqs:GetQueueAttributes",
