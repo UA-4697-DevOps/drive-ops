@@ -66,11 +66,15 @@ resource "aws_iam_role_policy" "tag_auditor_policy" {
           "ec2:DescribeInstances",
           "rds:DescribeDBInstances",
           "sqs:ListQueues",
-          "sqs:GetQueueAttributes",
           "secretsmanager:ListSecrets",
           "sts:GetCallerIdentity"
         ]
         Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["sqs:GetQueueAttributes"]
+        Resource = length(var.sqs_queue_arns) > 0 ? var.sqs_queue_arns : ["*"]
       },
       {
         Effect   = "Allow"
@@ -170,6 +174,11 @@ resource "aws_iam_role_policy" "cleanup_policy" {
           "sts:GetCallerIdentity"
         ]
         Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ec2:TerminateInstances"]
+        Resource = "arn:aws:ec2:*:${var.account_id}:instance/*"
       },
       {
         Effect   = "Allow"
