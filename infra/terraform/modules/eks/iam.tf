@@ -23,7 +23,7 @@ data "aws_iam_policy_document" "eks_assume_role" {
 }
 
 resource "aws_iam_role" "eks_cluster" {
-  name                 = "${local.safe_cluster_name}-cluster-role"
+  name                 = "${local.cluster_name}-cluster-role"
   assume_role_policy   = data.aws_iam_policy_document.eks_assume_role.json
   permissions_boundary = local.permissions_boundary
   tags                 = var.tags
@@ -54,7 +54,7 @@ data "aws_iam_policy_document" "node_assume_role" {
 }
 
 resource "aws_iam_role" "node_group" {
-  name                 = "${local.safe_cluster_name}-node-role"
+  name                 = "${local.cluster_name}-node-role"
   assume_role_policy   = data.aws_iam_policy_document.node_assume_role.json
   permissions_boundary = local.permissions_boundary
   tags                 = var.tags

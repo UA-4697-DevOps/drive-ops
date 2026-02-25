@@ -64,6 +64,12 @@ variable "public_subnet_ids" {
   default     = []
 }
 
+variable "node_subnet_ids" {
+  description = "List of subnet IDs for EKS worker nodes. If not provided, private_subnet_ids will be used. Use this to deploy nodes to public subnets in NATless VPCs."
+  type        = list(string)
+  default     = []
+}
+
 # --- Cluster Configuration ---
 
 variable "cluster_version" {
@@ -80,22 +86,13 @@ variable "cluster_version" {
 }
 
 variable "cluster_endpoint_public_access" {
-  description = <<-EOT
-    Whether the EKS API endpoint is publicly accessible.
-    
-    **BREAKING CHANGE:** The default is now `false` (was `true`).
-    If you require public access, set `cluster_endpoint_public_access = true` and specify trusted CIDRs in `cluster_endpoint_public_access_cidrs`.
-    
-    See CHANGELOG.md for migration details.
-    
-    Defaults to false for security (private-only access via VPC/bastion). Set to true ONLY if you explicitly set cluster_endpoint_public_access_cidrs to trusted IPs.
-  EOT
+  description = "Whether the EKS API endpoint is publicly accessible"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "cluster_endpoint_public_access_cidrs" {
-  description = "List of CIDR blocks allowed to access the public EKS API endpoint. REQUIRED when cluster_endpoint_public_access is true. Must NOT be empty when enabling public access — set to specific IPs (e.g., bastion/VPN) to restrict access. Default empty list enforces private-only access."
+  description = "List of CIDR blocks allowed to access the public EKS API endpoint. Only applies when cluster_endpoint_public_access is true. Restrict to known IPs (e.g., bastion/VPN) for production. Set to [] to disable public access; must be explicitly set for public access."
   type        = list(string)
   default     = []
 }
@@ -132,120 +129,34 @@ variable "kms_key_arn" {
 
 # --- Node Group Configuration ---
 
-variable "node_instance_types" {
-  description = "List of EC2 instance types for the managed node group"
-  type        = list(string)
-  default     = ["t3.small"]
+variable "custom_security_group_rules" {
+  description = "Additional custom security group rules to apply to the EKS cluster and nodes. Each rule must specify the security_group_id it applies to."
+  type = map(object({
+    type              = string # "ingress" or "egress"
+    from_port         = number
+    to_port           = number
+    protocol          = string # "tcp", "udp", "-1" (all), etc.
+    cidr_blocks       = optional(list(string))
+    source_sg_id      = optional(string) # Security group ID (alternative to cidr_blocks)
+    security_group_id = string           # Which SG to apply the rule to
+    description       = string
+  }))
+  default = {}
 }
 
-variable "node_desired_size" {
-  description = "Desired number of worker nodes"
-  type        = number
-  default     = 2
-}
-
-variable "node_min_size" {
-  description = "Minimum number of worker nodes"
-  type        = number
-  default     = 2
-}
-
-variable "node_max_size" {
-  description = "Maximum number of worker nodes"
-  type        = number
-  default     = 4
-}
-
-variable "node_disk_size" {
-  description = "Disk size in GiB for worker nodes"
-  type        = number
-  default     = 20
-}
-
-variable "node_capacity_type" {
-  description = "Capacity type for the node group (ON_DEMAND or SPOT)"
-  type        = string
-  default     = "ON_DEMAND"
-
-  validation {
-    condition     = contains(["ON_DEMAND", "SPOT"], var.node_capacity_type)
-    error_message = "node_capacity_type must be ON_DEMAND or SPOT."
-  }
-}
-
-variable "node_ami_type" {
-  description = "AMI type for EKS worker nodes (AL2023_x86_64_STANDARD, AL2_x86_64, etc.)"
-  type        = string
-  default     = "AL2023_x86_64_STANDARD"
-
-  validation {
-    condition = contains([
-      "AL2023_x86_64_STANDARD",
-      "AL2023_ARM_64_STANDARD",
-      "AL2023_x86_64_NEURON",
-      "AL2023_x86_64_NVIDIA",
-      "AL2023_ARM_64_NVIDIA",
-      "AL2_x86_64",
-      "AL2_x86_64_GPU",
-      "AL2_ARM_64",
-      "BOTTLEROCKET_ARM_64",
-      "BOTTLEROCKET_x86_64",
-      "BOTTLEROCKET_ARM_64_FIPS",
-      "BOTTLEROCKET_x86_64_FIPS",
-      "BOTTLEROCKET_x86_64_NVIDIA",
-      "BOTTLEROCKET_ARM_64_NVIDIA",
-      "BOTTLEROCKET_ARM_64_NVIDIA_FIPS",
-      "BOTTLEROCKET_x86_64_NVIDIA_FIPS",
-      "WINDOWS_CORE_2022_x86_64",
-      "WINDOWS_CORE_2019_x86_64",
-      "WINDOWS_FULL_2019_x86_64",
-      "WINDOWS_CORE_2025_x86_64",
-      "WINDOWS_FULL_2022_x86_64",
-      "WINDOWS_FULL_2025_x86_64",
-      "CUSTOM"
-    ], var.node_ami_type)
-    error_message = "Invalid node_ami_type: must be one of AL2023_x86_64_STANDARD, AL2023_ARM_64_STANDARD, AL2023_x86_64_NEURON, AL2023_x86_64_NVIDIA, AL2023_ARM_64_NVIDIA, AL2_x86_64, AL2_x86_64_GPU, AL2_ARM_64, BOTTLEROCKET_ARM_64, BOTTLEROCKET_x86_64, BOTTLEROCKET_ARM_64_FIPS, BOTTLEROCKET_x86_64_FIPS, BOTTLEROCKET_x86_64_NVIDIA, BOTTLEROCKET_ARM_64_NVIDIA, BOTTLEROCKET_ARM_64_NVIDIA_FIPS, BOTTLEROCKET_x86_64_NVIDIA_FIPS, WINDOWS_CORE_2022_x86_64, WINDOWS_CORE_2019_x86_64, WINDOWS_FULL_2019_x86_64, WINDOWS_CORE_2025_x86_64, WINDOWS_FULL_2022_x86_64, WINDOWS_FULL_2025_x86_64, or CUSTOM."
-  }
-}
-
-variable "node_subnet_ids" {
-  description = "Subnet IDs for worker nodes. Defaults to private_subnet_ids when empty. Pass public_subnet_ids for NATless VPCs (nodes in public subnets)."
-  type        = list(string)
-  default     = []
-}
-
-variable "node_associate_public_ip_address" {
-  description = "Assign a public IP to each worker node. Required when nodes are placed in public subnets without a NAT Instance."
-  type        = bool
-  default     = false
-}
-
-variable "node_update_max_unavailable" {
-  description = "Maximum number of worker nodes that can be unavailable during node group updates. Configurable to support different availability and update strategies."
-  type        = number
-  default     = 1
-
-  validation {
-    condition     = var.node_update_max_unavailable >= 1
-    error_message = "node_update_max_unavailable must be at least 1."
-  }
-}
-
-variable "bastion_sg_id" {
-  description = "Security group ID of the bastion host. When set, adds an ingress rule on port 22 to the node security group so engineers can SSH from the bastion to worker nodes for debugging. Set to null to omit the rule (use SSM Session Manager instead)."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
-variable "kubelet_extra_args" {
-  description = <<-EOT
-    Extra arguments to pass to the kubelet on worker nodes (e.g., --fail-swap-on=false).
-    
-    For Kubernetes v1.35+ with cgroup v1 compatibility fallback, set `failCgroupV1: false` in the kubelet ConfigMap (`kube-system/kubelet-config`).
-    Do not use a `--fail-cgroup-v1` CLI flag (it does not exist and will not be recognized by kubelet or bootstrap.sh).
-    This is only needed for custom AMIs that do not support cgroup v2. AL2023 and Bottlerocket node images use cgroup v2 and nodeadm by default and do not require this setting.
-  EOT
-  type        = string
-  default     = ""
+variable "node_groups" {
+  description = "Map of EKS managed node group configurations. Each node group can have different instance types, capacity types, scaling parameters, and disk sizes."
+  type = map(object({
+    instance_types         = list(string)
+    ami_type               = string
+    capacity_type          = string
+    desired_size           = number
+    min_size               = number
+    max_size               = number
+    disk_size              = number
+    update_max_unavailable = number
+    associate_public_ip    = bool
+    tags                   = optional(map(string), {})
+  }))
+  default = {}
 }
