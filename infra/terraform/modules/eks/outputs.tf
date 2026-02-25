@@ -9,12 +9,6 @@ output "cluster_name" {
   value       = aws_eks_cluster.this.name
 }
 
-output "cluster_arn" {
-  description = "ARN of the EKS cluster"
-  value       = aws_eks_cluster.this.arn
-  sensitive   = true
-}
-
 output "cluster_endpoint" {
   description = "Endpoint URL for the EKS API server"
   value       = aws_eks_cluster.this.endpoint
@@ -25,41 +19,6 @@ output "cluster_certificate_authority_data" {
   description = "Base64-encoded certificate authority data for the cluster"
   value       = aws_eks_cluster.this.certificate_authority[0].data
   sensitive   = true
-}
-
-output "cluster_version" {
-  description = "Kubernetes version running on the cluster"
-  value       = aws_eks_cluster.this.version
-}
-
-output "cluster_platform_version" {
-  description = "EKS platform version"
-  value       = aws_eks_cluster.this.platform_version
-}
-
-# --- Networking ---
-
-output "cluster_security_group_id" {
-  description = "Security group ID attached to the EKS cluster control plane"
-  value       = aws_security_group.eks_cluster.id
-}
-
-output "node_security_group_id" {
-  description = "Security group ID attached to the EKS worker nodes"
-  value       = aws_security_group.eks_nodes.id
-}
-
-# --- Node Group ---
-
-output "node_groups" {
-  description = "Map of EKS managed node groups with their attributes"
-  value = {
-    for k, ng in aws_eks_node_group.this : k => {
-      name   = ng.node_group_name
-      arn    = ng.arn
-      status = ng.status
-    }
-  }
 }
 
 # --- IAM ---
