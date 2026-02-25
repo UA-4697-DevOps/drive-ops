@@ -64,7 +64,6 @@ resource "aws_iam_role_policy" "tag_auditor_policy" {
         Effect = "Allow"
         Action = [
           "ec2:DescribeInstances",
-          "ec2:TerminateInstances",
           "rds:DescribeDBInstances",
           "sqs:ListQueues",
           "sqs:GetQueueAttributes",
@@ -109,4 +108,82 @@ resource "aws_cloudwatch_log_group" "tag_auditor_logs" {
   retention_in_days = 3
 
   tags = { Name = "${var.project_name}-${var.env}-tag-auditor-logs" }
+}
+
+# --- Cleanup Lambda ---
+data "archive_file" "cleanup_zip" {
+  type        = "zip"
+  source_file = "${path.module}/cleanup.py"
+  output_path = "${path.module}/cleanup.zip"
+}
+
+resource "aws_lambda_function" "cleanup" {
+  filename         = data.archive_file.cleanup_zip.output_path
+  function_name    = "${var.project_name}-${var.env}-tag-cleanup"
+  role             = aws_iam_role.cleanup_exec.arn
+  handler          = "cleanup.lambda_handler"
+  runtime          = "python3.12"
+  timeout          = 60
+  memory_size      = 128
+  source_code_hash = data.archive_file.cleanup_zip.output_base64sha256
+
+  environment {
+    variables = {
+      SNS_TOPIC_ARN = var.sns_topic_arn
+    }
+  }
+
+  tags = { Name = "${var.project_name}-${var.env}-tag-cleanup" }
+}
+
+resource "aws_iam_role" "cleanup_exec" {
+  name                 = "Training-${var.project_name}-${var.env}-lambda-tag-cleanup-role"
+  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "cleanup_logs" {
+  role       = aws_iam_role.cleanup_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "cleanup_policy" {
+  name = "Training-${var.project_name}-${var.env}-tag-cleanup-policy"
+  role = aws_iam_role.cleanup_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "tag:GetResources",
+          "ec2:DescribeInstances",
+          "ec2:TerminateInstances",
+          "sts:GetCallerIdentity"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
+        Resource = [var.sns_topic_arn]
+      }
+    ]
+  })
+}
+
+resource "aws_cloudwatch_log_group" "cleanup_logs" {
+  name              = "/aws/lambda/${aws_lambda_function.cleanup.function_name}"
+  retention_in_days = 3
+
+  tags = { Name = "${var.project_name}-${var.env}-tag-cleanup-logs" }
 }
