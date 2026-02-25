@@ -167,7 +167,6 @@ resource "aws_iam_role_policy" "cleanup_policy" {
         Action = [
           "tag:GetResources",
           "ec2:DescribeInstances",
-          "ec2:TerminateInstances",
           "sts:GetCallerIdentity"
         ]
         Resource = "*"
