@@ -9,7 +9,7 @@ resource "aws_ecr_repository" "service_repository" {
 }
 
 # --- IAM Role for GitHub Actions (Strict Main Branch Only) ---
-resource "aws_iam_role" "github_actions" {
+resource "aws_iam_role" "role" {
   # FIX: Added 'Training-' prefix to satisfy account permissions boundary
   name = "Training-${var.repository_name}-github-actions-role"
 
@@ -108,12 +108,12 @@ resource "aws_iam_policy" "terraform_backend_policy" {
 
 # Attach both policies to the role
 resource "aws_iam_role_policy_attachment" "ecr_policy" {
-  role       = aws_iam_role.github_actions.name
+  role       = aws_iam_role.role.name
   policy_arn = aws_iam_policy.ecr_push_policy.arn
 }
 
 resource "aws_iam_role_policy_attachment" "backend_policy" {
-  role       = aws_iam_role.github_actions.name
+  role       = aws_iam_role.role.name
   policy_arn = aws_iam_policy.terraform_backend_policy.arn
 }
 
@@ -128,4 +128,9 @@ resource "aws_ecr_lifecycle_policy" "cleanup_policy" {
       action       = { type = "expire" }
     }]
   })
+}
+
+moved {
+  from = aws_iam_role.github_actions
+  to   = aws_iam_role.role
 }
