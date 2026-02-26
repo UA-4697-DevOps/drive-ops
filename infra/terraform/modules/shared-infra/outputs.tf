@@ -76,12 +76,30 @@ output "ecr_repository_urls" {
   }
 }
 
+output "ecr_repository_arns" {
+  description = "Map of ECR repository ARNs for IAM policy scoping"
+  value = {
+    client_gateway = module.ecr_client_gateway.repository_arn
+    driver_service = module.ecr_driver_service.repository_arn
+    trip_service   = module.ecr_trip_service.repository_arn
+  }
+}
+
 output "ecr_iam_role_arns" {
   description = "IAM Role ARNs for GitHub Actions OIDC authentication"
   value = {
-    client_gateway = module.ecr_client_gateway.github_actions_role_arn
-    driver_service = module.ecr_driver_service.github_actions_role_arn
-    trip_service   = module.ecr_trip_service.github_actions_role_arn
+    client_gateway = module.ecr_client_gateway.role_arn
+    driver_service = module.ecr_driver_service.role_arn
+    trip_service   = module.ecr_trip_service.role_arn
+  }
+}
+
+output "ecr_iam_role_names" {
+  description = "IAM Role names for GitHub Actions (for policy attachment)"
+  value = {
+    client_gateway = module.ecr_client_gateway.role_name
+    driver_service = module.ecr_driver_service.role_name
+    trip_service   = module.ecr_trip_service.role_name
   }
 }
 

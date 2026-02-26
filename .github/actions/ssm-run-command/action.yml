@@ -1,0 +1,130 @@
+name: 'SSM Run Command'
+description: >
+  Execute a shell command on an EC2 instance via AWS SSM Run Command,
+  poll for completion, and capture stdout/stderr.
+  Requires AWS credentials to be pre-configured in the environment
+  (e.g. via aws-actions/configure-aws-credentials with OIDC).
+
+inputs:
+  instance-id:
+    description: 'EC2 instance ID to target'
+    required: true
+  command:
+    description: 'Bash command(s) to execute on the instance'
+    required: true
+  working-directory:
+    description: 'Working directory on the remote instance'
+    required: false
+    default: '/home/ubuntu'
+  comment:
+    description: 'Comment attached to the SSM command for logging'
+    required: false
+    default: 'Executed by GitHub Actions'
+  timeout-seconds:
+    description: 'Maximum seconds to wait for command completion'
+    required: false
+    default: '300'
+
+outputs:
+  command-id:
+    description: 'SSM Run Command ID (UUID)'
+    value: ${{ steps.send.outputs.command_id }}
+  status:
+    description: 'Final command status (Success, Failed, TimedOut, etc.)'
+    value: ${{ steps.poll.outputs.status }}
+  stdout:
+    description: 'Standard output from the remote command'
+    value: ${{ steps.poll.outputs.stdout }}
+  stderr:
+    description: 'Standard error from the remote command'
+    value: ${{ steps.poll.outputs.stderr }}
+
+runs:
+  using: 'composite'
+  steps:
+    # --- Step 1: Send the command via SSM ---
+    - name: Send SSM command
+      id: send
+      shell: bash
+      run: |
+        # Base64-encode the command to safely pass multi-line scripts
+        B64_CMD=$(echo '${{ inputs.command }}' | base64 -w0)
+
+        COMMAND_ID=$(aws ssm send-command \
+          --instance-ids "${{ inputs.instance-id }}" \
+          --document-name "AWS-RunShellScript" \
+          --parameters "commands=[\"cd ${{ inputs.working-directory }} && echo ${B64_CMD} | base64 -d | bash\"]" \
+          --timeout-seconds ${{ inputs.timeout-seconds }} \
+          --comment "${{ inputs.comment }}" \
+          --query "Command.CommandId" --output text)
+
+        echo "command_id=${COMMAND_ID}" >> $GITHUB_OUTPUT
+        echo "📤 SSM command sent: ${COMMAND_ID}"
+
+    # --- Step 2: Poll for completion ---
+    - name: Wait for SSM command completion
+      id: poll
+      shell: bash
+      run: |
+        COMMAND_ID="${{ steps.send.outputs.command_id }}"
+        INSTANCE_ID="${{ inputs.instance-id }}"
+        TIMEOUT=${{ inputs.timeout-seconds }}
+
+        # Poll interval: 5 seconds
+        MAX_ATTEMPTS=$(( TIMEOUT / 5 ))
+        if [ "${MAX_ATTEMPTS}" -lt 1 ]; then MAX_ATTEMPTS=1; fi
+
+        echo "⏳ Polling SSM command ${COMMAND_ID} (timeout: ${TIMEOUT}s)..."
+
+        for i in $(seq 1 ${MAX_ATTEMPTS}); do
+          STATUS=$(aws ssm get-command-invocation \
+            --command-id "${COMMAND_ID}" \
+            --instance-id "${INSTANCE_ID}" \
+            --query "Status" --output text 2>/dev/null || echo "Pending")
+
+          if [ "${STATUS}" = "Success" ]; then
+            echo "✅ Command completed successfully"
+
+            STDOUT=$(aws ssm get-command-invocation \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${INSTANCE_ID}" \
+              --query "StandardOutputContent" --output text)
+            echo "${STDOUT}"
+
+            # Write outputs (use delimiter for multi-line)
+            echo "status=Success" >> $GITHUB_OUTPUT
+            {
+              echo "stdout<<SSMEOFOUT"
+              echo "${STDOUT}"
+              echo "SSMEOFOUT"
+            } >> $GITHUB_OUTPUT
+            echo "stderr=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [ "${STATUS}" = "Failed" ] || [ "${STATUS}" = "TimedOut" ] || [ "${STATUS}" = "Cancelled" ]; then
+            echo "❌ Command ${STATUS}"
+
+            STDERR=$(aws ssm get-command-invocation \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${INSTANCE_ID}" \
+              --query "StandardErrorContent" --output text)
+            echo "${STDERR}" >&2
+
+            echo "status=${STATUS}" >> $GITHUB_OUTPUT
+            echo "stdout=" >> $GITHUB_OUTPUT
+            {
+              echo "stderr<<SSMEOFERR"
+              echo "${STDERR}"
+              echo "SSMEOFERR"
+            } >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          echo "  Status: ${STATUS} (attempt ${i}/${MAX_ATTEMPTS})..."
+          sleep 5
+        done
+
+        echo "❌ Command timed out after ${TIMEOUT}s (last status: ${STATUS})"
+        echo "status=TimedOut" >> $GITHUB_OUTPUT
+        exit 1
