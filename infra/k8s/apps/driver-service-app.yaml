@@ -7,16 +7,11 @@ spec:
   project: default
   source:
     repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
-<<<<<<< HEAD
     targetRevision: v0.0.0-dev
     path: driver-service/charts/driver-service
     helm:
       valueFiles:
         - values-dev.yaml
-=======
-    targetRevision: HEAD
-    path: driver-service/k8s
->>>>>>> ea3861c (feat: add driver-service ArgoCD Application for app-of-apps)
   destination:
     server: https://kubernetes.default.svc
     namespace: dev
