@@ -18,8 +18,3 @@ variable "sns_topic_arn" {
   description = "ARN of the existing SNS alerts topic from the monitoring module"
 }
 
-variable "sqs_queue_arns" {
-  type        = list(string)
-  description = "List of SQS queue ARNs to scope GetQueueAttributes permission"
-  default     = []
-}
