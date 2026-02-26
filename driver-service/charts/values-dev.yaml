@@ -2,6 +2,7 @@ replicaCount: 1
 
 image:
   tag: latest
+  pullPolicy: Always
 
 resources:
   requests:
@@ -16,6 +17,3 @@ autoscaling:
 
 gateway:
   url: "http://client-gateway.dev.svc.cluster.local:8080"
-
-image:
-  pullPolicy: Always
