@@ -9,7 +9,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
-    targetRevision: HEAD
+    targetRevision: main
     path: infra/k8s/kyverno
   destination:
     server: https://kubernetes.default.svc
