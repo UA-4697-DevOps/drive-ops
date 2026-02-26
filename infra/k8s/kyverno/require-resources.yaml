@@ -27,3 +27,11 @@ spec:
                       limits:
                         cpu: "?*"
                         memory: "?*"
+                =(initContainers):
+                  - resources:
+                      requests:
+                        cpu: "?*"
+                        memory: "?*"
+                      limits:
+                        cpu: "?*"
+                        memory: "?*"
