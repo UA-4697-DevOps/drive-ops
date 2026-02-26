@@ -2,43 +2,18 @@ import boto3
 import os
 
 
-def cleanup_untagged_resources(region, dry_run=True):
+def terminate_instances(ec2, instance_ids, dry_run):
     """
-    Finds and optionally terminates fully untagged EC2 instances.
-    dry_run=True (default) - only logs, never deletes.
+    Terminates EC2 instances by ID.
+    dry_run=True - only logs, never deletes.
     dry_run=False - real termination.
     """
-    sts = boto3.client("sts")
-    account_id = sts.get_caller_identity()["Account"]
-    ec2 = boto3.client("ec2", region_name=region)
-    tagging = boto3.client("resourcegroupstaggingapi", region_name=region)
-
-    tagged_arns = set()
-    paginator = tagging.get_paginator("get_resources")
-    for page in paginator.paginate(ResourcesPerPage=100):
-        for resource in page["ResourceTagMappingList"]:
-            tagged_arns.add(resource["ResourceARN"])
-
-    forgotten = []
-    for page in ec2.get_paginator("describe_instances").paginate():
-        for reservation in page["Reservations"]:
-            for instance in reservation["Instances"]:
-                instance_id = instance["InstanceId"]
-                arn = f"arn:aws:ec2:{region}:{account_id}:instance/{instance_id}"
-                state = instance["State"]["Name"]
-
-                if state in ("terminated", "shutting-down"):
-                    continue
-
-                if arn not in tagged_arns:
-                    forgotten.append({"arn": arn, "instance_id": instance_id, "state": state})
-                    if dry_run:
-                        print(f"[DRY-RUN] Would terminate: {instance_id} (state: {state})")
-                    else:
-                        print(f"[CLEANUP] Terminating: {instance_id}")
-                        ec2.terminate_instances(InstanceIds=[instance_id])
-
-    return forgotten
+    for instance_id in instance_ids:
+        if dry_run:
+            print(f"[DRY-RUN] Would terminate: {instance_id}")
+        else:
+            print(f"[CLEANUP] Terminating: {instance_id}")
+            ec2.terminate_instances(InstanceIds=[instance_id])
 
 
 def lambda_handler(event, context):
@@ -48,26 +23,34 @@ def lambda_handler(event, context):
     if not sns_arn:
         raise ValueError("SNS_TOPIC_ARN environment variable is not set.")
 
+    # Receive instance IDs from tag_auditor via Lambda invoke
+    instance_ids = event.get("instance_ids", [])
     dry_run = event.get("dry_run", True)
     mode = "DRY-RUN" if dry_run else "LIVE"
 
-    print(f"Starting cleanup in {mode} mode, region: {region}")
-    forgotten = cleanup_untagged_resources(region, dry_run=dry_run)
-    print(f"Cleanup complete. Forgotten resources: {len(forgotten)}")
+    if not instance_ids:
+        print("No instance IDs provided. Nothing to clean up.")
+        return {"statusCode": 200, "dry_run": dry_run, "terminated_count": 0}
 
-    if forgotten:
+    print(f"Starting cleanup in {mode} mode, region: {region}")
+    print(f"Instances to process: {instance_ids}")
+
+    ec2 = boto3.client("ec2", region_name=region)
+    terminate_instances(ec2, instance_ids, dry_run)
+
+    if not dry_run:
         sns = boto3.client("sns", region_name=region)
-        lines = [f"Cleanup Report [{mode}] - {len(forgotten)} forgotten resource(s)\n"]
-        for r in forgotten:
-            lines.append(f"Resource: {r['arn']} (state: {r['state']})")
+        lines = [f"Cleanup Report [{mode}] - {len(instance_ids)} instance(s) terminated\n"]
+        for instance_id in instance_ids:
+            lines.append(f"Terminated: {instance_id}")
         sns.publish(
             TopicArn=sns_arn,
-            Subject=f"[drive-ops] Cleanup [{mode}]: Forgotten Resources",
+            Subject=f"[drive-ops] Cleanup [{mode}]: Instances Terminated",
             Message="\n".join(lines),
         )
 
     return {
         "statusCode": 200,
         "dry_run": dry_run,
-        "forgotten_count": len(forgotten),
+        "terminated_count": len(instance_ids),
     }

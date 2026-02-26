@@ -17,7 +17,8 @@ resource "aws_lambda_function" "tag_auditor" {
 
   environment {
     variables = {
-      SNS_TOPIC_ARN = var.sns_topic_arn
+      SNS_TOPIC_ARN         = var.sns_topic_arn
+      CLEANUP_FUNCTION_NAME = aws_lambda_function.cleanup.function_name
     }
   }
 
@@ -76,6 +77,11 @@ resource "aws_iam_role_policy" "tag_auditor_policy" {
         Effect   = "Allow"
         Action   = ["sns:Publish"]
         Resource = [var.sns_topic_arn]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = aws_lambda_function.cleanup.arn
       }
     ]
   })
@@ -165,7 +171,6 @@ resource "aws_iam_role_policy" "cleanup_policy" {
       {
         Effect = "Allow"
         Action = [
-          "tag:GetResources",
           "ec2:DescribeInstances",
           "sts:GetCallerIdentity"
         ]
