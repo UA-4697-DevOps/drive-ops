@@ -8,7 +8,10 @@ spec:
   source:
     repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
     targetRevision: HEAD
-    path: driver-service/k8s
+    path: driver-service/charts
+    helm:
+      valueFiles:
+        - values-dev.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: dev
