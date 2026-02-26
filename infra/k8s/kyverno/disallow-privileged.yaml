@@ -15,10 +15,14 @@ spec:
       validate:
         message: >-
           Privileged containers are not allowed.
-        pattern:
-          spec:
-            =(template):
-              spec:
-                containers:
-                  - =(securityContext):
-                      =(privileged): "false"
+        anyPattern:
+          - spec:
+              containers:
+                - securityContext:
+                    privileged: "false"
+          - spec:
+              template:
+                spec:
+                  containers:
+                    - securityContext:
+                        privileged: "false"
