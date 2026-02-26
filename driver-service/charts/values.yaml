@@ -2,8 +2,8 @@ replicaCount: 1
 
 image:
   repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/driver-service
-tag: "0.0.0-dev"   # override per environment/CI pipeline
-pullPolicy: IfNotPresent
+  tag: "0.0.0-dev"    # override per environment/CI pipeline
+  pullPolicy: IfNotPresent
 
 service:
   type: ClusterIP
