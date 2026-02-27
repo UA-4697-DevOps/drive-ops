@@ -169,14 +169,6 @@ resource "aws_iam_role_policy" "cleanup_policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = [
-          "ec2:DescribeInstances",
-          "sts:GetCallerIdentity"
-        ]
-        Resource = "*"
-      },
-      {
         Effect   = "Allow"
         Action   = ["ec2:TerminateInstances"]
         Resource = "arn:aws:ec2:*:${var.account_id}:instance/*"
