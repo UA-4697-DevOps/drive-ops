@@ -42,6 +42,7 @@ wheels/
 .terraform.lock.hcl
 .docker/
 *.log
+.env.test
 .vagrant/
 postgres_data/
 rabbitmq_data/
