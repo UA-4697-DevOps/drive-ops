@@ -31,6 +31,12 @@ resource "aws_s3_bucket_lifecycle_configuration" "db_backups_lifecycle" {
   rule {
     id     = "archive-and-prune"
     status = "Enabled"
+
+    # NEW: Automatically delete failed upload chunks after 7 days
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+
     transition {
       days          = 30
       storage_class = "STANDARD_IA"
