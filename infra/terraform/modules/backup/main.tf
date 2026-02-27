@@ -86,12 +86,22 @@ resource "aws_iam_role_policy" "backup_s3_access" {
           "s3:PutObject",
           "s3:ListBucket"
         ]
-        Effect = "Allow" # Fix 3: Spacing fixed to pass terraform fmt
+        Effect = "Allow"
         Resource = [
           aws_s3_bucket.db_backups.arn,
           "${aws_s3_bucket.db_backups.arn}/*"
         ]
       },
+      {
+        # NEW: Allow the role to request a Data Key for encryption
+        Action = [
+          "kms:GenerateDataKey"
+        ]
+        Effect = "Allow"
+        Resource = [
+          var.backup_kms_key_arn
+        ]
+      }
     ]
   })
 }
