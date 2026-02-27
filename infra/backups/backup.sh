@@ -1,8 +1,8 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-# Validate required environment variables
-if [ -z "$PGHOST" ] || [ -z "$PGUSER" ] || [ -z "$PGPASSWORD" ] || [ -z "$S3_BUCKET_URI" ] || [ -z "$ENV" ]; then
+# Validate required environment variables (using :- to safely handle 'set -u')
+if [ -z "${PGHOST:-}" ] || [ -z "${PGUSER:-}" ] || [ -z "${PGPASSWORD:-}" ] || [ -z "${S3_BUCKET_URI:-}" ] || [ -z "${ENV:-}" ]; then
   echo "Error: Missing required database, S3, or ENV environment variables."
   exit 1
 fi
@@ -21,6 +21,7 @@ for DB in "${DATABASES[@]}"; do
   BACKUP_FILE="${DB}_${TIMESTAMP}.sql.gz"
   
   # Dump the database and compress it
+  # pipefail ensures that if pg_dump fails, the whole pipeline fails
   pg_dump -h "$PGHOST" -U "$PGUSER" -d "$DB" | gzip > "/tmp/$BACKUP_FILE"
   
   echo "--> Uploading $BACKUP_FILE to $S3_BUCKET_URI..."

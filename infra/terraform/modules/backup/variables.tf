@@ -29,3 +29,8 @@ variable "k8s_service_account_name" {
   type        = string
   default     = "db-backup-sa"
 }
+
+variable "backup_kms_key_arn" {
+  description = "The ARN of the KMS key used to encrypt the backup S3 bucket"
+  type        = string
+}

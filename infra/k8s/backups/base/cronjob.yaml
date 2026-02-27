@@ -7,7 +7,6 @@ metadata:
     app: drive-ops
     component: database-backup
 spec:
-  # Run daily at 02:00 AM system time
   schedule: "0 2 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
@@ -15,30 +14,32 @@ spec:
   jobTemplate:
     spec:
       template:
-        metadata:
-          annotations:
-            # IRSA: Attaches the IAM role created by your Terragrunt backup module
-            # Account ID 969283154407 is mapped dynamically based on your env vars
-            eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/drive-ops-backup-role-dev
         spec:
-          serviceAccountName: db-backup-sa # Must match the SA defined in your Terraform IRSA condition
+          serviceAccountName: db-backup-sa
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
           restartPolicy: OnFailure
           containers:
           - name: db-backup
-            # You will need to build and push the Docker image to your ECR registry
-            image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/drive-ops-backup:latest
-            imagePullPolicy: Always
+            # Placeholder image name - Kustomize will overwrite this
+            image: drive-ops-backup
+            imagePullPolicy: IfNotPresent
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: ["ALL"]
+            volumeMounts:
+              - name: tmp
+                mountPath: /tmp
             env:
-              # NEW: Passes the environment string to the backup script
-              - name: ENV
-                value: "dev"
-              - name: S3_BUCKET_URI
-                value: "s3://drive-ops-db-backups-dev"
               # Fetch database credentials securely from your existing Kubernetes Secret
               - name: PGHOST
                 valueFrom:
                   secretKeyRef:
-                    name: rds-credentials # Adjust to match your actual secret name
+                    name: rds-credentials
                     key: host
               - name: PGUSER
                 valueFrom:
@@ -50,3 +51,6 @@ spec:
                   secretKeyRef:
                     name: rds-credentials
                     key: password
+          volumes:
+            - name: tmp
+              emptyDir: {}

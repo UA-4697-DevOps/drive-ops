@@ -22,8 +22,11 @@ inputs = {
   # Pass the EKS dependency outputs into the backup module's variables
   eks_oidc_provider_arn = dependency.eks.outputs.oidc_provider_arn
   eks_oidc_provider_url = dependency.eks.outputs.oidc_provider_url
-  
+
   # Kubernetes details for the IAM Role (IRSA)
   k8s_namespace            = "default"
   k8s_service_account_name = "db-backup-sa"
+
+  # NEW: KMS Key for S3 Encryption (Using AWS-managed key to satisfy CodeRabbit review)
+  backup_kms_key_arn = "alias/aws/s3"
 }

@@ -5,6 +5,18 @@ resource "aws_s3_bucket" "db_backups" {
   bucket = "${var.project_name}-db-backups-${var.env}"
 }
 
+# Fix 1: Add CMK-backed Server-Side Encryption
+resource "aws_s3_bucket_server_side_encryption_configuration" "db_backups_crypto" {
+  bucket = aws_s3_bucket.db_backups.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = var.backup_kms_key_arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
 resource "aws_s3_bucket_public_access_block" "db_backups" {
   bucket                  = aws_s3_bucket.db_backups.id
   block_public_acls       = true
@@ -47,6 +59,13 @@ data "aws_iam_policy_document" "eks_assume_role" {
       variable = "${replace(var.eks_oidc_provider_url, "https://", "")}:sub"
       values   = ["system:serviceaccount:${var.k8s_namespace}:${var.k8s_service_account_name}"]
     }
+
+    # Fix 2: Add aud condition to restrict token acceptance to AWS STS
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(var.eks_oidc_provider_url, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
   }
 }
 
@@ -67,7 +86,7 @@ resource "aws_iam_role_policy" "backup_s3_access" {
           "s3:PutObject",
           "s3:ListBucket"
         ]
-        Effect   = "Allow"
+        Effect = "Allow" # Fix 3: Spacing fixed to pass terraform fmt
         Resource = [
           aws_s3_bucket.db_backups.arn,
           "${aws_s3_bucket.db_backups.arn}/*"
