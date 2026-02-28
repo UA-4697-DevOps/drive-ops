@@ -1,25 +1,21 @@
-# Package Lambda Code
-data "archive_file" "tag_auditor_zip" {
-  type        = "zip"
-  source_file = "${path.module}/tag_auditor.py"
-  output_path = "${path.module}/tag_auditor.zip"
-}
-
 resource "aws_lambda_function" "tag_auditor" {
-  filename         = data.archive_file.tag_auditor_zip.output_path
-  function_name    = "${var.project_name}-${var.env}-tag-auditor"
-  role             = aws_iam_role.tag_auditor_exec.arn
-  handler          = "tag_auditor.lambda_handler"
-  runtime          = "python3.12"
-  timeout          = 60
-  memory_size      = 128
-  source_code_hash = data.archive_file.tag_auditor_zip.output_base64sha256
+  filename      = "${path.module}/dummy.zip"
+  function_name = "${var.project_name}-${var.env}-tag-auditor"
+  role          = aws_iam_role.tag_auditor_exec.arn
+  handler       = "tag_auditor.lambda_handler"
+  runtime       = "python3.12"
+  timeout       = 60
+  memory_size   = 128
 
   environment {
     variables = {
       SNS_TOPIC_ARN         = var.sns_topic_arn
       CLEANUP_FUNCTION_NAME = aws_lambda_function.cleanup.function_name
     }
+  }
+
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
   }
 
   tags = { Name = "${var.project_name}-${var.env}-tag-auditor" }
@@ -117,26 +113,23 @@ resource "aws_cloudwatch_log_group" "tag_auditor_logs" {
 }
 
 # --- Cleanup Lambda ---
-data "archive_file" "cleanup_zip" {
-  type        = "zip"
-  source_file = "${path.module}/cleanup.py"
-  output_path = "${path.module}/cleanup.zip"
-}
-
 resource "aws_lambda_function" "cleanup" {
-  filename         = data.archive_file.cleanup_zip.output_path
-  function_name    = "${var.project_name}-${var.env}-tag-cleanup"
-  role             = aws_iam_role.cleanup_exec.arn
-  handler          = "cleanup.lambda_handler"
-  runtime          = "python3.12"
-  timeout          = 60
-  memory_size      = 128
-  source_code_hash = data.archive_file.cleanup_zip.output_base64sha256
+  filename      = "${path.module}/dummy.zip"
+  function_name = "${var.project_name}-${var.env}-tag-cleanup"
+  role          = aws_iam_role.cleanup_exec.arn
+  handler       = "cleanup.lambda_handler"
+  runtime       = "python3.12"
+  timeout       = 60
+  memory_size   = 128
 
   environment {
     variables = {
       SNS_TOPIC_ARN = var.sns_topic_arn
     }
+  }
+
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
   }
 
   tags = { Name = "${var.project_name}-${var.env}-tag-cleanup" }
