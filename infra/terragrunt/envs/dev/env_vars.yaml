@@ -8,7 +8,24 @@ account_id: "969283154407"
 # Enable high availability in dev (set to false to save costs)
 enable_ha: false
 
+# Enable OpenVPN on the bastion host (set to false to save costs in dev)
+# Override with TG_VAR_ENABLE_OPENVPN or .env_vars.local.yaml for production-like deployments
+enable_openvpn: false
+
 # Environment-specific tags
 env_tags:
   Environment: "dev"
   AutoShutdown: "true"
+
+# CIDR(s) allowed for SSH access to the bastion host
+# ⚠ SECURITY WARNING: Do NOT hardcode real IPs in version control.
+# This placeholder is for reference only. Override this value using:
+#   1. Environment variable: export TG_VAR_BASTION_ALLOWED_SSH_CIDRS='["YOUR_IP/32"]'
+#   2. AWS SSM Parameter: Store the CIDR list in SSM Parameter Store and read via data source
+#   3. Local override file: Create a `.env_vars.local.yaml` (add to .gitignore) with the real value
+#
+# OWNER: DevOps team
+# ROTATION: Review quarterly or when team members change
+# FORMAT: YAML list of CIDR blocks (e.g., ["203.0.113.0/24", "198.51.100.50/32"])
+BASTION_ALLOWED_SSH_CIDRS:
+  - "0.0.0.0/32"  # PLACEHOLDER: Replace via secure override (see above)

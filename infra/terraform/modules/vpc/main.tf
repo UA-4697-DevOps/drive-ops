@@ -17,7 +17,11 @@ resource "aws_subnet" "public" {
   cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index)
   availability_zone       = var.availability_zones[count.index]
   map_public_ip_on_launch = true
-  tags                    = { Name = "${var.project_name}-${var.env}-public-${count.index}" }
+
+  tags = {
+    Name                     = "${var.project_name}-public-subnet-${count.index + 1}"
+    "kubernetes.io/role/elb" = "1"
+  }
 }
 
 # Private subnets - using fixed AZs from variables
@@ -26,7 +30,11 @@ resource "aws_subnet" "private" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + 10)
   availability_zone = var.availability_zones[count.index]
-  tags              = { Name = "${var.project_name}-${var.env}-private-${count.index}" }
+
+  tags = {
+    Name                              = "${var.project_name}-private-subnet-${count.index + 1}"
+    "kubernetes.io/role/internal-elb" = "1"
+  }
 }
 
 # --- Routing ---
@@ -40,10 +48,11 @@ resource "aws_route_table" "public" {
   tags = { Name = "${var.project_name}-${var.env}-public-rt" }
 }
 
+# Private route table — starts with no default route.
+# The nat module adds a 0.0.0.0/0 → NAT instance route when deployed.
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
-  # No route to 0.0.0.0/0 ensures isolation
-  tags = { Name = "${var.project_name}-${var.env}-private-rt" }
+  tags   = { Name = "${var.project_name}-${var.env}-private-rt" }
 }
 
 resource "aws_route_table_association" "public" {

@@ -16,7 +16,7 @@ set -euo pipefail
 #   - Terraform/Terragrunt compute modules applied (EC2 instances must be running)
 #   - EC2 instances must have SSM agent active and IAM role with:
 #       secretsmanager:GetSecretValue, rds:DescribeDBInstances
-#   - Secret "drive-ops/<env>/rds/credentials" must exist in Secrets Manager
+#   - Secret "drive-ops/<env>/rds/credentials-v2" must exist in Secrets Manager
 #
 # Usage:
 #   ./01-init-rds-schema.sh [dev|staging|prod]
@@ -46,7 +46,7 @@ TIMEOUT=120
 ENV_NORM="${ENV//-/_}"
 TRIP_DB="drive_ops_${ENV_NORM}_trip"
 DRIVER_DB="drive_ops_${ENV_NORM}_driver"
-SECRET_ID="${PROJECT}/${ENV}/rds/credentials"
+SECRET_ID="${PROJECT}/${ENV}/rds/credentials-v2"
 RDS_INSTANCE="${PROJECT}-${ENV}-postgres"
 
 echo -e "${BLUE}============================================================${NC}"
