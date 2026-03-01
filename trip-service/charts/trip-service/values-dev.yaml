@@ -1,0 +1,57 @@
+# Development environment values for trip-service
+
+replicaCount: 1
+
+image:
+  repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service
+  pullPolicy: Always
+  tag: "latest"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-dev-trip-service-role
+  name: "trip-service"
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+
+config:
+  awsRegion: "us-east-2"
+  sqsTripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-dev.fifo"
+  sqsDriverAssignedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-dev.fifo"
+  sqsTripCompletedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-dev.fifo"
+  servicePort: ":8081"
+
+database:
+  secretName: "trip-service-secrets"
+  secretKey: "database-url"
+
+# Simple health checks for test/dev
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 15
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 1  # Can tolerate downtime in dev

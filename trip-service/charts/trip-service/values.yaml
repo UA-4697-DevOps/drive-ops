@@ -1,0 +1,144 @@
+# Default values for trip-service Helm chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# -- Number of replicas for the deployment
+replicaCount: 1
+
+image:
+  # -- Container image repository
+  repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service
+  # -- Image pull policy
+  pullPolicy: Always
+  # -- Overrides the image tag whose default is the chart appVersion
+  tag: "latest"
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Override the name of the chart
+nameOverride: ""
+# -- Override the full name of the release
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Specifies whether a service account should be created
+  create: true
+  # -- Annotations to add to the service account (IRSA)
+  # Replace role ARN with actual IRSA role after Terraform provisioning
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-dev-trip-service-role
+  # -- The name of the service account to use
+  name: "trip-service"
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- Service port
+  port: 80
+  # -- Container target port
+  targetPort: 8081
+  # -- Service port name
+  portName: http
+
+resources:
+  # -- Resource limits
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  # -- Resource requests
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+autoscaling:
+  # -- Enable horizontal pod autoscaling
+  enabled: false
+  # -- Minimum number of replicas
+  minReplicas: 2
+  # -- Maximum number of replicas
+  maxReplicas: 10
+  # -- Target CPU utilization percentage
+  targetCPUUtilizationPercentage: 80
+  # -- Target memory utilization percentage
+  targetMemoryUtilizationPercentage: 80
+
+# -- Node selector for pod assignment
+nodeSelector: {}
+
+# -- Tolerations for pod assignment
+tolerations: []
+
+# -- Affinity for pod assignment
+affinity: {}
+
+# Health checks configuration
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 15
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# Strategy for deployment updates
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 1
+
+# Application configuration
+config:
+  # -- AWS region
+  awsRegion: "us-east-2"
+  # -- SQS queue URL for trip created events
+  sqsTripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-dev.fifo"
+  # -- SQS queue URL for driver assigned events
+  sqsDriverAssignedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-dev.fifo"
+  # -- SQS queue URL for trip completed events
+  sqsTripCompletedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-dev.fifo"
+  # -- Service port
+  servicePort: ":8081"
+
+# Database configuration (will be loaded from secret)
+database:
+  # -- Database connection URL (leave empty to use secret)
+  url: ""
+  # -- Secret name containing database URL
+  secretName: "trip-service-secrets"
+  # -- Secret key for database URL
+  secretKey: "database-url"
+
+# External secrets configuration (optional)
+externalSecrets:
+  # -- Enable external secrets operator
+  enabled: false
+  # -- AWS Secrets Manager secret name
+  secretName: "trip-service/database"
+  # -- AWS region for secrets
+  region: "us-east-2"
+
+# ConfigMap settings
+configMap:
+  # -- Create ConfigMap
+  create: true
+
+# Secret settings
+secret:
+  # -- Create Secret (for local/testing only)
+  create: false
+  # -- Database URL (only used if secret.create is true)
+  databaseUrl: ""

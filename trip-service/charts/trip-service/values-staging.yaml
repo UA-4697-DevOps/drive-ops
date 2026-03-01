@@ -1,0 +1,90 @@
+# Staging environment values for trip-service
+
+replicaCount: 1
+
+image:
+  repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service
+  pullPolicy: Always
+  tag: "latest"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-staging-trip-service-role
+  name: "trip-service"
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+
+config:
+  awsRegion: "us-east-2"
+  sqsTripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-staging.fifo"
+  sqsDriverAssignedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-staging.fifo"
+  sqsTripCompletedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-staging.fifo"
+  servicePort: ":8081"
+
+database:
+  secretName: "trip-service-secrets"
+  secretKey: "database-url"
+
+# Production-like health checks for staging
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 15
+  periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 0
+  periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 12  # Allow 60 seconds for startup
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0  # No downtime
+
+# Pod disruption budget for staging
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Node affinity - prefer spot instances in staging
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 50
+      preference:
+        matchExpressions:
+        - key: kubernetes.io/lifecycle
+          operator: In
+          values:
+          - spot

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: trip-service
+description: Helm chart for Trip Service - microservice for managing ride trips
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - trip-service
+  - microservice
+  - golang
+  - eks
+home: https://github.com/UA-4697-DevOps/drive-ops
+sources:
+  - https://github.com/UA-4697-DevOps/drive-ops/tree/main/trip-service
+maintainers:
+  - name: DevOps Team
+    email: devops@example.com

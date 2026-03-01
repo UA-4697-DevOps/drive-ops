@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trip-service
+  namespace: dev
+  labels:
+    app: trip-service
+    app.kubernetes.io/name: trip-service
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: trip-service
+  template:
+    metadata:
+      labels:
+        app: trip-service
+    spec:
+      serviceAccountName: trip-service
+      containers:
+      - name: trip-service
+        image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8081
+          protocol: TCP
+        env:
+        # Database Configuration (from Secret)
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: trip-service-secrets
+              key: database-url
+        # AWS Configuration (from ConfigMap)
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: trip-service-config
+              key: aws-region
+        # SQS Queue URLs (from ConfigMap)
+        - name: SQS_TRIP_CREATED_URL
+          valueFrom:
+            configMapKeyRef:
+              name: trip-service-config
+              key: sqs-trip-created-url
+        - name: SQS_DRIVER_ASSIGNED_URL
+          valueFrom:
+            configMapKeyRef:
+              name: trip-service-config
+              key: sqs-driver-assigned-url
+        - name: SQS_TRIP_COMPLETED_URL
+          valueFrom:
+            configMapKeyRef:
+              name: trip-service-config
+              key: sqs-trip-completed-url
+        # Service Port
+        - name: TRIP_SERVICE_PORT
+          value: ":8081"
+        # Health Checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        # Resource Limits and Requests
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        # Volume Mounts
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
