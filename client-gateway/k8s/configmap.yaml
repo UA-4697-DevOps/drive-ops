@@ -9,4 +9,4 @@ data:
   trip-service-url: "http://trip-service.dev.svc.cluster.local:8081"
   driver-service-url: "http://driver-service.dev.svc.cluster.local:8082"
   health-check-port: "8080"
-  debug: "False"
+  debug: "false"

@@ -34,7 +34,7 @@ backend:
 
 config:
   healthCheckPort: "8080"
-  debug: "False"
+  debug: "false"
 
 bot:
   token: ""

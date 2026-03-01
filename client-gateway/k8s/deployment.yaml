@@ -31,8 +31,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: client-gateway
-          image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/client-gateway:latest
-          imagePullPolicy: Always
+          image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/client-gateway:0.0.0-dev
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           securityContext:
@@ -82,6 +82,8 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: bot-logs
+              mountPath: /app/bot/logs
           livenessProbe:
             httpGet:
               path: /health
@@ -98,4 +100,6 @@ spec:
             failureThreshold: 3
       volumes:
         - name: tmp
+          emptyDir: {}
+        - name: bot-logs
           emptyDir: {}
