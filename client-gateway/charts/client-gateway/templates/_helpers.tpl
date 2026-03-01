@@ -1,0 +1,13 @@
+{{- define "client-gateway.name" -}}
+{{- .Chart.Name }}
+{{- end }}
+
+{{- define "client-gateway.fullname" -}}
+{{- printf "%s-%s" .Release.Name .Chart.Name | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "client-gateway.labels" -}}
+app: {{ include "client-gateway.name" . }}
+helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}

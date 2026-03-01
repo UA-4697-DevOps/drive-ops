@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: client-gateway
+  namespace: dev
+  labels:
+    app: client-gateway
+spec:
+  selector:
+    app: client-gateway
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
