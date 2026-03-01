@@ -6,7 +6,7 @@ metadata:
     {{- include "client-gateway.labels" . | nindent 4 }}
 spec:
   selector:
-    {{- include "client-gateway.labels" . | nindent 4 }}
+    {{- include "client-gateway.selectorLabels" . | nindent 4 }}
   ports:
     - protocol: TCP
       port: {{ .Values.service.port }}
