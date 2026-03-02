@@ -68,7 +68,7 @@ jobs:
       - name: Wait for locust-master to be available
         run: |
           echo "Waiting for load-testing namespace and pods..."
-          if ! kubectl wait --for=condition=available deployment/locust-master \ 
+          if ! kubectl wait --for=condition=available deployment/locust-master \
             -n load-testing --timeout=120s; then
              echo "::warning::locust-master not available after 120s, proceeding anyway"
           fi
