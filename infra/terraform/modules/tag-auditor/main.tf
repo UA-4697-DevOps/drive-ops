@@ -38,8 +38,6 @@ locals {
   }
 }
 
-# --- 0. Dynamic Dummy Zip ---
-# Створюємо пустий файл на льоту, щоб не тримати dummy.zip у Git-репозиторії
 data "archive_file" "dummy" {
   type        = "zip"
   output_path = "${path.module}/dummy_generated.zip"
@@ -49,8 +47,6 @@ data "archive_file" "dummy" {
     filename = "dummy.txt"
   }
 }
-
-# --- 1. IAM Roles & Policies ---
 
 resource "aws_iam_role" "this" {
   for_each = var.lambda_functions
@@ -76,7 +72,6 @@ resource "aws_iam_role_policy_attachment" "basic_exec" {
 }
 
 resource "aws_iam_role_policy" "custom_policy" {
-  # Створюємо політику ТІЛЬКИ для тих функцій, які описані в locals.policies
   for_each = { for k, v in var.lambda_functions : k => v if contains(keys(local.policies), k) }
 
   name = "Training-${var.project_name}-${var.env}-${each.key}-policy"
@@ -88,27 +83,26 @@ resource "aws_iam_role_policy" "custom_policy" {
   })
 }
 
-# --- 2. Lambda Functions ---
-
 resource "aws_lambda_function" "this" {
   for_each = var.lambda_functions
 
   function_name = "${var.project_name}-${var.env}-${each.key}"
-
-  # Використовуємо згенерований на льоту архів
-  filename = data.archive_file.dummy.output_path
-
-  role        = aws_iam_role.this[each.key].arn
-  handler     = each.value.handler
-  runtime     = each.value.runtime
-  timeout     = each.value.timeout
-  memory_size = each.value.memory_size
-  description = each.value.description
+  filename      = data.archive_file.dummy.output_path
+  
+  role          = aws_iam_role.this[each.key].arn
+  handler       = each.value.handler
+  runtime       = each.value.runtime
+  timeout       = each.value.timeout
+  memory_size   = each.value.memory_size
+  description   = each.value.description
 
   environment {
     variables = merge(
       { SNS_TOPIC_ARN = var.sns_topic_arn },
-      each.key == "tag-auditor" ? { CLEANUP_FUNCTION_NAME = "${var.project_name}-${var.env}-tag-cleanup" } : {}
+      each.key == "tag-auditor" ? { 
+        CLEANUP_FUNCTION_NAME = "${var.project_name}-${var.env}-tag-cleanup"
+        MANDATORY_TAGS        = var.mandatory_tags
+      } : {}
     )
   }
 
@@ -126,8 +120,6 @@ resource "aws_cloudwatch_log_group" "logs" {
   retention_in_days = 3
   tags              = { Name = "${var.project_name}-${var.env}-${each.key}-logs" }
 }
-
-# --- 3. Scheduling ---
 
 resource "aws_cloudwatch_event_rule" "schedule" {
   for_each = { for k, v in var.lambda_functions : k => v if v.schedule != null }

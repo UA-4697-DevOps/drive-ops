@@ -2,7 +2,8 @@ import boto3
 import json
 import os
 
-MANDATORY_TAGS = ["Project", "Environment", "ManagedBy", "CostCenter"]
+tags_env = os.environ.get("MANDATORY_TAGS", "Project,Environment,ManagedBy,CostCenter")
+MANDATORY_TAGS = [t.strip() for t in tags_env.split(",")]
 SNS_MAX_BYTES = 256 * 1024
 
 

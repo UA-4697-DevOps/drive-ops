@@ -25,11 +25,10 @@ variable "lambda_functions" {
     runtime     = optional(string, "python3.12")
     timeout     = optional(number, 60)
     memory_size = optional(number, 128)
-    schedule    = optional(string, null) # If null, no schedule will be created
+    schedule    = optional(string, null)
     description = optional(string, "Managed by Terraform")
   }))
 
-  # Default values so the module works out of the box
   default = {
     "tag-auditor" = {
       handler     = "tag_auditor.lambda_handler"
@@ -41,4 +40,10 @@ variable "lambda_functions" {
       description = "Terminates non-compliant resources"
     }
   }
+}
+
+variable "mandatory_tags" {
+  description = "Comma-separated list of mandatory tags"
+  type        = string
+  default     = "Project,Environment,ManagedBy,CostCenter"
 }
