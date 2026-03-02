@@ -88,18 +88,18 @@ resource "aws_lambda_function" "this" {
 
   function_name = "${var.project_name}-${var.env}-${each.key}"
   filename      = data.archive_file.dummy.output_path
-  
-  role          = aws_iam_role.this[each.key].arn
-  handler       = each.value.handler
-  runtime       = each.value.runtime
-  timeout       = each.value.timeout
-  memory_size   = each.value.memory_size
-  description   = each.value.description
+
+  role        = aws_iam_role.this[each.key].arn
+  handler     = each.value.handler
+  runtime     = each.value.runtime
+  timeout     = each.value.timeout
+  memory_size = each.value.memory_size
+  description = each.value.description
 
   environment {
     variables = merge(
       { SNS_TOPIC_ARN = var.sns_topic_arn },
-      each.key == "tag-auditor" ? { 
+      each.key == "tag-auditor" ? {
         CLEANUP_FUNCTION_NAME = "${var.project_name}-${var.env}-tag-cleanup"
         MANDATORY_TAGS        = var.mandatory_tags
       } : {}
