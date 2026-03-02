@@ -8,6 +8,16 @@ variable "env" {
   type        = string
 }
 
+variable "account_id" {
+  description = "AWS Account ID — used for the DevOpsBound permissions boundary on the bastion IAM role"
+  type        = string
+
+  validation {
+    condition     = can(regex("^\\d{12}$", var.account_id))
+    error_message = "account_id must be a 12-digit AWS account ID."
+  }
+}
+
 variable "vpc_id" {
   description = "VPC ID where the bastion will be deployed"
   type        = string
@@ -54,65 +64,3 @@ variable "tags" {
   default     = {}
 }
 
-# --- OpenVPN Configuration ---
-
-variable "enable_openvpn" {
-  description = "Install and configure OpenVPN server on the bastion host"
-  type        = bool
-  default     = false
-}
-
-variable "vpc_cidr" {
-  description = "VPC CIDR block — pushed as a route to OpenVPN clients so they can reach private subnets"
-  type        = string
-  default     = ""
-}
-
-variable "egress_allowed_cidrs" {
-  description = <<-EOT
-    List of IPv4 CIDR blocks allowed for outbound traffic from the bastion.
-    If empty, `var.vpc_cidr` will be used when set; otherwise falls back to global egress.
-  EOT
-  type        = list(string)
-  default     = []
-}
-
-variable "egress_allowed_ipv6" {
-  description = "List of IPv6 CIDR blocks allowed for outbound traffic from the bastion."
-  type        = list(string)
-  default     = []
-}
-
-variable "egress_allowed_prefix_list_ids" {
-  description = "Optional list of AWS prefix list IDs (for service endpoints) allowed for outbound traffic."
-  type        = list(string)
-  default     = []
-}
-
-variable "vpn_client_cidr" {
-  description = "CIDR block for the OpenVPN virtual network (tunnel addresses assigned to clients)"
-  type        = string
-  default     = "10.8.0.0/24"
-}
-
-variable "account_id" {
-  description = "AWS account ID — used to scope least-privilege IAM policies to Secrets Manager ARNs for this account"
-  type        = string
-}
-
-variable "aws_region" {
-  description = "AWS region where the bastion is deployed — used in Secrets Manager ARNs and AWS CLI calls inside user_data"
-  type        = string
-  default     = "us-east-2"
-}
-
-variable "kms_key_arn" {
-  description = "ARN of the customer-managed KMS key used to encrypt OpenVPN PKI and client-config secrets in Secrets Manager. Set to null to use the AWS-managed default key."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = var.kms_key_arn == null || can(regex("^arn:aws:kms:", var.kms_key_arn))
-    error_message = "kms_key_arn must be a valid KMS key ARN (arn:aws:kms:...) or null."
-  }
-}

@@ -52,6 +52,32 @@ variable "flow_log_retention_in_days" {
   default     = 7
 }
 
+# --- NAT Instance Variables ---
+
+variable "use_nat_instance" {
+  description = "Whether to deploy a NAT instance (fck-nat) for private subnet outbound internet access"
+  type        = bool
+  default     = false
+}
+
+variable "nat_instance_type" {
+  description = "EC2 instance type for the NAT instance (ARM64/Graviton)"
+  type        = string
+  default     = "t4g.nano"
+}
+
+variable "nat_instance_key_name" {
+  description = "Name of the EC2 key pair for NAT instance SSH break-glass access. Leave null for SSM-only."
+  type        = string
+  default     = null
+}
+
+variable "nat_bastion_allowed_ssh_cidrs" {
+  description = "List of CIDR blocks allowed to SSH into the NAT instance"
+  type        = list(string)
+  default     = []
+}
+
 # --- SQS Variables ---
 
 variable "enable_ha" {
@@ -129,31 +155,3 @@ variable "discord_webhook_url" {
   }
 }
 
-# ---- NAT Instance Variables ---
-variable "use_nat_instance" {
-  description = "Whether to use a NAT Instance (fck-nat EC2) for private subnet outbound internet access"
-  type        = bool
-  default     = false
-}
-
-variable "nat_instance_type" {
-  description = "Instance type for NAT Instance (t4g.nano recommended for cost optimization - ARM/Graviton)"
-  type        = string
-  default     = "t4g.nano"
-  validation {
-    condition     = can(regex("^(?:t|m|c|r|a)\\d+g\\.[a-z0-9]+$", var.nat_instance_type))
-    error_message = "nat_instance_type must be an ARM/Graviton family instance (e.g., t4g.nano, m6g.large). The NAT AMI (data.aws_ami.nat_instance) is ARM64-only and will fail for x86 types like t3.nano."
-  }
-}
-
-variable "nat_instance_key_name" {
-  description = "Optional SSH key name for NAT Instance (for troubleshooting only). When null, SSH key access is disabled."
-  type        = string
-  default     = null
-}
-
-variable "nat_bastion_allowed_ssh_cidrs" {
-  description = "List of CIDR blocks allowed to SSH to the NAT Instance (e.g., bastion security group CIDR). When empty, SSH ingress is not configured. Example: [\"10.0.1.0/24\"]"
-  type        = list(string)
-  default     = []
-}

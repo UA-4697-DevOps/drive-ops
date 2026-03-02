@@ -28,34 +28,14 @@ resource "aws_security_group_rule" "ssh_ingress" {
   description       = "SSH from allowlisted CIDRs"
 }
 
-# --- Ingress: OpenVPN (UDP 1194) from allowlisted CIDRs only ---
-
-resource "aws_security_group_rule" "openvpn_ingress" {
-  count             = var.enable_openvpn ? 1 : 0
-  type              = "ingress"
-  from_port         = 1194
-  to_port           = 1194
-  protocol          = "udp"
-  cidr_blocks       = var.allowed_ssh_cidrs
-  security_group_id = aws_security_group.bastion.id
-  description       = "OpenVPN from allowlisted CIDRs"
-}
-
-# --- Egress: restricted outbound (configurable) ---
-
-locals {
-  _cidr_blocks = length(var.egress_allowed_cidrs) > 0 ? var.egress_allowed_cidrs : (var.vpc_cidr != "" ? [var.vpc_cidr] : ["0.0.0.0/0"])
-  _ipv6_blocks = length(var.egress_allowed_ipv6) > 0 ? var.egress_allowed_ipv6 : []
-}
+# --- Egress: allow all outbound traffic (VPC resources, OS updates, etc.) ---
 
 resource "aws_security_group_rule" "all_egress" {
   type              = "egress"
   from_port         = 0
   to_port           = 0
   protocol          = "-1"
-  cidr_blocks       = local._cidr_blocks
-  ipv6_cidr_blocks  = local._ipv6_blocks
-  prefix_list_ids   = var.egress_allowed_prefix_list_ids
+  cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.bastion.id
-  description       = "Outbound traffic allowed to configured CIDRs / prefix lists"
+  description       = "Allow all outbound traffic"
 }

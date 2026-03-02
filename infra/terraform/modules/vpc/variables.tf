@@ -42,43 +42,41 @@ variable "account_id" {
   type        = string
 }
 
+# --- NAT Instance Variables ---
 
 variable "use_nat_instance" {
-  description = "Whether to use a NAT Instance (fck-nat EC2) for private subnet outbound internet access. Defaults to false; must be set to true to enable outbound internet for private subnets."
+  description = "Whether to deploy a NAT instance (fck-nat) for private subnet outbound internet access. Cost-effective alternative to AWS NAT Gateway."
   type        = bool
   default     = false
 }
 
 variable "nat_instance_type" {
-  description = "Instance type for NAT Instance (t4g.nano recommended for cost optimization - ARM/Graviton)."
+  description = "EC2 instance type for the NAT instance. t4g.nano is sufficient for most workloads (ARM64/Graviton)."
   type        = string
   default     = "t4g.nano"
-  validation {
-    condition     = can(regex("^(?:t|m|c|r|a)\\d+g\\.[a-z0-9]+$", var.nat_instance_type))
-    error_message = "nat_instance_type must be an ARM/Graviton family instance (e.g., t4g.nano, m6g.large). The NAT AMI lookup (data.aws_ami.nat_instance) is ARM64-only and will fail for x86 types like t3.nano."
-  }
 }
 
 variable "nat_instance_key_name" {
-  description = "Optional SSH key name for NAT Instance (for troubleshooting only). When null, SSH key access is disabled."
+  description = "Name of the EC2 key pair to associate with the NAT instance. Leave empty to use SSM Session Manager only."
   type        = string
   default     = null
 }
 
-variable "nat_bastion_allowed_ssh_cidrs" {
-  description = "List of CIDR blocks allowed to SSH to the NAT Instance (e.g., bastion security group CIDR). When empty, SSH ingress is not configured. Example: [\"10.0.1.0/24\"]"
-  type        = list(string)
-  default     = []
-}
-
 variable "enable_nat_instance_ssm" {
-  description = "Whether to enable SSM Session Manager access to the NAT Instance (requires IAM instance profile)."
+  description = "Whether to attach the AmazonSSMManagedInstanceCore policy to allow Session Manager access to the NAT instance."
   type        = bool
   default     = true
 }
 
 variable "enable_nat_instance_cloudwatch" {
-  description = "Whether to enable CloudWatch Agent on the NAT Instance for enhanced monitoring."
+  description = "Whether to attach the CloudWatchAgentServerPolicy to enable CloudWatch monitoring on the NAT instance."
   type        = bool
-  default     = true
+  default     = false
 }
+
+variable "nat_bastion_allowed_ssh_cidrs" {
+  description = "List of CIDR blocks allowed to SSH into the NAT instance. Leave empty to disable SSH access."
+  type        = list(string)
+  default     = []
+}
+

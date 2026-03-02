@@ -28,17 +28,12 @@ output "sg_db_id" {
   value       = aws_security_group.db.id
 }
 
-output "nat_instance_id" {
-  description = "The ID of the NAT Instance (null if disabled)"
-  value       = var.use_nat_instance ? aws_instance.nat_instance[0].id : null
+output "private_route_table_id" {
+  description = "ID of the private subnet route table (used by the NAT module to add a default route)"
+  value       = aws_route_table.private.id
 }
 
-output "nat_instance_public_ip" {
-  description = "The public IP address of the NAT Instance (null if disabled)"
-  value       = var.use_nat_instance ? aws_eip.nat_instance[0].public_ip : null
-}
-
-output "nat_instance_private_ip" {
-  description = "The private IP address of the NAT Instance (null if disabled)"
-  value       = var.use_nat_instance ? aws_instance.nat_instance[0].private_ip : null
+output "private_subnet_cidrs" {
+  description = "CIDR blocks of all private subnets (used by the NAT module SG ingress)"
+  value       = aws_subnet.private[*].cidr_block
 }

@@ -29,6 +29,16 @@ output "sg_db_id" {
   value       = module.vpc.sg_db_id
 }
 
+output "private_route_table_id" {
+  description = "ID of the private subnet route table — passed to the NAT module to add the default route"
+  value       = module.vpc.private_route_table_id
+}
+
+output "private_subnet_cidrs" {
+  description = "CIDR blocks of private subnets — passed to the NAT module SG ingress allowlist"
+  value       = module.vpc.private_subnet_cidrs
+}
+
 # --- Messaging (SQS) ---
 output "sqs_urls" {
   description = "Map of all SQS Queue URLs for service environment variables"

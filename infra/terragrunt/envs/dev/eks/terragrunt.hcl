@@ -43,6 +43,18 @@ dependency "shared_infra" {
     vpc_id             = "vpc-mock-id"
     public_subnet_ids  = ["subnet-mock-pub-1", "subnet-mock-pub-2"]
     private_subnet_ids = ["subnet-mock-priv-1", "subnet-mock-priv-2"]
+    kms_key_arn        = "arn:aws:kms:us-east-2:123456789012:key/mock-key-id"
+  }
+}
+
+dependency "bastion" {
+  config_path = "../bastion"
+
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
+  mock_outputs_merge_strategy_with_state  = "shallow"
+
+  mock_outputs = {
+    bastion_security_group_id = "sg-mock-bastion"
   }
 }
 
@@ -60,14 +72,19 @@ inputs = {
   public_subnet_ids  = dependency.shared_infra.outputs.public_subnet_ids
 
   # Cluster
-  cluster_version                        = "1.35"
-  cluster_endpoint_public_access         = true
-  cluster_endpoint_private_access        = true
-  cluster_endpoint_public_access_cidrs   = ["0.0.0.0/0"] # TODO: restrict to bastion/VPN CIDRs after next task
-  enabled_cluster_log_types              = ["audit", "api", "authenticator"]
-  cluster_log_retention_in_days          = 7
+  # cgroup v2 is default on AL2023 — no additional AMI configuration needed.
+  cluster_version                 = "1.35"
+  cluster_endpoint_public_access  = false  # API accessible only from within VPC (via bastion / OpenVPN)
+  cluster_endpoint_private_access = true
+  enabled_cluster_log_types       = ["audit", "api", "authenticator"]
+  cluster_log_retention_in_days   = 7
 
-  # Node Groups
+  # Customer-managed KMS key for encrypting EKS secrets and CloudWatch Logs
+  kms_key_arn = dependency.shared_infra.outputs.kms_key_arn
+
+  # Node Groups — nodes run in private subnets; outbound traffic exits via the NAT instance.
+  # associate_public_ip = false ensures worker nodes have no public IP.
+  # node_subnet_ids is NOT set here, so the EKS module defaults to private_subnet_ids.
   node_groups = {
     "default" = {
       instance_types         = ["t3.small"]
@@ -78,12 +95,17 @@ inputs = {
       max_size               = 4
       disk_size              = 20
       update_max_unavailable = 1
-      # Place nodes in public subnets and assign public IPs so they can reach the
-      # EKS control plane and AWS APIs without a NAT gateway (NATless VPC design).
-      associate_public_ip = true
-      tags                = {}
+      associate_public_ip    = false
+      tags                   = {}
     }
   }
+
+  # Custom SG rule: allow bastion host → worker nodes on port 22 (SSH).
+  # Engineers can also reach nodes without this rule via SSM Session Manager.
+  # NOTE: security_group_id must reference the EKS nodes SG created by this module.
+  # After the first apply, retrieve the node SG ID from Terraform output and set it here,
+  # or manage it as a separate aws_security_group_rule resource post-deployment.
+  custom_security_group_rules = {}
 
   tags = {
     Component = "eks"

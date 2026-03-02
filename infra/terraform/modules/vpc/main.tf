@@ -48,10 +48,11 @@ resource "aws_route_table" "public" {
   tags = { Name = "${var.project_name}-${var.env}-public-rt" }
 }
 
+# Private route table — starts with no default route.
+# The nat module adds a 0.0.0.0/0 → NAT instance route when deployed.
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
-  # No route to 0.0.0.0/0 ensures isolation (unless NAT is enabled)
-  tags = { Name = "${var.project_name}-${var.env}-private-rt" }
+  tags   = { Name = "${var.project_name}-${var.env}-private-rt" }
 }
 
 # Default route through NAT Instance for private subnet outbound internet access
