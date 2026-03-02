@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+#
 # Scale Locust workers 1→10 and collect metrics at each step
 set -euo pipefail
 

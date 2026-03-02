@@ -67,13 +67,13 @@
 - [ ] Cluster Autoscaler triggered new node
 
 ### Details
-```
+```text
 # Paste kubectl top nodes output at breaking point
 ```
-```
+```text
 # Paste kubectl get hpa output at breaking point
 ```
-```
+```text
 # Paste relevant kubectl get events output
 ```
 

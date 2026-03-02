@@ -60,6 +60,8 @@ data:
                     resp.success()
                 elif resp.status_code >= 500:
                     resp.failure(f"Server error {resp.status_code}")
+                elif resp.status_code in (400, 403):
+                    resp.failure(f"Client error {resp.status_code}")
                 else:
                     resp.success()
 

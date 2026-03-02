@@ -15,11 +15,22 @@ spec:
       labels:
         app: trip-service
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: trip-service
           image: <ECR_REGISTRY>/trip-service:latest
           ports:
             - containerPort: 8081
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
           env:
             - name: DB_URL
               valueFrom:
@@ -54,6 +65,9 @@ spec:
             limits:
               cpu: "1000m"
               memory: "512Mi"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           livenessProbe:
             httpGet:
               path: /health
@@ -66,6 +80,9 @@ spec:
               port: 8081
             initialDelaySeconds: 10
             periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
