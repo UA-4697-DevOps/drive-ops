@@ -43,7 +43,7 @@ DRY_RUN="${DRY_RUN:-false}"
 
 TERRAGRUNT_DEV_DIR="$(cd "$(dirname "$0")/../terragrunt/envs/${ENV}" && pwd)"
 RDS_INSTANCE="${PROJECT}-${ENV}-postgres"
-SECRET_ID="${PROJECT}/${ENV}/rds/credentials-v2"
+SECRET_ID="${PROJECT}/${ENV}/rds/credentials"
 
 echo -e "${BLUE}============================================================${NC}"
 echo -e "${BLUE}  Populate SSM — project=${PROJECT}  env=${ENV}${NC}"

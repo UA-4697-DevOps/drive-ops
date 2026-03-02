@@ -10,13 +10,9 @@ resource "random_password" "master_password" {
 }
 
 resource "aws_secretsmanager_secret" "rds_credentials" {
-  name        = "${var.project_name}/${var.env}/rds/credentials-v2"
+  name        = "${var.project_name}/${var.env}/rds/credentials"
   description = "RDS master credentials for ${var.project_name} ${var.env}"
   tags        = var.tags
-
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
 resource "aws_secretsmanager_secret_version" "rds_credentials" {
@@ -30,13 +26,9 @@ resource "aws_secretsmanager_secret_version" "rds_credentials" {
 
 # --- 2. Discord Webhook (NEW) ---
 resource "aws_secretsmanager_secret" "discord_webhook" {
-  name        = "${var.project_name}/${var.env}/monitoring/discord-v2"
+  name        = "${var.project_name}/${var.env}/monitoring/discord"
   description = "Discord Webhook URL for alerting"
   tags        = var.tags
-
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
 resource "aws_secretsmanager_secret_version" "discord_webhook_val" {
