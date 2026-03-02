@@ -120,7 +120,29 @@ module "ecr_trip_service" {
 }
 
 # ------------------------------------------------------------------------------
-# 4. SECURITY & SECRETS
+# 4. ENCRYPTION (KMS)
+# ------------------------------------------------------------------------------
+
+# Customer-managed KMS key for encrypting sensitive data:
+# - EKS cluster secrets (envelope encryption)
+# - CloudWatch Logs for EKS and other services
+# - RDS Performance Insights (when enabled)
+resource "aws_kms_key" "cmk" {
+  description             = "Customer-managed KMS key for ${var.project_name}-${var.env} encryption (EKS, CloudWatch, RDS)"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+  tags = merge(var.common_tags, {
+    Name = "${var.project_name}-${var.env}-cmk"
+  })
+}
+
+resource "aws_kms_alias" "cmk" {
+  name          = "alias/${var.project_name}-${var.env}-encryption"
+  target_key_id = aws_kms_key.cmk.key_id
+}
+
+# ------------------------------------------------------------------------------
+# 5. SECURITY & SECRETS
 # ------------------------------------------------------------------------------
 
 module "rds_secrets" {
