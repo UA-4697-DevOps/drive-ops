@@ -155,6 +155,7 @@ resource "aws_instance" "vpn" {
   vpc_security_group_ids = [aws_security_group.vpn.id]
   key_name               = var.key_name
   iam_instance_profile   = aws_iam_instance_profile.vpn.name
+  source_dest_check      = false # Required: VPN forwards packets that aren't addressed to itself
   monitoring             = true
 
   user_data = templatefile("${path.module}/scripts/user-data.sh.tpl", {

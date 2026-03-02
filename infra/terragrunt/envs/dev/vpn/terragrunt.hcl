@@ -72,8 +72,9 @@ inputs = {
   # Fails with a Terragrunt error if the env var is absent — no insecure fallback.
   allowed_vpn_cidrs = jsondecode(get_env("TG_VAR_BASTION_ALLOWED_SSH_CIDRS"))
 
-  # Customer-managed KMS key for encrypting OpenVPN PKI and client .ovpn secrets
-  kms_key_arn = dependency.shared_infra.outputs.kms_key_arn
+  # Use the default aws/secretsmanager KMS key (free) instead of the CMK.
+  # Set to dependency.shared_infra.outputs.kms_key_arn to use the customer-managed key.
+  kms_key_arn = null
 
   tags = {
     Component = "vpn"
