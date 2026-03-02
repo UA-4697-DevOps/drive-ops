@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: locust-config
+  namespace: load-testing
+data:
+  target_host: "http://trip-service.dev.svc.cluster.local:8081"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: locust-scripts
+  namespace: load-testing
+data:
+  locustfile.py: |
+    import uuid, random, logging
+    from locust import HttpUser, task, between
+    from locust.runners import MasterRunner, WorkerRunner
+
+    logger = logging.getLogger(__name__)
+
+    PICKUP_LOCATIONS = [
+        "Khreshchatyk St 1, Kyiv", "Boryspil Airport, Terminal D",
+        "Lviv Railway Station", "Maidan Nezalezhnosti, Kyiv",
+        "Obolon Metro Station, Kyiv", "Shevchenko Park, Kyiv",
+        "Poznyaky Metro Station, Kyiv", "Hydropark, Kyiv",
+        "Olympic Stadium, Kyiv", "Lukyanivska Metro Station, Kyiv",
+    ]
+    DROPOFF_LOCATIONS = [
+        "Pechersk Lavra, Kyiv", "Kyiv Polytechnic Institute",
+        "IKEA Kyiv, Petrivka", "Darnytsya Railway Station",
+        "Kontraktova Ploshcha, Kyiv", "Lisova Metro Station, Kyiv",
+        "Akademmistechko, Kyiv", "Svyatoshyn, Kyiv",
+        "Zhytomir Highway, km 10", "Brovary, Central Square",
+    ]
+
+    class TripServiceUser(HttpUser):
+        wait_time = between(0.5, 2.0)
+        weight = 3
+
+        def on_start(self):
+            self.passenger_id = str(uuid.uuid4())
+            self.created_trip_ids = []
+
+        @task(5)
+        def create_trip(self):
+            payload = {
+                "passenger_id": self.passenger_id,
+                "pickup": random.choice(PICKUP_LOCATIONS),
+                "dropoff": random.choice(DROPOFF_LOCATIONS),
+            }
+            with self.client.post("/trips", json=payload, catch_response=True, name="POST /trips") as resp:
+                if resp.status_code == 201:
+                    data = resp.json()
+                    trip_id = data.get("id")
+                    if trip_id:
+                        self.created_trip_ids.append(trip_id)
+                        if len(self.created_trip_ids) > 50:
+                            self.created_trip_ids.pop(0)
+                    resp.success()
+                elif resp.status_code >= 500:
+                    resp.failure(f"Server error {resp.status_code}")
+                else:
+                    resp.success()
+
+        @task(3)
+        def get_existing_trip(self):
+            if not self.created_trip_ids:
+                return
+            trip_id = random.choice(self.created_trip_ids)
+            with self.client.get(f"/trips/{trip_id}", catch_response=True, name="GET /trips/{id}") as resp:
+                if resp.status_code in (200, 404):
+                    resp.success()
+                else:
+                    resp.failure(f"Unexpected {resp.status_code}")
+
+        @task(1)
+        def health_check(self):
+            with self.client.get("/health", catch_response=True, name="GET /health") as resp:
+                resp.success() if resp.status_code == 200 else resp.failure(f"Health failed {resp.status_code}")
+
+    class DriverSimulatorUser(HttpUser):
+        wait_time = between(2.0, 5.0)
+        weight = 1
+
+        def on_start(self):
+            self.driver_id = str(uuid.uuid4())
+
+        @task
+        def assign_driver_to_trip(self):
+            trip_id = str(uuid.uuid4())
+            with self.client.patch(
+                f"/trips/{trip_id}/assign-driver",
+                json={"driver_id": self.driver_id},
+                catch_response=True,
+                name="PATCH /trips/{id}/assign-driver"
+            ) as resp:
+                resp.success() if resp.status_code in (200, 404, 409) else resp.failure(f"Unexpected {resp.status_code}")

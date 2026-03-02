@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trip-service
+  namespace: dev
+  labels:
+    app: trip-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trip-service
+  template:
+    metadata:
+      labels:
+        app: trip-service
+    spec:
+      containers:
+        - name: trip-service
+          image: <ECR_REGISTRY>/trip-service:latest
+          ports:
+            - containerPort: 8081
+          env:
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: trip-service-secrets
+                  key: db-url
+            - name: SQS_TRIP_CREATED_URL
+              valueFrom:
+                secretKeyRef:
+                  name: trip-service-secrets
+                  key: sqs-trip-created-url
+            - name: SQS_DRIVER_ASSIGNED_URL
+              valueFrom:
+                secretKeyRef:
+                  name: trip-service-secrets
+                  key: sqs-driver-assigned-url
+            - name: SQS_TRIP_COMPLETED_URL
+              valueFrom:
+                secretKeyRef:
+                  name: trip-service-secrets
+                  key: sqs-trip-completed-url
+            - name: AWS_REGION
+              value: "us-east-2"
+            - name: TRIP_SERVICE_PORT
+              value: ":8081"
+            - name: ENABLE_SWAGGER
+              value: "false"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trip-service
+  namespace: dev
+  labels:
+    app: trip-service
+spec:
+  selector:
+    app: trip-service
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+  type: ClusterIP

@@ -80,3 +80,4 @@ go.work
 .env.production.local
 *.pem
 *.bak
+load-test-reports/

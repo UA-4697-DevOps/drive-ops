@@ -1,0 +1,208 @@
+name: Load Testing — Distributed Locust
+
+on:
+  workflow_dispatch:
+    inputs:
+      workers:
+        description: 'Number of Locust worker pods (1-10)'
+        required: true
+        default: '5'
+        type: choice
+        options: ['1','2','3','4','5','6','7','8','9','10']
+      users:
+        description: 'Total virtual users'
+        required: true
+        default: '500'
+        type: string
+      spawn_rate:
+        description: 'Users spawned per second'
+        required: true
+        default: '50'
+        type: string
+      duration:
+        description: 'Test duration (e.g. 5m, 10m)'
+        required: true
+        default: '5m'
+        type: string
+      environment:
+        description: 'Target environment'
+        required: false
+        default: 'dev'
+        type: choice
+        options: ['dev']
+
+env:
+  AWS_REGION: us-east-2
+
+jobs:
+  load-test:
+    name: Run Load Test (${{ inputs.workers }} workers, ${{ inputs.users }} users)
+    runs-on: ubuntu-22.04
+    environment: ${{ inputs.environment }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/Training-trip-service-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.29.0'
+
+      - name: Configure kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ secrets.EKS_CLUSTER_NAME }}
+
+      - name: Wait for locust-master to be available
+        run: |
+          echo "Waiting for load-testing namespace and pods..."
+          kubectl wait --for=condition=available deployment/locust-master \
+            -n load-testing --timeout=120s || true
+
+      - name: Scale Locust workers to ${{ inputs.workers }}
+        run: |
+          echo "Scaling locust-worker to ${{ inputs.workers }} replicas..."
+          kubectl scale deployment locust-worker \
+            -n load-testing \
+            --replicas=${{ inputs.workers }}
+
+          kubectl rollout status deployment/locust-worker \
+            -n load-testing --timeout=120s
+
+          echo "Workers ready: ${{ inputs.workers }}"
+
+      - name: Trigger load test via Locust API
+        run: |
+          echo "Starting load test..."
+          kubectl port-forward svc/locust-master -n load-testing 8089:8089 &
+          PF_PID=$!
+          sleep 5
+
+          curl -sf -X POST http://localhost:8089/swarm \
+            -d "user_count=${{ inputs.users }}&spawn_rate=${{ inputs.spawn_rate }}" \
+            -H "Content-Type: application/x-www-form-urlencoded"
+
+          echo "Load test started: ${{ inputs.users }} users @ ${{ inputs.spawn_rate }}/s"
+          echo "Running for ${{ inputs.duration }}..."
+
+          DURATION_SEC=$(echo "${{ inputs.duration }}" | sed 's/m/*60/;s/s//' | bc)
+          sleep "$DURATION_SEC"
+
+          curl -sf -X GET http://localhost:8089/stop || true
+          echo "Load test stopped"
+
+          kill $PF_PID || true
+
+      - name: Collect metrics snapshot
+        if: always()
+        run: |
+          echo "Collecting cluster metrics..."
+          echo "=== Nodes ==="
+          kubectl top nodes || echo "(metrics-server unavailable)"
+          echo "=== load-testing pods ==="
+          kubectl top pods -n load-testing || true
+          echo "=== default pods ==="
+          kubectl top pods -n default || true
+          echo "=== HPA ==="
+          kubectl get hpa -n default || true
+          echo "=== Warning Events ==="
+          kubectl get events -n default \
+            --field-selector type=Warning \
+            --sort-by='.lastTimestamp' | tail -20 || true
+
+      - name: Download Locust CSV report
+        if: always()
+        run: |
+          kubectl port-forward svc/locust-master -n load-testing 8089:8089 &
+          PF_PID=$!
+          sleep 5
+
+          curl -sf "http://localhost:8089/stats/requests/csv" \
+            -o locust-stats.csv || echo "Could not download stats"
+          curl -sf "http://localhost:8089/stats/failures/csv" \
+            -o locust-failures.csv || echo "Could not download failures"
+
+          kill $PF_PID || true
+
+      - name: Upload report artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-report-${{ inputs.workers }}workers-${{ github.run_id }}
+          path: |
+            locust-stats.csv
+            locust-failures.csv
+          retention-days: 30
+
+      - name: Scale workers back to 1
+        if: always()
+        run: |
+          kubectl scale deployment locust-worker \
+            -n load-testing --replicas=1
+          echo "Workers scaled back to 1"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "================================================"
+          echo " Load Test Summary"
+          echo "================================================"
+          echo " Workers:     ${{ inputs.workers }}"
+          echo " Users:       ${{ inputs.users }}"
+          echo " Spawn rate:  ${{ inputs.spawn_rate }}/s"
+          echo " Duration:    ${{ inputs.duration }}"
+          echo " Environment: ${{ inputs.environment }}"
+          echo " Status:      ${{ job.status }}"
+          echo "================================================"
+
+  cleanup:
+    name: Cleanup load-testing namespace
+    runs-on: ubuntu-22.04
+    needs: load-test
+    if: always()
+    environment: ${{ inputs.environment }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/Training-trip-service-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.29.0'
+
+      - name: Configure kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ secrets.EKS_CLUSTER_NAME }}
+
+      - name: Scale workers to 0 after test
+        run: |
+          kubectl scale deployment locust-worker \
+            -n load-testing --replicas=0 || true
+          kubectl scale deployment locust-master \
+            -n load-testing --replicas=0 || true
+          echo "All locust pods scaled to 0"
