@@ -80,6 +80,3 @@ go.work
 .env.production.local
 *.pem
 *.bak
-# Local override files for sensitive configuration (see infra/terragrunt/envs/*/env_vars.yaml)
-.env_vars.local.yaml
-*_vars.local.yaml

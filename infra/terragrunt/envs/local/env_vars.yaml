@@ -11,9 +11,3 @@ enable_ha: false
 env_tags:
   Environment: "local"
   AutoShutdown: "true"
-
-# CIDR(s) allowed for SSH/VPN access to the bastion and VPN hosts
-# ⚠ SECURITY WARNING: Do NOT hardcode real IPs in version control.
-# Override via: export TG_VAR_BASTION_ALLOWED_SSH_CIDRS='["YOUR_IP/32"]'
-BASTION_ALLOWED_SSH_CIDRS:
-  - "0.0.0.0/32"  # PLACEHOLDER: Replace via secure override before applying

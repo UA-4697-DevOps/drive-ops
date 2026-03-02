@@ -16,7 +16,7 @@ Use the diagnostic table below for quick troubleshooting, then proceed to the de
 | Queue URL missing `.fifo` suffix | Using standard queue instead of FIFO | Check `.fifo` suffix in env vars | Fix URL — FIFO queues must have `.fifo` suffix |
 | `FATAL: password authentication failed` | Invalid RDS credentials | `aws secretsmanager get-secret-value --secret-id drive-ops/<env>/rds-credentials` | Sync password between Secrets Manager & env |
 | HTTP 500 / Cannot create trip | Migrations not applied — tables missing | `\dt` in psql via bastion / check migration logs | Run migrations manually |
-| Timeout at `sqs:GetQueueUrl` | No NAT Instance or VPC Endpoint for SQS | `aws ec2 describe-vpc-endpoints --filters "Name=vpc-id,Values=<vpc-id>"` | Add VPC Endpoint for SQS or enable NAT Instance |
+| Timeout at `sqs:GetQueueUrl` | No NAT Gateway or VPC Endpoint for SQS | `aws ec2 describe-vpc-endpoints --filters "Name=vpc-id,Values=<vpc-id>"` | Add VPC Endpoint for SQS or NAT Gateway |
 | `InvalidParameterValue`<br/>Resource not found | Region mismatch | Compare `AWS_REGION` with `terraform show \| grep region` | Set `AWS_REGION=us-east-2` for all services |
 
 ---
@@ -217,7 +217,7 @@ Service cannot connect to SQS — timeout at `sqs:GetQueueUrl`.
 
 ### Root Cause
 
-Service is in a private subnet without NAT Instance or VPC Endpoint for SQS.
+Service is in a private subnet without NAT Gateway or VPC Endpoint for SQS.
 
 ### How to Check
 
@@ -233,9 +233,9 @@ aws ec2 describe-vpc-endpoints \
 Choose one of two options:
 
 1. **VPC Endpoint for SQS** (recommended) — add Interface VPC Endpoint for `com.amazonaws.us-east-2.sqs` in private subnets.
-2. **NAT Instance** — enable NAT Instance (`use_nat_instance = true`) in the VPC module to route private subnet traffic to the internet.
+2. **NAT Gateway** — add NAT Gateway in public subnet and route from private subnets through it.
 
-> **Note**: VPC Endpoint is more secure — traffic stays within AWS network. However, cost comparisons depend on endpoint type, number of AZs, and data transfer. For example, a small NAT Instance (e.g., t3.nano) may be cheaper than an interface VPC Endpoint with per‑AZ hourly and per‑GB charges in low-traffic scenarios. VPC Endpoints are typically cheaper than NAT Gateways but not always vs NAT Instances. Evaluate costs for your workload.
+> **Note**: VPC Endpoint is cheaper and more secure — traffic stays within AWS network.
 
 ---
 

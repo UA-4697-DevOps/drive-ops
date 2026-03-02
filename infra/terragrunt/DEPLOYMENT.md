@@ -17,28 +17,6 @@ To prevent hardcoding sensitive data and to satisfy the fail-fast validation we 
 export TF_VAR_discord_webhook_url="https://discord.com/api/webhooks/your_actual_url_here"
 ```
 
-#### 🔐 SSH Access Configuration (Bastion Host)
-
-**⚠️ SECURITY NOTE:** The bastion host SSH allowlist (`BASTION_ALLOWED_SSH_CIDRS`) in `env_vars.yaml` contains a placeholder only. You MUST override this with your real IP address using one of the following methods:
-
-1. **Environment Variable (Recommended for CI/CD):**
-   ```bash
-   export TG_VAR_BASTION_ALLOWED_SSH_CIDRS='["YOUR_IP/32"]'
-   ```
-
-2. **Local Override File (Recommended for local development):**
-   Create a `.env_vars.local.yaml` file (already in `.gitignore`) in `infra/terragrunt/envs/dev/`:
-   ```yaml
-   BASTION_ALLOWED_SSH_CIDRS:
-     - "YOUR_IP/32"
-   ```
-
-3. **AWS SSM Parameter Store (Recommended for production):**
-   Store the CIDR list in SSM Parameter Store and update `bastion/terragrunt.hcl` to read from it.
-
-**OWNER:** DevOps team  
-**ROTATION:** Review quarterly or when team members change
-
 ### 🏗️ Step 1: Shared Infrastructure (Foundation)
 
 This module sets up the core components: VPC, SQS queues, ECR repositories, and Secrets Manager.

@@ -128,5 +128,3 @@ variable "discord_webhook_url" {
     error_message = "The discord_webhook_url must be a valid Discord webhook URL (starting with https://discord.com/api/webhooks/). Empty strings or placeholders are not allowed."
   }
 }
-
-
