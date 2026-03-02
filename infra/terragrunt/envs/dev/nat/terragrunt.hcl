@@ -64,15 +64,22 @@ inputs = {
   private_route_table_id = dependency.shared_infra.outputs.private_route_table_id
 
   # t4g.nano: ARM/Graviton — required by the fck-nat ARM64 AMI
+  # Cost-effective for dev environments and light workloads
   instance_type = "t4g.nano"
 
   # Optional SSH key for break-glass access (prefer SSM Session Manager)
+  # Uncomment if manual SSH access is required
   # key_name = "nat-key"
 
-  # Allow SSH from the bastion's public IP (set when bastion is deployed)
+  # Allow SSH from the bastion's EIP for break-glass access and monitoring
+  # After bastion deployment, retrieve its EIP and uncomment:
   # allowed_ssh_cidrs = ["<bastion-eip>/32"]
+  # For now, rely on SSM Session Manager for management
   allowed_ssh_cidrs = []
 
+  # Enable SSM Session Manager for secure shell access without SSH keys
   enable_ssm        = true
+
+  # Enable CloudWatch monitoring for NAT instance performance metrics
   enable_cloudwatch = true
 }

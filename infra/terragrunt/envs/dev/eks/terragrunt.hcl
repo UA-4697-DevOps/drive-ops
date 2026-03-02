@@ -82,6 +82,11 @@ inputs = {
   # Customer-managed KMS key for encrypting EKS secrets and CloudWatch Logs
   kms_key_arn = dependency.shared_infra.outputs.kms_key_arn
 
+  # Security: Allow SSH from bastion host to worker nodes
+  # This enables administrators to SSH into private worker nodes for debugging and maintenance
+  # via the bastion as a jump-host. Workers have no public IPs and are not directly accessible.
+  bastion_security_group_id = dependency.bastion.outputs.bastion_security_group_id
+
   # Node Groups — nodes run in private subnets; outbound traffic exits via the NAT instance.
   # associate_public_ip = false ensures worker nodes have no public IP.
   # node_subnet_ids is NOT set here, so the EKS module defaults to private_subnet_ids.
@@ -100,11 +105,8 @@ inputs = {
     }
   }
 
-  # Custom SG rule: allow bastion host → worker nodes on port 22 (SSH).
-  # Engineers can also reach nodes without this rule via SSM Session Manager.
-  # NOTE: security_group_id must reference the EKS nodes SG created by this module.
-  # After the first apply, retrieve the node SG ID from Terraform output and set it here,
-  # or manage it as a separate aws_security_group_rule resource post-deployment.
+  # Custom SG rules are automatically generated from bastion_security_group_id above.
+  # Add additional custom rules here if needed for other administrative access patterns.
   custom_security_group_rules = {}
 
   tags = {

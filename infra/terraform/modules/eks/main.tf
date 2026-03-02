@@ -88,9 +88,25 @@ locals {
     }
   }
 
-  # Merge default rules with user-provided custom rules
+  # Optional: Allow SSH from bastion host to worker nodes (for administrative debugging access)
+  # Added dynamically only if bastion_security_group_id is provided
+  bastion_ssh_rule = var.bastion_security_group_id != null ? {
+    bastion_ssh_to_nodes = {
+      type              = "ingress"
+      from_port         = 22
+      to_port           = 22
+      protocol          = "tcp"
+      cidr_blocks       = null
+      source_sg_id      = var.bastion_security_group_id
+      security_group_id = aws_security_group.eks_nodes.id
+      description       = "Allow SSH from bastion host to worker nodes (administrative debugging access only)"
+    }
+  } : {}
+
+  # Merge default rules with bastion SSH rule and user-provided custom rules
   all_security_group_rules = merge(
     local.default_security_group_rules,
+    local.bastion_ssh_rule,
     var.custom_security_group_rules
   )
 }

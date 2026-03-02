@@ -127,6 +127,20 @@ variable "kms_key_arn" {
   }
 }
 
+# --- Security & Administrative Access ---
+
+variable "bastion_security_group_id" {
+  description = "Security group ID of the bastion host (jumphost). When provided, allows SSH access from the bastion to EKS worker nodes. Leave null to disable bastion access rules."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.bastion_security_group_id == null || can(regex("^sg-[a-f0-9]{8,17}$", var.bastion_security_group_id))
+    error_message = "bastion_security_group_id must be a valid security group ID (sg-...) or null."
+  }
+}
+
 # --- Node Group Configuration ---
 
 variable "custom_security_group_rules" {
