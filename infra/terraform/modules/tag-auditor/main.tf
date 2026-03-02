@@ -1,29 +1,61 @@
-resource "aws_lambda_function" "tag_auditor" {
-  filename      = "${path.module}/dummy.zip"
-  function_name = "${var.project_name}-${var.env}-tag-auditor"
-  role          = aws_iam_role.tag_auditor_exec.arn
-  handler       = "tag_auditor.lambda_handler"
-  runtime       = "python3.12"
-  timeout       = 60
-  memory_size   = 128
+data "aws_region" "current" {}
 
-  environment {
-    variables = {
-      SNS_TOPIC_ARN         = var.sns_topic_arn
-      CLEANUP_FUNCTION_NAME = aws_lambda_function.cleanup.function_name
+locals {
+  policies = {
+    "tag-auditor" = {
+      Statement = [
+        {
+          Action   = ["tag:GetResources", "tag:GetTagKeys", "tag:GetTagValues", "ec2:DescribeInstances", "rds:DescribeDBInstances", "sqs:ListQueues", "sqs:GetQueueAttributes", "secretsmanager:ListSecrets", "sts:GetCallerIdentity"]
+          Effect   = "Allow"
+          Resource = "*"
+        },
+        {
+          Action   = ["sns:Publish"]
+          Effect   = "Allow"
+          Resource = var.sns_topic_arn
+        },
+        {
+          Action   = ["lambda:InvokeFunction"]
+          Effect   = "Allow"
+          Resource = "arn:aws:lambda:${data.aws_region.current.id}:${var.account_id}:function:${var.project_name}-${var.env}-tag-cleanup"
+        }
+      ]
+    },
+    "tag-cleanup" = {
+      Statement = [
+        {
+          Action   = ["ec2:TerminateInstances"]
+          Effect   = "Allow"
+          Resource = "arn:aws:ec2:*:${var.account_id}:instance/*"
+        },
+        {
+          Action   = ["sns:Publish"]
+          Effect   = "Allow"
+          Resource = var.sns_topic_arn
+        }
+      ]
     }
   }
-
-  lifecycle {
-    ignore_changes = [filename, source_code_hash]
-  }
-
-  tags = { Name = "${var.project_name}-${var.env}-tag-auditor" }
 }
 
-# IAM Role
-resource "aws_iam_role" "tag_auditor_exec" {
-  name                 = "Training-${var.project_name}-${var.env}-lambda-tag-auditor-role"
+# --- 0. Dynamic Dummy Zip ---
+# Створюємо пустий файл на льоту, щоб не тримати dummy.zip у Git-репозиторії
+data "archive_file" "dummy" {
+  type        = "zip"
+  output_path = "${path.module}/dummy_generated.zip"
+
+  source {
+    content  = "# Dummy payload"
+    filename = "dummy.txt"
+  }
+}
+
+# --- 1. IAM Roles & Policies ---
+
+resource "aws_iam_role" "this" {
+  for_each = var.lambda_functions
+
+  name                 = "Training-${var.project_name}-${var.env}-${each.key}-role"
   permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
 
   assume_role_policy = jsonencode({
@@ -36,148 +68,89 @@ resource "aws_iam_role" "tag_auditor_exec" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "lambda_logs" {
-  role       = aws_iam_role.tag_auditor_exec.name
+resource "aws_iam_role_policy_attachment" "basic_exec" {
+  for_each = var.lambda_functions
+
+  role       = aws_iam_role.this[each.key].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy" "tag_auditor_policy" {
-  name = "Training-${var.project_name}-${var.env}-tag-auditor-policy"
-  role = aws_iam_role.tag_auditor_exec.id
+resource "aws_iam_role_policy" "custom_policy" {
+  # Створюємо політику ТІЛЬКИ для тих функцій, які описані в locals.policies
+  for_each = { for k, v in var.lambda_functions : k => v if contains(keys(local.policies), k) }
+
+  name = "Training-${var.project_name}-${var.env}-${each.key}-policy"
+  role = aws_iam_role.this[each.key].id
 
   policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "tag:GetResources",
-          "tag:GetTagKeys",
-          "tag:GetTagValues"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "ec2:DescribeInstances",
-          "rds:DescribeDBInstances",
-          "sqs:ListQueues",
-          "sqs:GetQueueAttributes",
-          "secretsmanager:ListSecrets",
-          "sts:GetCallerIdentity"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["sns:Publish"]
-        Resource = [var.sns_topic_arn]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["lambda:InvokeFunction"]
-        Resource = aws_lambda_function.cleanup.arn
-      }
-    ]
+    Version   = "2012-10-17"
+    Statement = local.policies[each.key].Statement
   })
 }
 
-resource "aws_cloudwatch_event_rule" "daily_audit" {
-  name                = "${var.project_name}-${var.env}-tag-auditor-schedule"
-  description         = "Triggers the tag auditor Lambda once per day"
-  schedule_expression = "rate(24 hours)"
+# --- 2. Lambda Functions ---
 
-  tags = { Name = "${var.project_name}-${var.env}-tag-auditor-schedule" }
+resource "aws_lambda_function" "this" {
+  for_each = var.lambda_functions
+
+  function_name = "${var.project_name}-${var.env}-${each.key}"
+  
+  # Використовуємо згенерований на льоту архів
+  filename = data.archive_file.dummy.output_path
+  
+  role          = aws_iam_role.this[each.key].arn
+  handler       = each.value.handler
+  runtime       = each.value.runtime
+  timeout       = each.value.timeout
+  memory_size   = each.value.memory_size
+  description   = each.value.description
+
+  environment {
+    variables = merge(
+      { SNS_TOPIC_ARN = var.sns_topic_arn },
+      each.key == "tag-auditor" ? { CLEANUP_FUNCTION_NAME = "${var.project_name}-${var.env}-tag-cleanup" } : {}
+    )
+  }
+
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+
+  tags = { Name = "${var.project_name}-${var.env}-${each.key}" }
 }
 
-resource "aws_cloudwatch_event_target" "tag_auditor_target" {
-  rule      = aws_cloudwatch_event_rule.daily_audit.name
-  target_id = "TagAuditorLambda"
-  arn       = aws_lambda_function.tag_auditor.arn
+resource "aws_cloudwatch_log_group" "logs" {
+  for_each = var.lambda_functions
+
+  name              = "/aws/lambda/${aws_lambda_function.this[each.key].function_name}"
+  retention_in_days = 3
+  tags              = { Name = "${var.project_name}-${var.env}-${each.key}-logs" }
+}
+
+# --- 3. Scheduling ---
+
+resource "aws_cloudwatch_event_rule" "schedule" {
+  for_each = { for k, v in var.lambda_functions : k => v if v.schedule != null }
+
+  name                = "${var.project_name}-${var.env}-${each.key}-schedule"
+  description         = "Trigger for ${each.key}"
+  schedule_expression = each.value.schedule
+}
+
+resource "aws_cloudwatch_event_target" "lambda_target" {
+  for_each = { for k, v in var.lambda_functions : k => v if v.schedule != null }
+
+  rule      = aws_cloudwatch_event_rule.schedule[each.key].name
+  target_id = "${each.key}-target"
+  arn       = aws_lambda_function.this[each.key].arn
 }
 
 resource "aws_lambda_permission" "allow_eventbridge" {
+  for_each = { for k, v in var.lambda_functions : k => v if v.schedule != null }
+
   statement_id  = "AllowExecutionFromEventBridge"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.tag_auditor.function_name
+  function_name = aws_lambda_function.this[each.key].function_name
   principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.daily_audit.arn
-}
-
-resource "aws_cloudwatch_log_group" "tag_auditor_logs" {
-  name              = "/aws/lambda/${aws_lambda_function.tag_auditor.function_name}"
-  retention_in_days = 3
-
-  tags = { Name = "${var.project_name}-${var.env}-tag-auditor-logs" }
-}
-
-# --- Cleanup Lambda ---
-resource "aws_lambda_function" "cleanup" {
-  filename      = "${path.module}/dummy.zip"
-  function_name = "${var.project_name}-${var.env}-tag-cleanup"
-  role          = aws_iam_role.cleanup_exec.arn
-  handler       = "cleanup.lambda_handler"
-  runtime       = "python3.12"
-  timeout       = 60
-  memory_size   = 128
-
-  environment {
-    variables = {
-      SNS_TOPIC_ARN = var.sns_topic_arn
-    }
-  }
-
-  lifecycle {
-    ignore_changes = [filename, source_code_hash]
-  }
-
-  tags = { Name = "${var.project_name}-${var.env}-tag-cleanup" }
-}
-
-resource "aws_iam_role" "cleanup_exec" {
-  name                 = "Training-${var.project_name}-${var.env}-lambda-tag-cleanup-role"
-  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action    = "sts:AssumeRole"
-      Effect    = "Allow"
-      Principal = { Service = "lambda.amazonaws.com" }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "cleanup_logs" {
-  role       = aws_iam_role.cleanup_exec.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-resource "aws_iam_role_policy" "cleanup_policy" {
-  name = "Training-${var.project_name}-${var.env}-tag-cleanup-policy"
-  role = aws_iam_role.cleanup_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["ec2:TerminateInstances"]
-        Resource = "arn:aws:ec2:*:${var.account_id}:instance/*"
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["sns:Publish"]
-        Resource = [var.sns_topic_arn]
-      }
-    ]
-  })
-}
-
-resource "aws_cloudwatch_log_group" "cleanup_logs" {
-  name              = "/aws/lambda/${aws_lambda_function.cleanup.function_name}"
-  retention_in_days = 3
-
-  tags = { Name = "${var.project_name}-${var.env}-tag-cleanup-logs" }
+  source_arn    = aws_cloudwatch_event_rule.schedule[each.key].arn
 }
