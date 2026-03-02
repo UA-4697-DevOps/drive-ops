@@ -1,0 +1,105 @@
+# --- Grafana Deployment ---
+# Grafana is a visualization and dashboarding tool. It queries Prometheus
+# for metrics and Jaeger for traces, then presents them in configurable panels.
+#
+# Three ConfigMaps are mounted into Grafana's provisioning directories:
+#   1. grafana-datasources       → /etc/grafana/provisioning/datasources/
+#   2. grafana-dashboard-provider → /etc/grafana/provisioning/dashboards/
+#   3. grafana-dashboard-trip-service → /var/lib/grafana/dashboards/
+#
+# On startup, Grafana reads these and auto-configures everything.
+# No manual UI clicks needed.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.6.0
+          env:
+            # Default admin credentials (change in production!)
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "admin"
+            # Allow anonymous read access for easy demo viewing
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: "Viewer"
+          ports:
+            - containerPort: 3000
+              name: http
+          volumeMounts:
+            # 1. Datasource definitions (Prometheus + Jaeger)
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            # 2. Dashboard provider config (tells Grafana to scan /var/lib/grafana/dashboards)
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            # 3. Actual dashboard JSON files
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboard-trip-service
+---
+# --- Grafana Service ---
+# NodePort service so you can access the Grafana UI from outside the cluster
+# at http://<node-ip>:30300
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  type: NodePort
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: http
+      nodePort: 30300
+      protocol: TCP
+      name: http
