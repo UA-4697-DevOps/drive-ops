@@ -94,16 +94,16 @@ resource "aws_lambda_function" "this" {
   for_each = var.lambda_functions
 
   function_name = "${var.project_name}-${var.env}-${each.key}"
-  
+
   # Використовуємо згенерований на льоту архів
   filename = data.archive_file.dummy.output_path
-  
-  role          = aws_iam_role.this[each.key].arn
-  handler       = each.value.handler
-  runtime       = each.value.runtime
-  timeout       = each.value.timeout
-  memory_size   = each.value.memory_size
-  description   = each.value.description
+
+  role        = aws_iam_role.this[each.key].arn
+  handler     = each.value.handler
+  runtime     = each.value.runtime
+  timeout     = each.value.timeout
+  memory_size = each.value.memory_size
+  description = each.value.description
 
   environment {
     variables = merge(

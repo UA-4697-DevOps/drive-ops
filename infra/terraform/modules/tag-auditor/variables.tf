@@ -28,7 +28,7 @@ variable "lambda_functions" {
     schedule    = optional(string, null) # If null, no schedule will be created
     description = optional(string, "Managed by Terraform")
   }))
-  
+
   # Default values so the module works out of the box
   default = {
     "tag-auditor" = {
