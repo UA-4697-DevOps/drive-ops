@@ -52,6 +52,32 @@ variable "flow_log_retention_in_days" {
   default     = 7
 }
 
+# --- NAT Instance Variables ---
+
+variable "use_nat_instance" {
+  description = "Whether to deploy a NAT instance (fck-nat) for private subnet outbound internet access"
+  type        = bool
+  default     = false
+}
+
+variable "nat_instance_type" {
+  description = "EC2 instance type for the NAT instance (ARM64/Graviton)"
+  type        = string
+  default     = "t4g.nano"
+}
+
+variable "nat_instance_key_name" {
+  description = "Name of the EC2 key pair for NAT instance SSH break-glass access. Leave null for SSM-only."
+  type        = string
+  default     = null
+}
+
+variable "nat_bastion_allowed_ssh_cidrs" {
+  description = "List of CIDR blocks allowed to SSH into the NAT instance"
+  type        = list(string)
+  default     = []
+}
+
 # --- SQS Variables ---
 
 variable "enable_ha" {
@@ -128,3 +154,4 @@ variable "discord_webhook_url" {
     error_message = "The discord_webhook_url must be a valid Discord webhook URL (starting with https://discord.com/api/webhooks/). Empty strings or placeholders are not allowed."
   }
 }
+

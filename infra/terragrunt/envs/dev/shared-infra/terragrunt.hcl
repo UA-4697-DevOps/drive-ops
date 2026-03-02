@@ -29,8 +29,31 @@ inputs = {
   enable_flow_logs           = true
   flow_log_retention_in_days = 3
 
+  # NAT Configuration — NAT Instance (t4g.nano ARM/Graviton) for cost-effective private subnet outbound
+  # NAT Instance routes private subnet traffic (0.0.0.0/0) to the Internet Gateway
+  # Using fck-nat AMI: production-ready, auto-recovery, CloudWatch monitoring
+  # Cost: ~$3/month vs AWS NAT Gateway at ~$32+/month (90% savings)
+  #
+  # ⚠ SINGLE POINT OF FAILURE (SPOF): A single NAT instance serves both AZs (us-east-2a, us-east-2b).
+  #   If the instance or its AZ becomes unavailable, all private-subnet egress is lost.
+  #   For production workloads, deploy one NAT instance (or NAT Gateway) per AZ.
+  #
+  # ⚠ CROSS-AZ DATA CHARGES: Traffic from private subnets in us-east-2b egressing via a NAT
+  #   instance in us-east-2a incurs cross-AZ data transfer fees (~$0.01/GB each direction).
+  #   At low volumes this is negligible, but it compounds at scale.
+  #
+  # DEV: Single NAT instance is acceptable for dev/cost savings.
+  # PROD: Enable HA by deploying one NAT instance per AZ.
+  #   Example (prod):
+  #     use_nat_instance  = true
+  #     nat_instance_type = "t4g.small"  # Upsize for prod traffic
+  #     enable_ha         = true          # Enables one NAT instance per AZ (no SPOF)
+  enable_ha          = false            # Controls NAT high-availability (one NAT instance per AZ when true)
+  use_nat_instance   = true
+  nat_instance_type  = "t4g.nano"  # ARM/Graviton — cheapest option
+  # nat_instance_key_name = null  # Optional: set to an EC2 key pair name for SSH break-glass access
+
   # SQS settings
-  enable_ha         = false
   message_retention = 345600
   max_receive_count = 3
 

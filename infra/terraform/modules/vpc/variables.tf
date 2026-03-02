@@ -42,4 +42,41 @@ variable "account_id" {
   type        = string
 }
 
+# --- NAT Instance Variables ---
+
+variable "use_nat_instance" {
+  description = "Whether to deploy a NAT instance (fck-nat) for private subnet outbound internet access. Cost-effective alternative to AWS NAT Gateway."
+  type        = bool
+  default     = false
+}
+
+variable "nat_instance_type" {
+  description = "EC2 instance type for the NAT instance. t4g.nano is sufficient for most workloads (ARM64/Graviton)."
+  type        = string
+  default     = "t4g.nano"
+}
+
+variable "nat_instance_key_name" {
+  description = "Name of the EC2 key pair to associate with the NAT instance. Leave empty to use SSM Session Manager only."
+  type        = string
+  default     = null
+}
+
+variable "enable_nat_instance_ssm" {
+  description = "Whether to attach the AmazonSSMManagedInstanceCore policy to allow Session Manager access to the NAT instance."
+  type        = bool
+  default     = true
+}
+
+variable "enable_nat_instance_cloudwatch" {
+  description = "Whether to attach the CloudWatchAgentServerPolicy to enable CloudWatch monitoring on the NAT instance."
+  type        = bool
+  default     = false
+}
+
+variable "nat_bastion_allowed_ssh_cidrs" {
+  description = "List of CIDR blocks allowed to SSH into the NAT instance. Leave empty to disable SSH access."
+  type        = list(string)
+  default     = []
+}
 
