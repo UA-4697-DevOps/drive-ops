@@ -17,6 +17,7 @@ import (
 	"trip-service/internal/broker"
 	"trip-service/internal/repository"
 	"trip-service/internal/service"
+	"trip-service/internal/telemetry"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
@@ -90,6 +91,20 @@ func main() {
 	// Define a background context to manage the entire application lifecycle
 	appCtx, appCancel := context.WithCancel(context.Background())
 	defer appCancel()
+
+	// --- OpenTelemetry Initialization ---
+	// Must happen early so the global TracerProvider and MeterProvider are set
+	// before any instrumented code runs. The shutdown function flushes pending
+	// spans and metrics on application exit.
+	otelShutdown, err := telemetry.Init(appCtx)
+	if err != nil {
+		log.Fatalf("Failed to initialise OpenTelemetry: %v", err)
+	}
+	defer func() {
+		if err := otelShutdown(appCtx); err != nil {
+			log.Printf("OpenTelemetry shutdown error: %v", err)
+		}
+	}()
 
 	// Helper for retry logic
 	connectWithRetry := func(desc string, fn func() error) error {
@@ -195,6 +210,16 @@ func main() {
 
 	// 6. Router setup
 	r := chi.NewRouter()
+
+	// Apply OpenTelemetry middleware to ALL routes.
+	// This creates a trace span and records metrics for every HTTP request.
+	// Must be added before route definitions so it wraps all handlers.
+	r.Use(telemetry.Middleware)
+
+	// Prometheus metrics endpoint — scraped by Prometheus every 15s.
+	// This serves counters, histograms, and gauges in Prometheus exposition format.
+	r.Handle("/metrics", telemetry.MetricsHandler())
+
 	r.Get("/health", handler.HealthCheck)
 	r.Route("/trips", func(r chi.Router) {
 		r.Post("/", handler.CreateTrip)
