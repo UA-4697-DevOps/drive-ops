@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'ECR image tag to deploy (commit SHA from CI)'
+        description: 'Image tag to build and push (e.g. v1.0.0, rc-1)'
         required: true
         type: string
       environment:
@@ -18,226 +18,57 @@ on:
 env:
   AWS_REGION: us-east-2
   ECR_REPOSITORY: trip-service
-  SERVICE_PORT: 8081
 
 jobs:
-  deploy:
-    name: Deploy to ${{ inputs.environment }}
+  build-and-push:
+    name: Build & Push to ECR (${{ inputs.environment }})
     runs-on: ubuntu-22.04
     environment: ${{ inputs.environment }}
+
+    concurrency:
+      group: trip-service-build-push-${{ inputs.environment }}
+      cancel-in-progress: true
 
     permissions:
       id-token: write   # Required for OIDC authentication
       contents: read
 
     steps:
-      # ---------------------------------------------------------------
-      # Step 0: Checkout (required for local composite actions)
-      # ---------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ---------------------------------------------------------------
-      # Step 1: Authenticate to AWS via OIDC
-      # ---------------------------------------------------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/Training-trip-service-github-actions-role
           aws-region: ${{ env.AWS_REGION }}
 
-      # ---------------------------------------------------------------
-      # Step 2: Verify the image exists in ECR before deploying
-      # ---------------------------------------------------------------
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Verify image exists in ECR
-        run: |
-          echo "🔍 Verifying image tag '${{ inputs.image_tag }}' exists in ECR..."
-          if ! aws ecr describe-images \
-            --repository-name ${{ env.ECR_REPOSITORY }} \
-            --image-ids imageTag=${{ inputs.image_tag }} \
-            --region ${{ env.AWS_REGION }} > /dev/null 2>&1; then
-            echo "❌ ERROR: Image tag '${{ inputs.image_tag }}' not found in ECR repository '${{ env.ECR_REPOSITORY }}'"
-            echo "Available tags:"
-            aws ecr describe-images --repository-name ${{ env.ECR_REPOSITORY }} \
-              --query 'imageDetails[*].imageTags' --output text --region ${{ env.AWS_REGION }}
-            exit 1
-          fi
-          echo "✅ Image tag '${{ inputs.image_tag }}' verified in ECR"
-
-      # ---------------------------------------------------------------
-      # Step 3: Read configuration from SSM Parameter Store
-      # ---------------------------------------------------------------
-      - name: Fetch deployment configuration from SSM
-        id: ssm-config
-        run: |
-          echo "📋 Reading deployment configuration from SSM Parameter Store..."
-
-          # Read EC2 instance ID for SSM Run Command targeting
-          INSTANCE_ID=$(aws ssm get-parameter \
-            --name "/drive-ops/${{ inputs.environment }}/infra/ec2-instance-id" \
-            --query "Parameter.Value" --output text)
-          echo "instance_id=${INSTANCE_ID}" >> $GITHUB_OUTPUT
-
-          # Read ECR registry URL
-          ECR_REGISTRY="${{ steps.login-ecr.outputs.registry }}"
-          echo "ecr_registry=${ECR_REGISTRY}" >> $GITHUB_OUTPUT
-
-          echo "✅ Configuration loaded"
-          echo "  Instance ID: ${INSTANCE_ID}"
-          echo "  ECR Registry: ${ECR_REGISTRY}"
-
-      # ---------------------------------------------------------------
-      # Step 4: Capture current image tag for rollback
-      # ---------------------------------------------------------------
-      - name: Capture current image tag for rollback
-        id: capture-tag
-        uses: ./.github/actions/ssm-run-command
+      - name: Build and Push Image
+        id: build-image
+        uses: docker/build-push-action@v6
         with:
-          instance-id: ${{ steps.ssm-config.outputs.instance_id }}
-          command: |
-            docker inspect trip-service --format='{{.Config.Image}}' 2>/dev/null \
-              | awk -F: '{print $2}' || echo "none"
-          comment: "Capture current TripService image tag"
-          timeout-seconds: 60
-
-      - name: Set current tag for rollback
-        id: current-tag
-        run: |
-          CURRENT_TAG=$(echo "${{ steps.capture-tag.outputs.stdout }}" | tr -d '[:space:]')
-          echo "current_tag=${CURRENT_TAG}" >> $GITHUB_OUTPUT
-          echo "📸 Current image tag: ${CURRENT_TAG}"
-
-      # ---------------------------------------------------------------
-      # Step 5: Deploy new image via SSM Run Command
-      # ---------------------------------------------------------------
-      - name: Deploy TripService via SSM Run Command
-        id: deploy
-        uses: ./.github/actions/ssm-run-command
-        with:
-          instance-id: ${{ steps.ssm-config.outputs.instance_id }}
-          working-directory: /opt/drive-ops
-          command: |
-            set -euo pipefail
-
-            echo "=== TripService Deployment ==="
-            echo "Registry: ${{ steps.ssm-config.outputs.ecr_registry }}"
-            echo "Image Tag: ${{ inputs.image_tag }}"
-            echo "Region: ${{ env.AWS_REGION }}"
-
-            echo "Step 1/4: Authenticating Docker to ECR..."
-            aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
-              docker login --username AWS --password-stdin ${{ steps.ssm-config.outputs.ecr_registry }}
-
-            echo "Step 2/4: Pulling image..."
-            docker pull ${{ steps.ssm-config.outputs.ecr_registry }}/trip-service:${{ inputs.image_tag }}
-
-            echo "Step 3/4: Updating image reference..."
-            export TRIP_SERVICE_IMAGE="${{ steps.ssm-config.outputs.ecr_registry }}/trip-service:${{ inputs.image_tag }}"
-
-            echo "Step 4/4: Restarting TripService..."
-            docker compose up -d --no-deps --force-recreate trip-service
-
-            echo "=== Deployment command completed ==="
-          comment: "Deploy TripService:${{ inputs.image_tag }}"
-          timeout-seconds: 300
-
-      # ---------------------------------------------------------------
-      # Step 6: Post-deploy smoke checks
-      # ---------------------------------------------------------------
-      - name: Run smoke checks
-        id: smoke-checks
-        uses: ./.github/actions/ssm-run-command
-        with:
-          instance-id: ${{ steps.ssm-config.outputs.instance_id }}
-          command: |
-            set -euo pipefail
-
-            echo "=== Smoke Check 1: Health Endpoint ==="
-            for i in $(seq 1 12); do
-              if curl -sf http://localhost:${{ env.SERVICE_PORT }}/health; then
-                echo ""
-                echo "✅ Health check passed"
-                break
-              fi
-              if [ $i -eq 12 ]; then
-                echo "❌ Health check failed after 60s"
-                docker logs trip-service --tail 50
-                exit 1
-              fi
-              echo "  Waiting for service... (attempt ${i}/12)"
-              sleep 5
-            done
-
-            echo ""
-            echo "=== Smoke Check 2: DB Connectivity (GET /trips) ==="
-            HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:${{ env.SERVICE_PORT }}/trips 2>/dev/null || echo "000")
-            if [ "${HTTP_CODE}" = "200" ]; then
-              echo "✅ DB connectivity check passed (HTTP ${HTTP_CODE})"
-            else
-              echo "❌ DB connectivity check failed (HTTP ${HTTP_CODE})"
-              docker logs trip-service --tail 50
-              exit 1
-            fi
-
-            echo ""
-            echo "=== All smoke checks passed ✅ ==="
-          comment: "Smoke checks for TripService:${{ inputs.image_tag }}"
-          timeout-seconds: 120
-
-      # ---------------------------------------------------------------
-      # Step 7: Rollback on failure
-      # ---------------------------------------------------------------
-      - name: Rollback to previous version
-        if: failure() && steps.current-tag.outputs.current_tag != 'none' && steps.current-tag.outputs.current_tag != ''
-        uses: ./.github/actions/ssm-run-command
-        with:
-          instance-id: ${{ steps.ssm-config.outputs.instance_id }}
-          working-directory: /opt/drive-ops
-          command: |
-            set -euo pipefail
-
-            PREVIOUS_TAG="${{ steps.current-tag.outputs.current_tag }}"
-            ECR_REGISTRY="${{ steps.ssm-config.outputs.ecr_registry }}"
-
-            echo "=== TripService Rollback ==="
-            echo "Rolling back to: ${ECR_REGISTRY}/trip-service:${PREVIOUS_TAG}"
-
-            # Re-authenticate to ECR
-            aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
-              docker login --username AWS --password-stdin ${ECR_REGISTRY}
-
-            # Pull and restart with previous image
-            docker pull ${ECR_REGISTRY}/trip-service:${PREVIOUS_TAG}
-            export TRIP_SERVICE_IMAGE="${ECR_REGISTRY}/trip-service:${PREVIOUS_TAG}"
-            docker compose up -d --no-deps --force-recreate trip-service
-
-            # Wait for health
-            for i in $(seq 1 12); do
-              if curl -sf http://localhost:${{ env.SERVICE_PORT }}/health > /dev/null; then
-                echo "✅ Rollback successful — service is healthy"
-                exit 0
-              fi
-              echo "  Waiting for rollback health check... (${i}/12)"
-              sleep 5
-            done
-
-            echo "⚠️  Rollback deployed but health check is not passing"
-            exit 1
-          comment: "Rollback TripService to ${{ steps.current-tag.outputs.current_tag }}"
-          timeout-seconds: 300
+          context: ./trip-service
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ inputs.image_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Deployment summary
         if: always()
         run: |
           echo "============================================"
-          echo " TripService Deployment Summary"
+          echo " TripService ECR Publish Summary"
           echo "============================================"
           echo " Environment:  ${{ inputs.environment }}"
           echo " Image Tag:    ${{ inputs.image_tag }}"
-          echo " Previous Tag: ${{ steps.current-tag.outputs.current_tag }}"
+          echo " Image URI:    ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ inputs.image_tag }}"
           echo " Status:       ${{ job.status }}"
           echo "============================================"
