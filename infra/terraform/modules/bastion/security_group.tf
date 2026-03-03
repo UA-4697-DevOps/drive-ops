@@ -51,7 +51,7 @@ resource "aws_security_group_rule" "egress_https" {
   protocol          = "tcp"
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.bastion.id
-  description       = "HTTPS outbound — OS updates and AWS API calls"
+  description       = "HTTPS outbound - OS updates and AWS API calls"
 }
 
 # 3. HTTP to the internet — some package repositories still serve over plain HTTP.
@@ -62,5 +62,5 @@ resource "aws_security_group_rule" "egress_http" {
   protocol          = "tcp"
   cidr_blocks       = ["0.0.0.0/0"]
   security_group_id = aws_security_group.bastion.id
-  description       = "HTTP outbound — package repository mirrors"
+  description       = "HTTP outbound - package repository mirrors"
 }
