@@ -10,6 +10,7 @@ sed -i 's/^#\?X11Forwarding.*/X11Forwarding no/'               /etc/ssh/sshd_con
 sed -i 's/^#\?MaxAuthTries.*/MaxAuthTries 3/'                   /etc/ssh/sshd_config
 sed -i 's/^#\?ClientAliveInterval.*/ClientAliveInterval 300/'   /etc/ssh/sshd_config
 sed -i 's/^#\?ClientAliveCountMax.*/ClientAliveCountMax 2/'     /etc/ssh/sshd_config
+sshd -t
 systemctl restart sshd
 
 # ------------------------------------------------------------------------------

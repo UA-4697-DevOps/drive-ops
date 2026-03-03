@@ -97,8 +97,7 @@ locals {
 
 # --- Consolidated Security Group Rules ---
 # Allow unrestricted egress from cluster to reach AWS services and external APIs.
-# NOTE: This is an accepted trade-off for NAT-less/public-subnet deployments.
-# TODO: Migrate to private subnets with NAT gateway per #239 for egress control.
+# Nodes run in private subnets; outbound traffic exits via the NAT instance.
 resource "aws_security_group_rule" "this" {
   for_each = local.all_security_group_rules
 
@@ -148,7 +147,9 @@ resource "aws_eks_cluster" "this" {
   version  = var.cluster_version
   role_arn = aws_iam_role.eks_cluster.arn
 
-  # NOTE: Public API endpoint exposure is tracked in #239; restrict via cluster_endpoint_public_access_cidrs in production.
+  # API endpoint access is controlled via cluster_endpoint_public_access and
+  # cluster_endpoint_private_access variables. In dev, public access is disabled
+  # and engineers reach the API via bastion or VPN.
   vpc_config {
     subnet_ids              = local.cluster_subnet_ids
     security_group_ids      = [aws_security_group.eks_cluster.id]

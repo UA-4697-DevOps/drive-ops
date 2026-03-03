@@ -60,6 +60,16 @@ variable "allowed_ssh_cidrs" {
   type        = list(string)
   default     = []
   description = "List of CIDR blocks allowed to SSH to the NAT instance (e.g., bastion public IP). When empty, SSH ingress is not configured. Example: [\"10.0.1.10/32\"]"
+  
+  validation {
+    condition     = alltrue([for cidr in var.allowed_ssh_cidrs : can(cidrhost(cidr, 0))])
+    error_message = "Each entry in allowed_ssh_cidrs must be a valid CIDR block."
+  }
+  
+  validation {
+    condition     = !contains(var.allowed_ssh_cidrs, "0.0.0.0/0") && !contains(var.allowed_ssh_cidrs, "::/0")
+    error_message = "0.0.0.0/0 and ::/0 are not allowed for SSH ingress. Use specific source CIDRs."
+  }
 }
 
 variable "enable_ssm" {
