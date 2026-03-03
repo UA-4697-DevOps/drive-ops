@@ -25,6 +25,10 @@ jobs:
     runs-on: ubuntu-22.04
     environment: ${{ inputs.environment }}
 
+    concurrency:
+      group: trip-service-build-push-${{ inputs.environment }}
+      cancel-in-progress: true
+
     permissions:
       id-token: write   # Required for OIDC authentication
       contents: read
