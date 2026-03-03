@@ -24,6 +24,16 @@
 #     --query SecretString --output text > client1.ovpn
 # ==============================================================================
 
+# ==============================================================================
+# Variables
+# ==============================================================================
+
+variable "ami_id" {
+  type        = string
+  default     = null
+  description = "Optional AMI ID for the VPN instance. If not provided, the latest Amazon Linux 2023 ARM64 AMI will be used."
+}
+
 # --- Validation ---
 
 resource "null_resource" "validate_vpn_cidr" {
@@ -38,6 +48,7 @@ resource "null_resource" "validate_vpn_cidr" {
 # --- Latest Amazon Linux 2023 AMI (ARM64 / Graviton) ---
 
 data "aws_ami" "al2023" {
+  count       = var.ami_id == null ? 1 : 0
   most_recent = true
   owners      = ["amazon"]
 
@@ -149,13 +160,14 @@ resource "aws_eip" "vpn" {
 # ==============================================================================
 
 resource "aws_instance" "vpn" {
-  ami                    = data.aws_ami.al2023.id
+  ami                    = coalesce(var.ami_id, data.aws_ami.al2023[0].id)
   instance_type          = var.instance_type
   subnet_id              = var.public_subnet_id
   vpc_security_group_ids = [aws_security_group.vpn.id]
   key_name               = var.key_name
   iam_instance_profile   = aws_iam_instance_profile.vpn.name
   monitoring             = true
+  source_dest_check      = false # Required: allows the instance to forward VPN client traffic
 
   user_data = templatefile("${path.module}/scripts/user-data.sh.tpl", {
     project_name    = var.project_name

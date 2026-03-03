@@ -156,6 +156,5 @@ Private Route Table:
 | `private_subnet_ids` | List of IDs for private subnets (EKS nodes, RDS). |
 | `sg_app_id` | Security Group ID to attach to Application instances. |
 | `sg_db_id` | Security Group ID to attach to RDS instances. |
-| `nat_instance_id` | The ID of the NAT Instance (null if disabled). |
-| `nat_instance_public_ip` | The public IP address of the NAT Instance (null if disabled). |
-| `nat_instance_private_ip` | The private IP address of the NAT Instance (null if disabled). |
+
+> **Note:** `nat_instance_id`, `nat_instance_public_ip`, and `nat_instance_private_ip` are **not** outputs of this module. They are exported by the separate **NAT module** (`infra/terraform/modules/nat/outputs.tf`).
