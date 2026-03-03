@@ -106,7 +106,7 @@ resource "aws_iam_policy" "terraform_backend_policy" {
   })
 }
 
-# Attach both policies to the role
+# Attach both policies to the CI role
 resource "aws_iam_role_policy_attachment" "ecr_policy" {
   role       = aws_iam_role.role.name
   policy_arn = aws_iam_policy.ecr_push_policy.arn
@@ -115,6 +115,38 @@ resource "aws_iam_role_policy_attachment" "ecr_policy" {
 resource "aws_iam_role_policy_attachment" "backend_policy" {
   role       = aws_iam_role.role.name
   policy_arn = aws_iam_policy.terraform_backend_policy.arn
+}
+
+# --- IAM Role for GitHub Actions Deploy (workflow_dispatch) ---
+resource "aws_iam_role" "deploy_role" {
+  name = "Training-${var.repository_name}-deploy-role"
+
+  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Effect = "Allow"
+        Principal = {
+          Federated = "arn:aws:iam::${var.account_id}:oidc-provider/token.actions.githubusercontent.com"
+        }
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:environment:dev"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# Attach ECR push policy to the deploy role
+resource "aws_iam_role_policy_attachment" "deploy_ecr_policy" {
+  role       = aws_iam_role.deploy_role.name
+  policy_arn = aws_iam_policy.ecr_push_policy.arn
 }
 
 # ECR Lifecycle Policy to manage storage costs
