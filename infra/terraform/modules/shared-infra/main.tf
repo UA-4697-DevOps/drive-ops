@@ -127,7 +127,10 @@ module "ecr_trip_service" {
 # - EKS cluster secrets (envelope encryption)
 # - CloudWatch Logs for EKS and other services
 # - RDS Performance Insights (when enabled)
+# Gated by var.enable_kms (default false) — skip in dev to save costs.
 resource "aws_kms_key" "cmk" {
+  count = var.enable_kms ? 1 : 0
+
   description             = "Customer-managed KMS key for ${var.project_name}-${var.env} encryption (EKS, CloudWatch, RDS)"
   deletion_window_in_days = 7
   enable_key_rotation     = true
@@ -137,8 +140,10 @@ resource "aws_kms_key" "cmk" {
 }
 
 resource "aws_kms_alias" "cmk" {
+  count = var.enable_kms ? 1 : 0
+
   name          = "alias/${var.project_name}-${var.env}-encryption"
-  target_key_id = aws_kms_key.cmk.key_id
+  target_key_id = aws_kms_key.cmk[0].key_id
 }
 
 # ------------------------------------------------------------------------------

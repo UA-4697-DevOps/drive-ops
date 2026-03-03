@@ -1,8 +1,8 @@
 package infratests
 
 import (
-	"testing"
 	"strings"
+	"testing"
 
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
@@ -125,26 +125,27 @@ func TestVPCSubnetCIDRAllocation(t *testing.T) {
 // TestVPCPrivateSubnetIsolation validates that private subnets have no DIRECT internet route.
 // When NAT Instance is enabled, a route to 0.0.0.0/0 via NAT Instance is acceptable (not via IGW).
 func TestVPCPrivateSubnetIsolation(t *testing.T) {
-    t.Parallel()
+	t.Parallel()
 
-    terraformOptions := VPCTestOptions(t)
+	terraformOptions := VPCTestOptions(t)
+	terraformOptions.Vars["use_nat_instance"] = true // Ensure NAT instance is enabled for this test
 
-    planStruct := terraform.InitAndPlanAndShowWithStruct(t, terraformOptions)
-    require.NotNil(t, planStruct.RawPlan.PlannedValues)
+	planStruct := terraform.InitAndPlanAndShowWithStruct(t, terraformOptions)
+	require.NotNil(t, planStruct.RawPlan.PlannedValues)
 
-    foundPrivateRouteTable := false
+	foundPrivateRouteTable := false
 
-    // FIRST PASS: Locate the private route table
-    for _, resource := range planStruct.RawPlan.PlannedValues.RootModule.Resources {
-        if resource.Type == "aws_route_table" && strings.Contains(resource.Address, "private") {
-            foundPrivateRouteTable = true
+	// FIRST PASS: Locate the private route table
+	for _, resource := range planStruct.RawPlan.PlannedValues.RootModule.Resources {
+		if resource.Type == "aws_route_table" && strings.Contains(resource.Address, "private") {
+			foundPrivateRouteTable = true
 
-            values := resource.AttributeValues
-            routes, ok := values["route"].([]interface{})
-            if ok {
-                for _, route := range routes {
-                    routeMap, ok := route.(map[string]interface{})
-                    if ok {
+			values := resource.AttributeValues
+			routes, ok := values["route"].([]interface{})
+			if ok {
+				for _, route := range routes {
+					routeMap, ok := route.(map[string]interface{})
+					if ok {
 						// Ensure no INLINE route to IGW exists. Treat computed/unknown values
 						// (Terraform plan after_unknown maps) as presence of a gateway so they
 						// cannot bypass the assertion.
@@ -188,57 +189,63 @@ func TestVPCPrivateSubnetIsolation(t *testing.T) {
 									"Private route table should not have a direct IGW route to 0.0.0.0/0")
 							}
 						}
-                    }
-                }
-            }
-        }
-    }
+					}
+				}
+			}
+		}
+	}
 
-    foundPrivateNatRoute := false
+	foundPrivateNatRoute := false
 
-    // SECOND PASS: Validate NAT route configuration
-    for _, resource := range planStruct.RawPlan.PlannedValues.RootModule.Resources {
-        if resource.Type == "aws_route" && resource.Name == "private_nat_instance" {
-            foundPrivateNatRoute = true
-            attributes := resource.AttributeValues
+	// SECOND PASS: Validate NAT route configuration
+	for _, resource := range planStruct.RawPlan.PlannedValues.RootModule.Resources {
+		if resource.Type == "aws_route" && resource.Name == "private_nat_instance" {
+			foundPrivateNatRoute = true
+			attributes := resource.AttributeValues
 
-            // Safe extraction of gateway_id
-            gwStr := ""
-            if gwVal, hasGW := attributes["gateway_id"]; hasGW {
-                var ok bool
-                gwStr, ok = gwVal.(string)
-                if !ok {
-                    gwStr = ""
-                }
-            }
+			// Safe extraction of gateway_id
+			gwStr := ""
+			if gwVal, hasGW := attributes["gateway_id"]; hasGW {
+				var ok bool
+				gwStr, ok = gwVal.(string)
+				if !ok {
+					gwStr = ""
+				}
+			}
 
-            // gateway_id should be empty/absent for NAT routes
-            assert.Equal(t, "", gwStr, "NAT route should not target an Internet Gateway (gateway_id must be empty)")
-            
-            // Plan-time check: Ensure network_interface_id or instance_id is planned to be set
-            niAfterUnknown := false
-            if niVal, hasNI := attributes["network_interface_id"]; hasNI {
-                if niMap, ok := niVal.(map[string]interface{}); ok {
-                    if auVal, hasAU := niMap["after_unknown"]; hasAU {
-                        niAfterUnknown, _ = auVal.(bool)
-                    }
-                }
-            }
-            
-            instAfterUnknown := false
-            if instVal, hasInst := attributes["instance_id"]; hasInst {
-                if instMap, ok := instVal.(map[string]interface{}); ok {
-                    if auVal, hasAU := instMap["after_unknown"]; hasAU {
-                        instAfterUnknown, _ = auVal.(bool)
-                    }
-                }
-            }
-            
-            assert.True(t, niAfterUnknown || instAfterUnknown,
-                "NAT route must plan to target a NAT instance ENI or instance ID")
-        }
-    }
+			// gateway_id should be empty/absent for NAT routes
+			assert.Equal(t, "", gwStr, "NAT route should not target an Internet Gateway (gateway_id must be empty)")
 
-    assert.True(t, foundPrivateRouteTable, "Expected private route table")
-    assert.True(t, foundPrivateNatRoute, "expected aws_route.private_nat_instance to be present in plan")
+			// Accept either known IDs or plan-time unknowns.
+			niTargetPlanned := false
+			if niVal, hasNI := attributes["network_interface_id"]; hasNI {
+				if niStr, ok := niVal.(string); ok && niStr != "" {
+					niTargetPlanned = true
+				} else if niMap, ok := niVal.(map[string]interface{}); ok {
+					if auVal, hasAU := niMap["after_unknown"]; hasAU {
+						au, _ := auVal.(bool)
+						niTargetPlanned = au
+					}
+				}
+			}
+
+			instTargetPlanned := false
+			if instVal, hasInst := attributes["instance_id"]; hasInst {
+				if instStr, ok := instVal.(string); ok && instStr != "" {
+					instTargetPlanned = true
+				} else if instMap, ok := instVal.(map[string]interface{}); ok {
+					if auVal, hasAU := instMap["after_unknown"]; hasAU {
+						au, _ := auVal.(bool)
+						instTargetPlanned = au
+					}
+				}
+			}
+
+			assert.True(t, niTargetPlanned || instTargetPlanned,
+				"NAT route must plan to target a NAT instance ENI or instance ID")
+		}
+	}
+
+	assert.True(t, foundPrivateRouteTable, "Expected private route table")
+	assert.True(t, foundPrivateNatRoute, "expected aws_route.private_nat_instance to be present in plan")
 }

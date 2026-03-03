@@ -42,6 +42,7 @@ dependency "shared_infra" {
 
   mock_outputs = {
     vpc_id            = "vpc-mock-id"
+    vpc_cidr          = "10.0.0.0/16"
     public_subnet_ids = ["subnet-mock-pub-1", "subnet-mock-pub-2"]
   }
 }
@@ -52,6 +53,7 @@ inputs = {
   account_id   = local.env_vars.account_id
 
   vpc_id           = dependency.shared_infra.outputs.vpc_id
+  vpc_cidr_block   = dependency.shared_infra.outputs.vpc_cidr
   public_subnet_id = try(dependency.shared_infra.outputs.public_subnet_ids[0], "")
 
   # t4g.nano: ARM/Graviton — cheapest option, sufficient for SSH jump-host

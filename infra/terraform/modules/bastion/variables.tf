@@ -58,6 +58,16 @@ variable "instance_type" {
   default     = "t4g.nano"
 }
 
+variable "vpc_cidr_block" {
+  description = "VPC CIDR block — used in egress rules to scope internal traffic"
+  type        = string
+
+  validation {
+    condition     = can(cidrhost(var.vpc_cidr_block, 0))
+    error_message = "vpc_cidr_block must be a valid CIDR notation (e.g. 10.0.0.0/16)."
+  }
+}
+
 variable "tags" {
   description = "Additional tags applied to all bastion resources"
   type        = map(string)

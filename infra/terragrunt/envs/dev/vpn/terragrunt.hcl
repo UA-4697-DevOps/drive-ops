@@ -59,7 +59,7 @@ inputs = {
 
   vpc_id           = dependency.shared_infra.outputs.vpc_id
   vpc_cidr         = dependency.shared_infra.outputs.vpc_cidr
-  public_subnet_id = try(dependency.shared_infra.outputs.public_subnet_ids[0], "")
+  public_subnet_id = dependency.shared_infra.outputs.public_subnet_ids[0]
 
   # t4g.micro: ARM/Graviton — hardware-accelerated AES-256-GCM for OpenVPN
   instance_type = "t4g.micro"

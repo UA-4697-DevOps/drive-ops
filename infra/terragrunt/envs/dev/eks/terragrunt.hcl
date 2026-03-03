@@ -100,11 +100,8 @@ inputs = {
     }
   }
 
-  # Custom SG rule: allow bastion host → worker nodes on port 22 (SSH).
-  # Engineers can also reach nodes without this rule via SSM Session Manager.
-  # NOTE: security_group_id must reference the EKS nodes SG created by this module.
-  # After the first apply, retrieve the node SG ID from Terraform output and set it here,
-  # or manage it as a separate aws_security_group_rule resource post-deployment.
+  # No custom SG rules are applied in this stack yet.
+  # If SSH from bastion to worker nodes is required, add the rule in a follow-up change.
   custom_security_group_rules = {}
 
   tags = {
