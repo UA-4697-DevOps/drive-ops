@@ -1,0 +1,131 @@
+name: Deploy External Secrets Operator
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+        default: dev
+  push:
+    branches:
+      - feat/#260
+    paths:
+      - "infra/k8s/apps/external-secrets/**"
+
+env:
+  AWS_REGION: us-east-2
+  EKS_CLUSTER_NAME: drive-ops-dev
+  ESO_NAMESPACE: external-secrets
+  ESO_CHART_VERSION: "0.10.7"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # 1. Install ESO via Helm
+  install-eso:
+    name: Install ESO via Helm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Add ESO Helm repo
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io
+          helm repo update
+
+      - name: Install / Upgrade ESO
+        run: |
+          helm upgrade --install external-secrets external-secrets/external-secrets \
+            --namespace ${{ env.ESO_NAMESPACE }} \
+            --create-namespace \
+            --version ${{ env.ESO_CHART_VERSION }} \
+            --set installCRDs=true \
+            --set serviceAccount.create=true \
+            --set serviceAccount.name=external-secrets \
+            --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=${{ secrets.ESO_ROLE_ARN }} \
+            --set replicaCount=1 \
+            --set resources.requests.cpu=50m \
+            --set resources.requests.memory=64Mi \
+            --set resources.limits.cpu=200m \
+            --set resources.limits.memory=128Mi \
+            --wait \
+            --timeout 5m
+
+      - name: Verify ESO pods are running
+        run: |
+          kubectl rollout status deployment/external-secrets \
+            -n ${{ env.ESO_NAMESPACE }} \
+            --timeout=120s
+
+  # 2. Apply ClusterSecretStore + ExternalSecrets
+  apply-manifests:
+    name: Apply ESO Manifests
+    runs-on: ubuntu-latest
+    needs: install-eso
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }}
+
+      - name: Apply ClusterSecretStore
+        run: |
+          kubectl apply -f infra/k8s/apps/external-secrets/cluster-secret-store.yaml
+
+      - name: Wait for ClusterSecretStore to be ready
+        run: |
+          kubectl wait clustersecretstore/aws-secrets-manager \
+            --for=condition=Ready \
+            --timeout=60s
+
+      - name: Apply ExternalSecrets
+        run: |
+          kubectl apply -f infra/k8s/apps/external-secrets/driver-service-secret.yaml
+          kubectl apply -f infra/k8s/apps/external-secrets/trip-service-secret.yaml
+          kubectl apply -f infra/k8s/apps/external-secrets/client-gateway-secret.yaml
+
+      - name: Verify secrets synced
+        run: |
+          echo "### Checking ExternalSecret sync status..."
+          for SECRET in driver-service-secrets trip-service-secrets client-gateway-secrets; do
+            NS=$(echo $SECRET | sed 's/-secrets//' | tr '-' '-')
+            STATUS=$(kubectl get externalsecret $SECRET \
+              -n ${NS/service/service} \
+              -o jsonpath='{.status.conditions[0].reason}' 2>/dev/null || echo "NotFound")
+            echo "$SECRET → $STATUS"
+          done
+          echo "### ✅ ESO manifests applied" >> "$GITHUB_STEP_SUMMARY"
