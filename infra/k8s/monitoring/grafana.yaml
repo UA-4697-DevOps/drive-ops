@@ -26,9 +26,20 @@ spec:
       labels:
         app: grafana
     spec:
+      # Pod-level security: run as Grafana's built-in UID (472) and apply seccomp
+      securityContext:
+        runAsUser: 472
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: grafana
           image: grafana/grafana:11.6.0
+          # Container-level security: least-privilege hardening
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
           env:
             # Default admin credentials (change in production!)
             - name: GF_SECURITY_ADMIN_USER
@@ -53,6 +64,12 @@ spec:
             # 3. Actual dashboard JSON files
             - name: dashboards
               mountPath: /var/lib/grafana/dashboards
+            # 4. Writable data dir (SQLite DB, sessions) — needed for readOnlyRootFilesystem
+            - name: grafana-data
+              mountPath: /var/lib/grafana
+            # 5. Writable tmp dir — Grafana uses /tmp for plugin downloads, rendering, etc.
+            - name: grafana-tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 100m
@@ -82,6 +99,11 @@ spec:
         - name: dashboards
           configMap:
             name: grafana-dashboard-trip-service
+        # emptyDir volumes for writable paths (ephemeral, cleared on pod restart)
+        - name: grafana-data
+          emptyDir: {}
+        - name: grafana-tmp
+          emptyDir: {}
 ---
 # --- Grafana Service ---
 # NodePort service so you can access the Grafana UI from outside the cluster
