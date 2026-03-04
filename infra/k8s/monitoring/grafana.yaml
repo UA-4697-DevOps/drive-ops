@@ -41,16 +41,20 @@ spec:
               drop: ["ALL"]
             readOnlyRootFilesystem: true
           env:
-            # Default admin credentials (change in production!)
+            # Admin credentials pulled from K8s Secret (not hardcoded in manifest)
             - name: GF_SECURITY_ADMIN_USER
-              value: "admin"
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: GF_SECURITY_ADMIN_USER
             - name: GF_SECURITY_ADMIN_PASSWORD
-              value: "admin"
-            # Allow anonymous read access for easy demo viewing
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: GF_SECURITY_ADMIN_PASSWORD
+            # Anonymous access disabled for security
             - name: GF_AUTH_ANONYMOUS_ENABLED
-              value: "true"
-            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
-              value: "Viewer"
+              value: "false"
           ports:
             - containerPort: 3000
               name: http
@@ -106,8 +110,8 @@ spec:
           emptyDir: {}
 ---
 # --- Grafana Service ---
-# NodePort service so you can access the Grafana UI from outside the cluster
-# at http://<node-ip>:30300
+# ClusterIP service — access via kubectl port-forward:
+#   kubectl port-forward svc/grafana 3000:3000 -n monitoring
 apiVersion: v1
 kind: Service
 metadata:
@@ -116,12 +120,12 @@ metadata:
   labels:
     app: grafana
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: grafana
   ports:
     - port: 3000
       targetPort: http
-      nodePort: 30300
       protocol: TCP
       name: http
+
