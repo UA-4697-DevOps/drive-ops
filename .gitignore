@@ -80,3 +80,7 @@ go.work
 .env.production.local
 *.pem
 *.bak
+
+# Kubernetes secrets
+**/k8s/secret*.yaml
+**/k8s/secret*.yml
