@@ -27,9 +27,22 @@ spec:
       labels:
         app: jaeger
     spec:
+      # Pod-level security: run as Jaeger's non-root UID and apply seccomp
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: jaeger
           image: jaegertracing/jaeger:2.5.0
+          # Container-level security: least-privilege hardening
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
           # Environment variables configure the all-in-one binary
           env:
             # COLLECTOR_OTLP_ENABLED: accept traces via OTLP protocol
@@ -45,6 +58,10 @@ spec:
             - containerPort: 16686
               name: ui
               protocol: TCP
+          # Writable tmp dir — Jaeger uses /tmp for badger in-memory storage
+          volumeMounts:
+            - name: jaeger-tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 100m
@@ -65,6 +82,9 @@ spec:
               port: 14269
             initialDelaySeconds: 10
             periodSeconds: 15
+      volumes:
+        - name: jaeger-tmp
+          emptyDir: {}
 ---
 # --- Jaeger Service ---
 # Exposes two ports inside the cluster:
