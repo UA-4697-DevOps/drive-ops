@@ -36,3 +36,18 @@ module "state_backend" {
     Component = "state-backend"
   }
 }
+
+module "external_secrets" {
+  source = "../modules/external-secrets"
+
+  project_name      = var.project_name
+  env               = var.env
+  aws_region        = var.aws_region
+  account_id        = "969283154407"
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  oidc_provider_url = module.eks.oidc_provider_url
+
+  tags = {
+    Component = "external-secrets"
+  }
+}
