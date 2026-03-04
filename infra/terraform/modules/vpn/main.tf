@@ -197,6 +197,7 @@ resource "aws_instance" "vpn" {
     volume_type           = "gp3"
     volume_size           = 8
     encrypted             = true
+    kms_key_id            = var.kms_key_arn # null falls back to the default AWS-managed EBS key
     delete_on_termination = true
   }
 
