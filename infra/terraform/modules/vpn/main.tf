@@ -46,6 +46,10 @@ resource "null_resource" "validate_vpn_cidr" {
       condition     = var.vpc_cidr != "" && can(cidrhost(var.vpc_cidr, 0))
       error_message = "vpc_cidr must be a valid CIDR block. OpenVPN pushes this route to clients so they can reach private subnets."
     }
+    precondition {
+      condition     = var.vpn_client_cidr != "" && can(cidrhost(var.vpn_client_cidr, 0))
+      error_message = "vpn_client_cidr must be a valid CIDR block so OpenVPN can assign client tunnel addresses."
+    }
   }
 }
 
