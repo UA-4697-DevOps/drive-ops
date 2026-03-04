@@ -37,17 +37,39 @@ module "state_backend" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
 module "external_secrets" {
   source = "../modules/external-secrets"
 
   project_name      = var.project_name
   env               = var.env
   aws_region        = var.aws_region
-  account_id        = "969283154407"
-  oidc_provider_arn = module.eks.oidc_provider_arn
-  oidc_provider_url = module.eks.oidc_provider_url
+  account_id        = data.aws_caller_identity.current.account_id
+  oidc_provider_arn = data.aws_iam_openid_connect_provider.eks.arn
+  oidc_provider_url = replace(data.aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")
 
   tags = {
     Component = "external-secrets"
   }
+}
+
+module "eks" {
+  source = "../modules/eks"
+
+  project_name = var.project_name
+  env          = var.env
+  aws_region   = var.aws_region
+
+  tags = {
+    Component = "eks"
+  }
+}
+
+data "aws_eks_cluster" "this" {
+  name = "${var.project_name}-${var.env}-cluster"
+}
+
+data "aws_iam_openid_connect_provider" "eks" {
+  url = data.aws_eks_cluster.this.identity[0].oidc[0].issuer
 }
