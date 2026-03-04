@@ -32,6 +32,10 @@ variable "ami_id" {
   type        = string
   default     = null
   description = "Optional AMI ID for the VPN instance. If not provided, the latest Amazon Linux 2023 ARM64 AMI will be used."
+  validation {
+    condition     = var.ami_id == null || trimspace(var.ami_id) != ""
+    error_message = "ami_id, when provided, must be a non-empty AMI ID."
+  }
 }
 
 # --- Validation ---
@@ -160,7 +164,7 @@ resource "aws_eip" "vpn" {
 # ==============================================================================
 
 resource "aws_instance" "vpn" {
-  ami                    = coalesce(var.ami_id, data.aws_ami.al2023[0].id)
+  ami                    = var.ami_id != null ? var.ami_id : data.aws_ami.al2023[0].id
   instance_type          = var.instance_type
   subnet_id              = var.public_subnet_id
   vpc_security_group_ids = [aws_security_group.vpn.id]
