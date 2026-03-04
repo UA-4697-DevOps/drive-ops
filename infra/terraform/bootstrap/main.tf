@@ -35,7 +35,7 @@ module "state_backend" {
 data "aws_caller_identity" "current" {}
 
 data "aws_eks_cluster" "this" {
-  name = "${var.project_name}-${var.env}-cluster"
+  name = "Training-${var.project_name}-${var.env}-eks"
 }
 
 data "aws_iam_openid_connect_provider" "eks" {
