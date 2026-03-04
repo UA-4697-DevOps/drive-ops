@@ -18,14 +18,29 @@ spec:
       labels:
         app: prometheus
     spec:
+      # Pod-level security: prom/prometheus runs as nobody (UID 65534)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: prometheus
           image: prom/prometheus:v3.3.0
+          # Container-level security: least-privilege hardening
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           args:
             # --config.file: tells Prometheus where to find its scrape config
             - "--config.file=/etc/prometheus/prometheus.yml"
             # --storage.tsdb.retention.time: how long to keep metrics data (15 days is the default)
             - "--storage.tsdb.retention.time=15d"
+            # --storage.tsdb.path: where TSDB data is stored (matches our emptyDir mount)
+            - "--storage.tsdb.path=/prometheus"
             # --web.enable-lifecycle: allows reloading config via HTTP POST to /-/reload
             - "--web.enable-lifecycle"
           ports:
@@ -35,6 +50,12 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /etc/prometheus
+            # Writable TSDB data dir — Prometheus stores scraped metrics here
+            - name: prometheus-data
+              mountPath: /prometheus
+            # Writable tmp dir — needed for readOnlyRootFilesystem
+            - name: prometheus-tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 100m
@@ -60,6 +81,11 @@ spec:
         - name: config
           configMap:
             name: prometheus-config
+        # emptyDir for TSDB data (ephemeral — for production, replace with a PVC)
+        - name: prometheus-data
+          emptyDir: {}
+        - name: prometheus-tmp
+          emptyDir: {}
 ---
 # --- Prometheus Service ---
 # Exposes Prometheus inside the cluster so Grafana can query it at
