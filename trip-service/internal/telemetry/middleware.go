@@ -123,22 +123,12 @@ func Middleware(next http.Handler) http.Handler {
 		// Wrap the ResponseWriter to capture the status code
 		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
-		// Start a trace span.
-		// chi.RouteContext gives us the matched route pattern (e.g. "/trips/{id}")
-		// rather than the actual URL (e.g. "/trips/abc-123"), which is better for
-		// grouping in both Jaeger and Prometheus labels.
-		routePattern := r.URL.Path // fallback
-		if rctx := chi.RouteContext(r.Context()); rctx != nil {
-			if pattern := rctx.RoutePattern(); pattern != "" {
-				routePattern = pattern
-			}
-		}
-
-		spanName := r.Method + " " + routePattern
-		ctx, span := tracer.Start(r.Context(), spanName,
+		// Start a trace span with the raw URL path; the final Chi route
+		// pattern (e.g. "/trips/{id}") isn't available until after the
+		// handler chain runs, so we update the span name below.
+		ctx, span := tracer.Start(r.Context(), r.Method+" "+r.URL.Path,
 			trace.WithAttributes(
 				attribute.String("http.method", r.Method),
-				attribute.String("http.route", routePattern),
 				attribute.String("http.url", r.URL.String()),
 			),
 		)
@@ -146,6 +136,19 @@ func Middleware(next http.Handler) http.Handler {
 
 		// Call the actual handler with the trace-enriched context
 		next.ServeHTTP(wrapped, r.WithContext(ctx))
+
+		// Now that the handler chain has run, chi.RouteContext holds
+		// the fully-resolved route pattern (including subrouter segments).
+		routePattern := r.URL.Path // fallback
+		if rctx := chi.RouteContext(r.Context()); rctx != nil {
+			if pattern := rctx.RoutePattern(); pattern != "" {
+				routePattern = pattern
+			}
+		}
+
+		// Update the span name and add the resolved route attribute
+		span.SetName(r.Method + " " + routePattern)
+		span.SetAttributes(attribute.String("http.route", routePattern))
 
 		// Calculate request duration
 		duration := time.Since(start).Seconds()
