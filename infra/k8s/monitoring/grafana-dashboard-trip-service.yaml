@@ -141,7 +141,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "go_goroutines",
+              "expr": "go_goroutines{job=\"trip-service\"}",
               "legendFormat": "goroutines"
             }
           ],
@@ -167,7 +167,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "go_memstats_heap_alloc_bytes",
+              "expr": "go_memstats_heap_alloc_bytes{job=\"trip-service\"}",
               "legendFormat": "heap alloc"
             }
           ],
