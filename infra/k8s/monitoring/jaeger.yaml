@@ -17,6 +17,9 @@ metadata:
   namespace: monitoring
   labels:
     app: jaeger
+    team: platform
+    env: dev
+    service: jaeger
 spec:
   replicas: 1
   selector:
@@ -26,6 +29,9 @@ spec:
     metadata:
       labels:
         app: jaeger
+        team: platform
+        env: dev
+        service: jaeger
     spec:
       # Pod-level security: run as Jaeger's non-root UID and apply seccomp
       securityContext:

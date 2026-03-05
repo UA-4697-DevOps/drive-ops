@@ -16,6 +16,9 @@ metadata:
   namespace: monitoring
   labels:
     app: grafana
+    team: platform
+    env: dev
+    service: grafana
 spec:
   replicas: 1
   selector:
@@ -25,6 +28,9 @@ spec:
     metadata:
       labels:
         app: grafana
+        team: platform
+        env: dev
+        service: grafana
     spec:
       # Pod-level security: run as Grafana's built-in UID (472) and apply seccomp
       securityContext:

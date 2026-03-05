@@ -16,6 +16,9 @@ metadata:
   namespace: default
   labels:
     app: trip-service
+    team: platform
+    env: dev
+    service: trip-service
 spec:
   replicas: 1
   selector:
@@ -25,6 +28,9 @@ spec:
     metadata:
       labels:
         app: trip-service
+        team: platform
+        env: dev
+        service: trip-service
     spec:
       # Pod-level security: run as non-root with seccomp
       securityContext:

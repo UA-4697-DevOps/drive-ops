@@ -8,6 +8,9 @@ metadata:
   namespace: monitoring
   labels:
     app: prometheus
+    team: platform
+    env: dev
+    service: prometheus
 spec:
   replicas: 1
   selector:
@@ -17,6 +20,9 @@ spec:
     metadata:
       labels:
         app: prometheus
+        team: platform
+        env: dev
+        service: prometheus
     spec:
       # Pod-level security: prom/prometheus runs as nobody (UID 65534)
       securityContext:

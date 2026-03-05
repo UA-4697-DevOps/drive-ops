@@ -101,7 +101,12 @@ func main() {
 		log.Fatalf("Failed to initialise OpenTelemetry: %v", err)
 	}
 	defer func() {
-		if err := otelShutdown(appCtx); err != nil {
+		// Use a fresh context — appCtx is already canceled by the shutdown
+		// sequence (line 275) before this defer runs, so passing it here
+		// would prevent the BatchSpanProcessor from flushing pending spans.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := otelShutdown(shutdownCtx); err != nil {
 			log.Printf("OpenTelemetry shutdown error: %v", err)
 		}
 	}()
