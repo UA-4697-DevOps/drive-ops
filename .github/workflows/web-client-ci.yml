@@ -46,7 +46,7 @@ jobs:
       - name: Check nginx template syntax
         run: |
           # Substitute a dummy upstream so nginx -t can parse the template
-          export DRIVER_SERVICE_URL=http://driver-service:8082
+          export DRIVER_SERVICE_URL=http://localhost:8082
           envsubst '${DRIVER_SERVICE_URL}' < nginx/default.conf.template > /tmp/default.conf
           docker run --rm \
             -v /tmp/default.conf:/etc/nginx/conf.d/default.conf:ro \
