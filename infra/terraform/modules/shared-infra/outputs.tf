@@ -73,6 +73,7 @@ output "ecr_repository_urls" {
     client_gateway = module.ecr_client_gateway.repository_url
     driver_service = module.ecr_driver_service.repository_url
     trip_service   = module.ecr_trip_service.repository_url
+    web_client     = module.ecr_web_client.repository_url
   }
 }
 
@@ -82,6 +83,7 @@ output "ecr_repository_arns" {
     client_gateway = module.ecr_client_gateway.repository_arn
     driver_service = module.ecr_driver_service.repository_arn
     trip_service   = module.ecr_trip_service.repository_arn
+    web_client     = module.ecr_web_client.repository_arn
   }
 }
 
@@ -91,6 +93,7 @@ output "ecr_iam_role_arns" {
     client_gateway = module.ecr_client_gateway.role_arn
     driver_service = module.ecr_driver_service.role_arn
     trip_service   = module.ecr_trip_service.role_arn
+    web_client     = module.ecr_web_client.role_arn
   }
 }
 
@@ -100,6 +103,7 @@ output "ecr_iam_role_names" {
     client_gateway = module.ecr_client_gateway.role_name
     driver_service = module.ecr_driver_service.role_name
     trip_service   = module.ecr_trip_service.role_name
+    web_client     = module.ecr_web_client.role_name
   }
 }
 
