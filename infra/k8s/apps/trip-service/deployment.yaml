@@ -15,9 +15,24 @@ spec:
       labels:
         app: trip-service
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: trip-service
         image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service:f0b02799234b1845412a0d7ce58997829bd693b1 # someone deleted ecr so I can't put image tag there
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 8081
           name: http
