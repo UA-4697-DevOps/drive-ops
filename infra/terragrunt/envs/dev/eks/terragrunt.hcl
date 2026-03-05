@@ -56,16 +56,16 @@ inputs = {
 
   # Networking (from shared-infra)
   vpc_id             = dependency.shared_infra.outputs.vpc_id
-  private_subnet_ids = dependency.shared_infra.outputs.private_subnet_ids
+  private_subnet_ids = dependency.shared_infra.outputs.public_subnet_ids
   public_subnet_ids  = dependency.shared_infra.outputs.public_subnet_ids
 
   # Cluster
-  cluster_version                        = "1.35"
-  cluster_endpoint_public_access         = true
-  cluster_endpoint_private_access        = true
-  cluster_endpoint_public_access_cidrs   = ["0.0.0.0/0"] # TODO: restrict to bastion/VPN CIDRs after next task
-  enabled_cluster_log_types              = ["audit", "api", "authenticator"]
-  cluster_log_retention_in_days          = 7
+  cluster_version                      = "1.35"
+  cluster_endpoint_public_access       = true
+  cluster_endpoint_private_access      = true
+  cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"] # TODO: restrict to bastion/VPN CIDRs after next task
+  enabled_cluster_log_types            = ["audit", "api", "authenticator"]
+  cluster_log_retention_in_days        = 7
 
   # Node Groups
   node_groups = {
@@ -73,8 +73,8 @@ inputs = {
       instance_types         = ["t3.small"]
       ami_type               = "AL2023_x86_64_STANDARD"
       capacity_type          = "ON_DEMAND"
-      desired_size           = 2
-      min_size               = 2
+      desired_size           = 0
+      min_size               = 0
       max_size               = 4
       disk_size              = 20
       update_max_unavailable = 1
