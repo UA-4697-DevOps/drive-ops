@@ -56,7 +56,7 @@ inputs = {
 
   # Networking (from shared-infra)
   vpc_id             = dependency.shared_infra.outputs.vpc_id
-  private_subnet_ids = dependency.shared_infra.outputs.private_subnet_ids
+  private_subnet_ids = dependency.shared_infra.outputs.public_subnet_ids
   public_subnet_ids  = dependency.shared_infra.outputs.public_subnet_ids
 
   # Cluster
