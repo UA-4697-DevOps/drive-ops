@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: drive-ops-db-backup
+  namespace: default
+  labels:
+    app: drive-ops
+    component: database-backup
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: db-backup-sa
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          restartPolicy: OnFailure
+          containers:
+          - name: db-backup
+            # Placeholder image name - Kustomize will overwrite this
+            image: drive-ops-backup
+            imagePullPolicy: IfNotPresent
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: ["ALL"]
+            volumeMounts:
+              - name: tmp
+                mountPath: /tmp
+            env:
+              # Fetch database credentials securely from your existing Kubernetes Secret
+              - name: PGHOST
+                valueFrom:
+                  secretKeyRef:
+                    name: rds-credentials
+                    key: host
+              - name: PGUSER
+                valueFrom:
+                  secretKeyRef:
+                    name: rds-credentials
+                    key: username
+              - name: PGPASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: rds-credentials
+                    key: password
+          volumes:
+            - name: tmp
+              emptyDir: {}
