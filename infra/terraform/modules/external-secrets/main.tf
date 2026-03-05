@@ -1,5 +1,9 @@
+# ==============================================================================
+# EXTERNAL SECRETS OPERATOR – IAM MODULE
+# ==============================================================================
+
 locals {
-  oidc_host = var.oidc_provider_url # вже без https:// (приходить з eks outputs)
+  oidc_host = var.oidc_provider_url
 }
 
 data "aws_iam_policy_document" "eso_secrets" {
@@ -11,7 +15,7 @@ data "aws_iam_policy_document" "eso_secrets" {
       "secretsmanager:DescribeSecret",
     ]
     resources = [
-      "arn:aws:secretsmanager:${var.aws_region}:${var.account_id}:secret:${var.project_name}/*",
+      "arn:aws:secretsmanager:${var.aws_region}:${var.account_id}:secret:${var.project_name}/${var.env}/*",
     ]
   }
 }
