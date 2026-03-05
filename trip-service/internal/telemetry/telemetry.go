@@ -15,6 +15,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -136,13 +137,16 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, err error)
 
 	// Return a combined shutdown function that flushes both providers
 	shutdown = func(ctx context.Context) error {
+		var errs []error
 		if err := tp.Shutdown(ctx); err != nil {
 			log.Printf("ERROR: TracerProvider shutdown: %v", err)
+			errs = append(errs, err)
 		}
 		if err := mp.Shutdown(ctx); err != nil {
 			log.Printf("ERROR: MeterProvider shutdown: %v", err)
+			errs = append(errs, err)
 		}
-		return nil
+		return errors.Join(errs...)
 	}
 
 	return shutdown, nil
