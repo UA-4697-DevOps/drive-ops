@@ -129,7 +129,7 @@ func Middleware(next http.Handler) http.Handler {
 		ctx, span := tracer.Start(r.Context(), r.Method+" "+r.URL.Path,
 			trace.WithAttributes(
 				attribute.String("http.method", r.Method),
-				attribute.String("http.url", r.URL.String()),
+				attribute.String("http.target", r.URL.Path),
 			),
 		)
 		defer span.End()
