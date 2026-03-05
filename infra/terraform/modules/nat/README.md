@@ -51,19 +51,19 @@ All NAT resources (EC2, EIP, security group, route) will be destroyed.
 
 ### Architecture
 
-```
+```text
 Private Subnets (EKS nodes, RDS, etc.)
-         ↓
+      ↓
     Private Route Table
-         ↓
+      ↓
     0.0.0.0/0 → NAT Instance ENI
-         ↓
+      ↓
     NAT Instance (source_dest_check disabled)
-         ↓
+      ↓
     Elastic IP (stable outbound address)
-         ↓
+      ↓
     Internet Gateway
-         ↓
+      ↓
     Internet
 ```
 
@@ -93,7 +93,7 @@ Private Subnets (EKS nodes, RDS, etc.)
 
 When `enabled = true`:
 
-```
+```text
 nat_instance_id          → NAT EC2 instance ID
 nat_instance_public_ip   → Elastic IP (stable outbound address)
 nat_instance_private_ip  → Private IP within the VPC

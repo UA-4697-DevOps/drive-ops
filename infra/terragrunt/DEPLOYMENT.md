@@ -26,12 +26,8 @@ export TF_VAR_discord_webhook_url="https://discord.com/api/webhooks/your_actual_
    export TG_VAR_BASTION_ALLOWED_SSH_CIDRS='["YOUR_IP/32"]'
    ```
 
-2. **Local Override File (Recommended for local development):**
-   Create a `.env_vars.local.yaml` file (already in `.gitignore`) in `infra/terragrunt/envs/dev/`:
-   ```yaml
-   BASTION_ALLOWED_SSH_CIDRS:
-     - "YOUR_IP/32"
-   ```
+2. **Local Override File:**
+   The Terragrunt `root.hcl` in this repository currently only loads `env_vars.yaml` and does **not** consume `.env_vars.local.yaml`. To override values for local development use the environment variable method above or edit `env_vars.yaml` locally (do not commit secrets). For production use, prefer AWS SSM Parameter Store.
 
 3. **AWS SSM Parameter Store (Recommended for production):**
    Store the CIDR list in SSM Parameter Store and update `bastion/terragrunt.hcl` to read from it.
