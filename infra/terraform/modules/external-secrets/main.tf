@@ -1,5 +1,5 @@
 locals {
-  oidc_host = var.oidc_provider_url  # вже без https:// (приходить з eks outputs)
+  oidc_host = var.oidc_provider_url # вже без https:// (приходить з eks outputs)
 }
 
 data "aws_iam_policy_document" "eso_secrets" {
