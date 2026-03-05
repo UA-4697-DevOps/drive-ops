@@ -26,7 +26,7 @@ spec:
       serviceAccountName: trip-service
       containers:
       - name: trip-service
-        image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service:latest
+        image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service:f0b02799234b1845412a0d7ce58997829bd693b1
         imagePullPolicy: Always
         ports:
         - name: http

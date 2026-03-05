@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: trip-service
-        image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service:latest # someone deleted ecr so I can't put image tag there
+        image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service:f0b02799234b1845412a0d7ce58997829bd693b1 # someone deleted ecr so I can't put image tag there
         ports:
         - containerPort: 8081
           name: http
