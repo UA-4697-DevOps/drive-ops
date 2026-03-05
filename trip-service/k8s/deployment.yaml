@@ -52,7 +52,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: trip-service-secrets
-              key: database-url
+              key: DB_URL
         # AWS Configuration (from ConfigMap)
         - name: AWS_REGION
           valueFrom:

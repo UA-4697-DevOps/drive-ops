@@ -33,7 +33,7 @@ config:
 
 database:
   secretName: "trip-service-secrets"
-  secretKey: "database-url"
+  secretKey: "DB_URL"
 
 # Strict health checks for production
 livenessProbe:
