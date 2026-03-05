@@ -20,10 +20,18 @@ spec:
         {{- include "trip-service.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "trip-service.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: {{ .Chart.Name }}
         image: {{ include "trip-service.image" . }}
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         ports:
         - name: {{ .Values.service.portName }}
           containerPort: {{ .Values.service.targetPort }}
@@ -76,3 +84,15 @@ spec:
       volumes:
       - name: tmp
         emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
