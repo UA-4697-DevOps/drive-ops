@@ -1,0 +1,68 @@
+# ---------------------------------------------------------------------------
+# nginx/default.conf.template
+#
+# Processed at container start by nginx's built-in envsubst mechanism:
+#   /etc/nginx/templates/*.template  →  /etc/nginx/conf.d/*.conf
+#
+# Environment variables:
+#   DRIVER_SERVICE_URL  — full base URL of the driver-service
+#                         default: http://driver-service:8082
+# ---------------------------------------------------------------------------
+
+server {
+    listen       8083;
+    server_name  _;
+
+    # ------------------------------------------------------------------
+    # Static assets
+    # ------------------------------------------------------------------
+    root  /usr/share/nginx/html;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # ------------------------------------------------------------------
+    # Health check endpoint — returns 200 immediately (no upstream needed)
+    # ------------------------------------------------------------------
+    location /health {
+        access_log  off;
+        return      200 '{"status":"ok"}';
+        add_header  Content-Type application/json;
+    }
+
+    # ------------------------------------------------------------------
+    # API reverse-proxy → driver-service
+    #
+    # /api/drivers            → DRIVER_SERVICE_URL/drivers
+    # /api/v1/trip-requests   → DRIVER_SERVICE_URL/api/v1/trip-requests
+    #
+    # Proxying through nginx avoids CORS issues: the browser only talks to
+    # the web-client origin; all cross-service calls happen server-side.
+    # ------------------------------------------------------------------
+    location /api/ {
+        proxy_pass          ${DRIVER_SERVICE_URL}/;
+        proxy_set_header    Host              $host;
+        proxy_set_header    X-Real-IP         $remote_addr;
+        proxy_set_header    X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header    X-Forwarded-Proto $scheme;
+        proxy_read_timeout  10s;
+        proxy_connect_timeout 5s;
+    }
+
+    # ------------------------------------------------------------------
+    # Security headers
+    # ------------------------------------------------------------------
+    add_header X-Frame-Options       "SAMEORIGIN"   always;
+    add_header X-Content-Type-Options "nosniff"     always;
+    add_header Referrer-Policy       "strict-origin" always;
+
+    # ------------------------------------------------------------------
+    # Cache static assets for 1 hour; HTML and /health are always fresh
+    # ------------------------------------------------------------------
+    location ~* \.(css|js|ico|png|jpg|svg|woff2?)$ {
+        expires     1h;
+        add_header  Cache-Control "public, no-transform";
+    }
+}
