@@ -112,6 +112,11 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, err error)
 	// default Prometheus registry that promhttp.Handler() will serve.
 	promReader, err := promexporter.New()
 	if err != nil {
+		// Roll back the already-initialised TracerProvider so we don't
+		// leak its background goroutines and OTLP connection.
+		if shutdownErr := tp.Shutdown(context.Background()); shutdownErr != nil {
+			log.Printf("ERROR: TracerProvider rollback shutdown: %v", shutdownErr)
+		}
 		return nil, err
 	}
 
