@@ -1,0 +1,78 @@
+name: Deploy Lambda Functions
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/lambdas/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: us-east-2
+  PROJECT_NAME: drive-ops
+  ENV: dev
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-tag-auditor:
+    name: Deploy Tag Auditor Lambdas
+    runs-on: ubuntu-latest
+    if: |
+      contains(toJson(github.event.commits.*.modified), 'src/lambdas/tag-auditor/')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/Training-trip-service-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy tag-auditor
+        run: |
+          cd src/lambdas/tag-auditor
+          zip tag_auditor.zip tag_auditor.py
+          aws lambda update-function-code \
+            --function-name ${{ env.PROJECT_NAME }}-${{ env.ENV }}-tag-auditor \
+            --zip-file fileb://tag_auditor.zip
+
+      - name: Deploy tag-cleanup
+        run: |
+          cd src/lambdas/tag-auditor
+          zip cleanup.zip cleanup.py
+          aws lambda update-function-code \
+            --function-name ${{ env.PROJECT_NAME }}-${{ env.ENV }}-tag-cleanup \
+            --zip-file fileb://cleanup.zip
+
+  deploy-discord-notifier:
+    name: Deploy Discord Notifier Lambda
+    runs-on: ubuntu-latest
+    if: |
+      contains(toJson(github.event.commits.*.modified), 'src/lambdas/discord-notifier/')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/Training-trip-service-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy discord-notifier
+        run: |
+          cd src/lambdas/discord-notifier
+          zip discord.zip discord.py
+          aws lambda update-function-code \
+            --function-name ${{ env.PROJECT_NAME }}-${{ env.ENV }}-discord-notifier \
+            --zip-file fileb://discord.zip

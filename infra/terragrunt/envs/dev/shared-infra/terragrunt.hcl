@@ -47,7 +47,7 @@ inputs = {
   rds_master_username = "drive_admin"
 
   # --- Monitoring & Alerting (Discord) ---
-  discord_webhook_url = get_env("TF_VAR_discord_webhook_url")
+  discord_webhook_url = get_env("TF_VAR_discord_webhook_url", "https://discord.com/api/webhooks/1234567890/dummy_token")
 
   # Common tags
   common_tags = {

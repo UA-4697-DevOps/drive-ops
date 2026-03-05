@@ -1,0 +1,45 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+
+patches:
+  # 1. Inject the dev IRSA role into the ServiceAccount
+  - target:
+      kind: ServiceAccount
+      name: db-backup-sa
+    patch: |-
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: db-backup-sa
+        annotations:
+          eks.amazonaws.com/role-arn: "arn:aws:iam::969283154407:role/drive-ops-backup-role-dev"
+          
+  # 2. Inject the dev environment variables into the CronJob container
+  - target:
+      kind: CronJob
+      name: drive-ops-db-backup
+    patch: |-
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: drive-ops-db-backup
+      spec:
+        jobTemplate:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: db-backup
+                    env:
+                      - name: ENV
+                        value: "dev"
+                      - name: S3_BUCKET_URI
+                        value: "s3://drive-ops-db-backups-dev"
+
+# 3. Pin the image to your exact ECR dev image
+images:
+  - name: drive-ops-backup
+    newName: 969283154407.dkr.ecr.us-east-2.amazonaws.com/drive-ops-backup
+    newTag: v1.0.0

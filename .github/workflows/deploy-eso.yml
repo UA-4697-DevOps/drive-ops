@@ -1,0 +1,77 @@
+# ==============================================================================
+# External Secrets Operator – Apply Manifests
+# ==============================================================================
+# Applies ClusterSecretStore + ExternalSecret manifests to the EKS cluster.
+# ESO itself is installed and managed by ArgoCD via helm-release.yaml.
+#
+# Triggers:
+#   - Manual dispatch only (requires live EKS cluster)
+# ==============================================================================
+name: Deploy External Secrets Operator
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - dev
+        default: dev
+
+env:
+  AWS_REGION: us-east-2
+  EKS_CLUSTER_NAME: drive-ops-dev
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apply-manifests:
+    name: Apply ESO Manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }}
+
+      - name: Apply ClusterSecretStore
+        run: |
+          kubectl apply -f infra/k8s/apps/external-secrets/cluster-secret-store.yaml
+
+      - name: Wait for ClusterSecretStore to be ready
+        run: |
+          kubectl wait clustersecretstore/aws-secrets-manager \
+            --for=condition=Ready \
+            --timeout=60s
+
+      - name: Apply ExternalSecrets
+        run: |
+          kubectl apply -f infra/k8s/apps/external-secrets/driver-service-secret.yaml
+          kubectl apply -f infra/k8s/apps/external-secrets/trip-service-secret.yaml
+          kubectl apply -f infra/k8s/apps/external-secrets/client-gateway-secret.yaml
+
+      - name: Verify secrets synced
+        run: |
+          for NS in driver-service trip-service client-gateway; do
+            SECRET="${NS}-secrets"
+            STATUS=$(kubectl get externalsecret $SECRET \
+              -n $NS \
+              -o jsonpath='{.status.conditions[0].reason}' 2>/dev/null || echo "NotFound")
+            echo "$SECRET → $STATUS"
+          done
+          echo "### ✅ ESO manifests applied" >> "$GITHUB_STEP_SUMMARY"

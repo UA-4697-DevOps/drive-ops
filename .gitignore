@@ -42,6 +42,7 @@ wheels/
 .terraform.lock.hcl
 .docker/
 *.log
+.env.test
 .vagrant/
 postgres_data/
 rabbitmq_data/
@@ -83,3 +84,7 @@ go.work
 # Local override files for sensitive configuration (see infra/terragrunt/envs/*/env_vars.yaml)
 .env_vars.local.yaml
 *_vars.local.yaml
+
+# Kubernetes secrets
+**/k8s/secret*.yaml
+**/k8s/secret*.yml
