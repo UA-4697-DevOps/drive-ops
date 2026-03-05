@@ -115,8 +115,10 @@ func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// +1 active request
+		// +1 active request; defer -1 so the gauge is always decremented,
+		// even if a downstream handler panics.
 		activeRequests.Add(r.Context(), 1)
+		defer activeRequests.Add(r.Context(), -1)
 
 		// Wrap the ResponseWriter to capture the status code
 		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
@@ -160,9 +162,6 @@ func Middleware(next http.Handler) http.Handler {
 
 		// Increment the request counter
 		requestTotal.Add(ctx, 1, attrs)
-
-		// -1 active request
-		activeRequests.Add(ctx, -1)
 
 		// Set span status based on HTTP status code
 		if wrapped.statusCode >= 400 {
