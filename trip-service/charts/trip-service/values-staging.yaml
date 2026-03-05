@@ -1,11 +1,11 @@
 # Staging environment values for trip-service
 
-replicaCount: 1
+replicaCount: 2
 
 image:
   repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service
-  pullPolicy: Always
-  tag: "latest"
+  pullPolicy: IfNotPresent
+  tag: "v1.0.0"
 
 serviceAccount:
   create: true

@@ -69,6 +69,10 @@ spec:
         - name: TRIP_SERVICE_PORT
           value: {{ .Values.config.servicePort | quote }}
         # Health Probes
+        {{- with .Values.startupProbe }}
+        startupProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         livenessProbe:
           {{- toYaml .Values.livenessProbe | nindent 10 }}
         readinessProbe:
