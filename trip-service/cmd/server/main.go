@@ -216,16 +216,16 @@ func main() {
 	// 6. Router setup
 	r := chi.NewRouter()
 
-	// Apply OpenTelemetry middleware to ALL routes.
+	// Prometheus metrics endpoint — scraped by Prometheus every 15s.
+	// Registered WITHOUT telemetry middleware to avoid self-instrumentation
+	// noise (every scrape would create spans, inflate counters, etc.).
+	r.Handle("/metrics", telemetry.MetricsHandler())
+	r.Get("/health", handler.HealthCheck)
+
+	// Apply OpenTelemetry middleware to application routes only.
 	// This creates a trace span and records metrics for every HTTP request.
-	// Must be added before route definitions so it wraps all handlers.
 	r.Use(telemetry.Middleware)
 
-	// Prometheus metrics endpoint — scraped by Prometheus every 15s.
-	// This serves counters, histograms, and gauges in Prometheus exposition format.
-	r.Handle("/metrics", telemetry.MetricsHandler())
-
-	r.Get("/health", handler.HealthCheck)
 	r.Route("/trips", func(r chi.Router) {
 		r.Post("/", handler.CreateTrip)
 		r.Get("/{id}", handler.GetTrip)
