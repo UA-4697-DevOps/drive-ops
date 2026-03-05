@@ -55,7 +55,10 @@ spec:
           env:
             # --- Database ---
             - name: DB_URL
-              value: "postgres://user:password@db-host:5432/trips?sslmode=disable"
+              valueFrom:
+                secretKeyRef:
+                  name: trip-service-db
+                  key: db-url
 
             # --- SQS Queues (loaded by broker.LoadConfig()) ---
             - name: AWS_REGION
