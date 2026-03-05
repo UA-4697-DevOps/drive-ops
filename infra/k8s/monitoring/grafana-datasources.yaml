@@ -18,6 +18,7 @@ data:
     datasources:
       # Datasource 1: Prometheus — for metrics (request rate, latency, error rate)
       - name: Prometheus
+        uid: prometheus
         type: prometheus
         access: proxy            # "proxy" means Grafana backend proxies requests (recommended)
         url: http://prometheus.monitoring.svc.cluster.local:9090
