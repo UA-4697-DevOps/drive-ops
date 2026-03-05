@@ -134,7 +134,7 @@ func main() {
 	}
 
 	var db *gorm.DB
-	err := connectWithRetry("Postgres", func() error {
+	err = connectWithRetry("Postgres", func() error {
 		var err error
 		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		return err
