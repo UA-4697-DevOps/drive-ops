@@ -35,7 +35,9 @@ const refreshBtn   = document.getElementById('refresh-btn');
 function shortId(uuid) {
   if (!uuid) return '—';
   const parts = uuid.split('-');
-  return `<span class="monospace" title="${uuid}">${parts[0]}…</span>`;
+  const safeId = escapeHtml(parts[0]);
+  const safeUuid = escapeHtml(uuid);
+  return `<span class="monospace" title="${safeUuid}">${safeId}…</span>`;
 }
 
 /** Map a status string to a coloured pill. */
@@ -47,7 +49,7 @@ function statusPill(status) {
   if (['inactive', 'offline', 'rejected', 'false'].includes(s))           cls = 'pill-red';
   if (['pending', 'in_progress', 'assigned'].includes(s))                 cls = 'pill-yellow';
   if (['created', 'new'].includes(s))                                      cls = 'pill-blue';
-  return `<span class="pill ${cls}">${status}</span>`;
+  return `<span class="pill ${cls}">${escapeHtml(status)}</span>`;
 }
 
 /** Fetch JSON and return [data, null] or [null, errorString]. */
@@ -81,14 +83,15 @@ async function loadDrivers() {
   }
 
   setStatus(driversStatus, 'ok');
-  driversCount.textContent = drivers.length;
+  const list = Array.isArray(drivers) ? drivers : [];
+  driversCount.textContent = list.length;
 
-  if (drivers.length === 0) {
+  if (list.length === 0) {
     driversBody.innerHTML = `<tr><td colspan="5" class="loading">No drivers found.</td></tr>`;
     return;
   }
 
-  driversBody.innerHTML = drivers.map(d => `
+  driversBody.innerHTML = list.map(d => `
     <tr>
       <td>${shortId(d.id)}</td>
       <td>${escapeHtml(d.first_name ?? '—')}</td>
@@ -115,7 +118,8 @@ async function loadTripRequests() {
   setStatus(tripsStatus, 'ok');
 
   // The endpoint returns either an array or an object with a list key.
-  const list = Array.isArray(trips) ? trips : (trips.trip_requests ?? trips.data ?? Object.values(trips));
+  let list = Array.isArray(trips) ? trips : (trips?.trip_requests ?? trips?.data ?? (trips ? Object.values(trips) : []));
+  if (!Array.isArray(list)) list = [];
 
   tripsCount.textContent = list.length;
 
