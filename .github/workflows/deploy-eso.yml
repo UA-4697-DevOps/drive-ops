@@ -1,20 +1,24 @@
+# ==============================================================================
+# External Secrets Operator – Apply Manifests
+# ==============================================================================
+# Applies ClusterSecretStore + ExternalSecret manifests to the EKS cluster.
+# ESO itself is installed and managed by ArgoCD via helm-release.yaml.
+#
+# Triggers:
+#   - Manual dispatch only (requires live EKS cluster)
+# ==============================================================================
 name: Deploy External Secrets Operator
 
 on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Target environment"
+        description: 'Target environment'
         required: true
         type: choice
         options:
           - dev
         default: dev
-  push:
-    branches:
-      - feat/#260
-    paths:
-      - "infra/k8s/apps/external-secrets/**"
 
 env:
   AWS_REGION: us-east-2
@@ -63,7 +67,6 @@ jobs:
 
       - name: Verify secrets synced
         run: |
-          echo "### Checking ExternalSecret sync status..."
           for NS in driver-service trip-service client-gateway; do
             SECRET="${NS}-secrets"
             STATUS=$(kubectl get externalsecret $SECRET \
