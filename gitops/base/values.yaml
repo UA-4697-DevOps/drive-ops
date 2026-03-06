@@ -1,9 +1,9 @@
 replicaCount: 1
 
 image:
-  repository: ""  # auto-populated by CI via yq (aws sts + vars.AWS_REGION)
+  repository: ""
   pullPolicy: IfNotPresent
-  tag: "none"     # never use latest — always explicit sha
+  tag: "none"
 
 service:
   type: ClusterIP
@@ -25,7 +25,10 @@ autoscaling:
 
 serviceAccount:
   create: true
-  annotations: {}
+  iamRoleArn: ""  # chart reads iamRoleArn, not annotations
 
 env:
   LOG_LEVEL: "info"
+
+externalSecret:
+  secretPath: ""  # overridden per environment via ArgoCD parameters

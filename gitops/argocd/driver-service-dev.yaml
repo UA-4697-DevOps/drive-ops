@@ -10,11 +10,14 @@ spec:
   source:
     repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
     targetRevision: main
-    path: helm/driver-service
+    path: driver-service/charts
     helm:
       valueFiles:
         - ../../gitops/base/values.yaml
         - ../../gitops/overlays/dev/values.yaml
+      parameters:
+        - name: externalSecret.secretPath
+          value: drive-ops/dev/rds/credentials
   destination:
     server: https://kubernetes.default.svc
     namespace: driver-service-dev

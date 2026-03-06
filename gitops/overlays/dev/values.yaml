@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  tag: "none"  # auto-updated by CI via yq
+  tag: "none"
 
 autoscaling:
   enabled: false
@@ -11,8 +11,7 @@ env:
   ENVIRONMENT: "dev"
 
 serviceAccount:
-  annotations:
-    eks.amazonaws.com/role-arn: ""  # auto-populated by CI via aws sts + vars
+  iamRoleArn: ""  # auto-populated by CI
 
 resources:
   requests:

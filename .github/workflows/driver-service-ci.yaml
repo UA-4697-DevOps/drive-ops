@@ -1,4 +1,4 @@
-name: Driver Service — Deploy & Promote
+name: Driver Service — Build & Deploy Dev
 
 on:
   workflow_run:
@@ -7,7 +7,6 @@ on:
     branches: [main]
 
 permissions:
-  actions: write
   id-token: write
   contents: write
   pull-requests: write
@@ -15,6 +14,10 @@ permissions:
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
   ECR_REPOSITORY: driver-service
+
+concurrency:
+  group: deploy-driver-service-dev
+  cancel-in-progress: false  # queue runs, never cancel an in-flight deploy
 
 jobs:
   deploy-dev:
@@ -24,13 +27,29 @@ jobs:
     outputs:
       image_tag: ${{ steps.meta.outputs.tag }}
       aws_account_id: ${{ steps.sts.outputs.account_id }}
+      artifact_found: ${{ steps.check-artifact.outputs.artifact_found }}
 
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check if build artifact exists
+        id: check-artifact
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: ${{ github.event.workflow_run.id }}
+            });
+            const found = artifacts.data.artifacts.some(a => a.name === 'driver-service-metadata');
+            console.log(`Artifact found: ${found}`);
+            core.setOutput('artifact_found', found ? 'true' : 'false');
+
       - name: Download build metadata from CI
+        if: steps.check-artifact.outputs.artifact_found == 'true'
         uses: actions/download-artifact@v4
         with:
           name: driver-service-metadata
@@ -40,11 +59,13 @@ jobs:
 
       - name: Read image tag from metadata
         id: meta
+        if: steps.check-artifact.outputs.artifact_found == 'true'
         run: |
           TAG=$(jq -r '.tag' build-artifacts/metadata.json)
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Configure AWS credentials via OIDC
+        if: steps.check-artifact.outputs.artifact_found == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
@@ -52,17 +73,20 @@ jobs:
 
       - name: Get AWS Account ID dynamically
         id: sts
+        if: steps.check-artifact.outputs.artifact_found == 'true'
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           echo "account_id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
 
       - name: Install yq
+        if: steps.check-artifact.outputs.artifact_found == 'true'
         run: |
           sudo wget -qO /usr/local/bin/yq \
             https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
       - name: Update dev overlay
+        if: steps.check-artifact.outputs.artifact_found == 'true'
         run: |
           ACCOUNT_ID=${{ steps.sts.outputs.account_id }}
           IMAGE_TAG=${{ steps.meta.outputs.tag }}
@@ -74,16 +98,22 @@ jobs:
             -i gitops/overlays/dev/values.yaml
 
       - name: Commit & push
+        if: steps.check-artifact.outputs.artifact_found == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add gitops/overlays/dev/values.yaml gitops/base/values.yaml
           git commit -m "chore(gitops): deploy driver-service dev → ${{ steps.meta.outputs.tag }}"
-          git push
+          git fetch origin main
+          git pull --rebase origin main
+          for i in 1 2 3; do
+            git push && break || sleep 5
+          done
 
   wait-and-verify-dev:
     name: Wait for ArgoCD & verify dev
     needs: deploy-dev
+    if: needs.deploy-dev.outputs.artifact_found == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -95,9 +125,11 @@ jobs:
 
       - name: Install argocd CLI
         run: |
-          curl -sSL -o /usr/local/bin/argocd \
+          mkdir -p $HOME/.local/bin
+          curl -sSL -o $HOME/.local/bin/argocd \
             https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          chmod +x /usr/local/bin/argocd
+          chmod +x $HOME/.local/bin/argocd
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Wait for ArgoCD dev sync
         run: |
@@ -121,7 +153,29 @@ jobs:
           fi
           echo "✅ driver-service-dev is Healthy"
 
+      - name: Verify live image tag matches expected
+        id: image_check
+        run: |
+          EXPECTED_TAG="${{ needs.deploy-dev.outputs.image_tag }}"
+
+          LIVE_TAG=$(argocd app get driver-service-dev \
+            --auth-token ${{ secrets.ARGOCD_TOKEN }} \
+            --server ${{ vars.ARGOCD_SERVER }} \
+            -o json | jq -r '.status.summary.images[0] | split(":")[1]')
+
+          echo "Expected: $EXPECTED_TAG"
+          echo "Live:     $LIVE_TAG"
+
+          if [ "$LIVE_TAG" != "$EXPECTED_TAG" ]; then
+            echo "❌ Live tag ($LIVE_TAG) != expected ($EXPECTED_TAG) — skipping promotion"
+            exit 1
+          fi
+
+          echo "✅ Image tag verified"
+          echo "verified=true" >> $GITHUB_OUTPUT
+
       - name: Trigger promotion
+        if: steps.image_check.outputs.verified == 'true'
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

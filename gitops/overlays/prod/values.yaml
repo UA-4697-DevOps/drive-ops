@@ -1,7 +1,7 @@
 replicaCount: 2
 
 image:
-  tag: "none"  # updated ONLY via promotion PR
+  tag: "none"
 
 autoscaling:
   enabled: true
@@ -14,8 +14,7 @@ env:
   ENVIRONMENT: "prod"
 
 serviceAccount:
-  annotations:
-    eks.amazonaws.com/role-arn: ""  # auto-populated by CI via aws sts + vars
+  iamRoleArn: ""  # auto-populated by CI
 
 resources:
   requests:
