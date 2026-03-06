@@ -14,11 +14,11 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: {{ include "client-gateway.name" . }}
+      {{- include "client-gateway.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: {{ include "client-gateway.name" . }}
+        {{- include "client-gateway.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "client-gateway.name" . }}-sa
       securityContext:
