@@ -5,7 +5,7 @@ replicaCount: 1
 image:
   repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service
   pullPolicy: Always
-  tag: "latest"
+  tag: "f0b02799234b1845412a0d7ce58997829bd693b1"
 
 serviceAccount:
   create: true
