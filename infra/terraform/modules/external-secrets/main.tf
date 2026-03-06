@@ -1,72 +1,64 @@
-# ============================================================================
-# External Secrets Operator - IRSA Role
-# Allows ESO to read secrets from AWS Secrets Manager
-# ============================================================================
+# ==============================================================================
+# EXTERNAL SECRETS OPERATOR – IAM MODULE
+# ==============================================================================
 
-# IAM Role for ESO ServiceAccount (IRSA)
-resource "aws_iam_role" "eso_role" {
-  name = "Training-${var.project_name}-${var.env}-${var.service_name}-eso-role"
+locals {
+  oidc_host = var.oidc_provider_url
+}
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Federated = var.oidc_provider_arn
-        }
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Condition = {
-          StringEquals = {
-            "${var.oidc_provider}:sub" = "system:serviceaccount:${var.namespace}:${var.service_name}-eso-sa"
-            "${var.oidc_provider}:aud" = "sts.amazonaws.com"
-          }
-        }
-      }
+data "aws_iam_policy_document" "eso_secrets" {
+  statement {
+    sid    = "ReadDriveOpsSecrets"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret",
     ]
-  })
-
-  tags = var.tags
-}
-
-# IAM Policy - allow reading secrets from Secrets Manager
-resource "aws_iam_policy" "eso_policy" {
-  name        = "Training-${var.project_name}-${var.env}-${var.service_name}-eso-policy"
-  description = "Allow ESO to read secrets for ${var.service_name}"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret"
-        ]
-        Resource = var.secret_arns
-      }
+    resources = [
+      "arn:aws:secretsmanager:${var.aws_region}:${var.account_id}:secret:${var.project_name}/${var.env}/*",
     ]
-  })
-
-  tags = var.tags
+  }
 }
 
-# Attach policy to role
-resource "aws_iam_role_policy_attachment" "eso_policy_attachment" {
-  role       = aws_iam_role.eso_role.name
-  policy_arn = aws_iam_policy.eso_policy.arn
-}
-
-# Secret for Driver Service - DATABASE_URL
-resource "aws_secretsmanager_secret" "driver_service_secret" {
-  name        = "${var.project_name}/${var.env}/${var.service_name}/config"
-  description = "Configuration secrets for ${var.service_name} in ${var.env}"
+resource "aws_iam_policy" "eso_secrets" {
+  name        = "Training-${var.project_name}-${var.env}-eso-secrets-policy"
+  description = "Allow ESO to read drive-ops secrets from AWS Secrets Manager"
+  policy      = data.aws_iam_policy_document.eso_secrets.json
   tags        = var.tags
 }
 
-resource "aws_secretsmanager_secret_version" "driver_service_secret" {
-  secret_id = aws_secretsmanager_secret.driver_service_secret.id
-  secret_string = jsonencode({
-    database_url = var.database_url
-  })
+data "aws_iam_policy_document" "eso_assume_role" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [var.oidc_provider_arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_host}:sub"
+      values   = ["system:serviceaccount:${var.eso_namespace}:external-secrets"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_host}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "eso" {
+  name                 = "Training-${var.project_name}-${var.env}-eso-role"
+  assume_role_policy   = data.aws_iam_policy_document.eso_assume_role.json
+  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+  tags                 = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "eso_secrets" {
+  role       = aws_iam_role.eso.name
+  policy_arn = aws_iam_policy.eso_secrets.arn
 }

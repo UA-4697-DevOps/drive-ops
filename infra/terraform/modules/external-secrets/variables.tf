@@ -1,48 +1,41 @@
 variable "project_name" {
+  description = "Project name"
   type        = string
-  description = "Project name (e.g., drive-ops)"
 }
 
 variable "env" {
+  description = "Environment name"
   type        = string
-  description = "Environment (e.g., dev, staging, prod)"
 }
 
-variable "service_name" {
+variable "account_id" {
+  description = "AWS account ID"
   type        = string
-  description = "Service name (e.g., driver-service)"
 }
 
-variable "namespace" {
+variable "aws_region" {
+  description = "AWS region"
   type        = string
-  description = "Kubernetes namespace where ESO ServiceAccount lives"
-  default     = "dev"
 }
 
 variable "oidc_provider_arn" {
-  type        = string
   description = "ARN of the EKS OIDC provider"
-}
-
-variable "oidc_provider" {
   type        = string
-  description = "OIDC provider URL without https:// prefix"
 }
 
-variable "secret_arns" {
-  type        = list(string)
-  description = "List of Secrets Manager ARNs that ESO is allowed to read"
-}
-
-variable "database_url" {
+variable "oidc_provider_url" {
+  description = "OIDC issuer URL without https:// prefix (from eks outputs)"
   type        = string
-  description = "PostgreSQL connection string for the service"
-  sensitive   = true
-  default     = "placeholder"
+}
+
+variable "eso_namespace" {
+  description = "Kubernetes namespace where ESO is installed"
+  type        = string
+  default     = "external-secrets"
 }
 
 variable "tags" {
-  type        = map(string)
   description = "Tags to apply to all resources"
+  type        = map(string)
   default     = {}
 }
