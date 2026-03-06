@@ -1,0 +1,14 @@
+{{- if .Values.configMap.create -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "trip-service.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trip-service.labels" . | nindent 4 }}
+data:
+  aws-region: {{ .Values.config.awsRegion | quote }}
+  sqs-trip-created-url: {{ .Values.config.sqsTripCreatedUrl | quote }}
+  sqs-driver-assigned-url: {{ .Values.config.sqsDriverAssignedUrl | quote }}
+  sqs-trip-completed-url: {{ .Values.config.sqsTripCompletedUrl | quote }}
+{{- end }}

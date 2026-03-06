@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trip-service-config
+  namespace: dev
+  labels:
+    app: trip-service
+data:
+  aws-region: "us-east-2"
+  sqs-trip-created-url: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-dev.fifo"
+  sqs-driver-assigned-url: "https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-dev.fifo"
+  sqs-trip-completed-url: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-dev.fifo"

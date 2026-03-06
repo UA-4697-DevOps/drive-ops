@@ -1,0 +1,128 @@
+# Production environment values for trip-service
+
+replicaCount: 2
+
+image:
+  repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service
+  pullPolicy: IfNotPresent
+  tag: "v1.0.0"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-prod-trip-service-role
+  name: "trip-service"
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+
+config:
+  awsRegion: "us-east-2"
+  sqsTripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-prod.fifo"
+  sqsDriverAssignedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-prod.fifo"
+  sqsTripCompletedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-prod.fifo"
+  servicePort: ":8081"
+
+database:
+  secretName: "trip-service-secrets"
+  secretKey: "DB_URL"
+
+# Strict health checks for production
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 2
+  successThreshold: 1
+  failureThreshold: 3
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 0
+  periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 10
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0  # Zero downtime deployments
+
+# Pod disruption budget for production
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1  # Allow one pod to be disrupted during maintenance
+
+# Production affinity rules
+affinity:
+  # Spread pods across availability zones
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - trip-service
+        topologyKey: topology.kubernetes.io/zone
+    # Spread pods across nodes
+    - weight: 50
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app
+            operator: In
+            values:
+            - trip-service
+        topologyKey: kubernetes.io/hostname
+  # Prefer on-demand instances in production
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      preference:
+        matchExpressions:
+        - key: kubernetes.io/lifecycle
+          operator: In
+          values:
+          - on-demand
+
+# Tolerations for dedicated node pools
+tolerations:
+- key: "workload"
+  operator: "Equal"
+  value: "production"
+  effect: "NoSchedule"
+
+# Pod annotations for production monitoring
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8081"
+  prometheus.io/path: "/metrics"
+  backup: "true"
+  monitoring: "enhanced"
