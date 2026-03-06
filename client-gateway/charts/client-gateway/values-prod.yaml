@@ -75,3 +75,17 @@ podAnnotations:
   prometheus.io/port: "8080"
   prometheus.io/path: "/metrics"
   monitoring: "enhanced"
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
