@@ -75,7 +75,7 @@ strategy:
 # Pod disruption budget for production
 podDisruptionBudget:
   enabled: true
-  minAvailable: 2  # Always keep at least 2 pods running
+  minAvailable: 1  # Allow one pod to be disrupted during maintenance
 
 # Production affinity rules
 affinity:
