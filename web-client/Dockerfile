@@ -25,7 +25,9 @@ COPY ./nginx/default.conf.template /etc/nginx/templates/default.conf.template
 
 # Runtime environment: URL of the driver-service reachable from within the
 # container network (Docker Compose service name or K8s ClusterIP DNS name).
-ENV DRIVER_SERVICE_URL=http://driver-service:8082
+# ARG lets the default be overridden at build time via --build-arg.
+ARG DRIVER_SERVICE_URL=http://driver-service:8082
+ENV DRIVER_SERVICE_URL=$DRIVER_SERVICE_URL
 
 # nginx image already runs as nginx user (UID 101) for the worker processes.
 # The master process must run as root, which is the nginx image default.
