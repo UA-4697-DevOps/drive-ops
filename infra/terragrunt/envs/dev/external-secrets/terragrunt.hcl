@@ -3,7 +3,7 @@ include "root" {
 }
 
 terraform {
-  source = "../../../../terraform//modules/external-secrets"
+  source = "../../../../terraform/modules//external-secrets"
 }
 
 locals {
@@ -11,28 +11,33 @@ locals {
   env_vars    = yamldecode(file(find_in_parent_folders("env_vars.yaml")))
 }
 
-dependency "eks" {
-  config_path = "../eks"
+dependency "shared_infra" {
+  config_path = "../shared-infra"
 
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
-  mock_outputs_merge_strategy_with_state  = "shallow"
-
   mock_outputs = {
     oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/mock"
-    oidc_provider_url = "oidc.eks.us-east-2.amazonaws.com/id/mock"
+    oidc_provider     = "oidc.eks.us-east-2.amazonaws.com/id/mock"
+    rds_secret_arn    = "arn:aws:secretsmanager:us-east-2:123456789012:secret:mock"
   }
 }
 
 inputs = {
-  project_name      = local.common_vars.project_name
-  env               = local.env_vars.env
-  account_id        = local.env_vars.account_id
-  aws_region        = try(local.env_vars.aws_region, local.common_vars.aws_region)
-  oidc_provider_arn = dependency.eks.outputs.oidc_provider_arn
-  oidc_provider_url = dependency.eks.outputs.oidc_provider_url
-  eso_namespace     = "external-secrets"
+  project_name = local.common_vars.project_name
+  env          = local.env_vars.env
+  service_name = "driver-service"
+  namespace    = local.env_vars.env
 
-  tags = {
+  oidc_provider_arn = dependency.shared_infra.outputs.oidc_provider_arn
+  oidc_provider     = dependency.shared_infra.outputs.oidc_provider
+
+  secret_arns = [
+    dependency.shared_infra.outputs.rds_secret_arn
+  ]
+
+  tags = merge(local.common_vars.common_tags, {
+    Service   = "driver-service"
     Component = "external-secrets"
-  }
+    Env       = local.env_vars.env
+  })
 }
