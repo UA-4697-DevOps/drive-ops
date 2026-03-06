@@ -144,6 +144,29 @@ services:
     networks:
       - drive-ops-net
 
+  # Web Client (Static Dashboard — nginx)
+  web-client:
+    build:
+      context: ./web-client
+      dockerfile: Dockerfile
+    container_name: web-client
+    restart: always
+    environment:
+      - DRIVER_SERVICE_URL=http://driver-service:8082
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      driver-service:
+        condition: service_healthy
+    networks:
+      - drive-ops-net
+
 # --- Infrastructure Definitions ---
 
 networks:

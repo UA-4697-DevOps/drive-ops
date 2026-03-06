@@ -1,0 +1,22 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-labels
+spec:
+  validationFailureAction: Enforce
+  rules:
+    - name: check-required-labels
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+      validate:
+        message: >-
+          Deployments must carry the labels: team, env, service.
+        pattern:
+          metadata:
+            labels:
+              team: "?*"
+              env: "?*"
+              service: "?*"
