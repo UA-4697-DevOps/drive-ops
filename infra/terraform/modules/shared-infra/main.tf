@@ -119,6 +119,14 @@ module "ecr_trip_service" {
   github_repo     = var.github_repo
 }
 
+module "ecr_web_client" {
+  source = "../ecr"
+
+  repository_name = "web-client"
+  account_id      = var.account_id
+  github_repo     = var.github_repo
+}
+
 # ------------------------------------------------------------------------------
 # 4. SECURITY & SECRETS
 # ------------------------------------------------------------------------------
