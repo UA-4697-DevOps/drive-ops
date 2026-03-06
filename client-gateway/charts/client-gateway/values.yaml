@@ -41,5 +41,8 @@ bot:
 
 ingress:
   enabled: false
+  className: ""
   host: ""
   path: /
+  annotations: {}
+  tls: []
