@@ -67,7 +67,7 @@ strategy:
 # Pod disruption budget for production
 podDisruptionBudget:
   enabled: true
-  minAvailable: 1
+  minAvailable: 0
 
 # Pod annotations for production monitoring
 podAnnotations:
