@@ -1,6 +1,18 @@
 apiVersion: v2
 name: client-gateway
-description: Helm chart for Client Gateway — drive-ops platform
+description: Helm chart for Client Gateway — Telegram bot gateway for the drive-ops platform
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
+keywords:
+  - client-gateway
+  - microservice
+  - python
+  - telegram
+  - eks
+home: https://github.com/UA-4697-DevOps/drive-ops
+sources:
+  - https://github.com/UA-4697-DevOps/drive-ops/tree/main/client-gateway
+maintainers:
+  - name: DevOps Team
+    email: devops@example.com
