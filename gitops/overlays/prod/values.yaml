@@ -1,0 +1,26 @@
+replicaCount: 2
+
+image:
+  tag: "none"  # updated ONLY via promotion PR
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+env:
+  LOG_LEVEL: "warning"
+  ENVIRONMENT: "prod"
+
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: ""  # auto-populated by CI via aws sts + vars
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

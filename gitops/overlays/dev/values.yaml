@@ -1,0 +1,23 @@
+replicaCount: 1
+
+image:
+  tag: "none"  # auto-updated by CI via yq
+
+autoscaling:
+  enabled: false
+
+env:
+  LOG_LEVEL: "debug"
+  ENVIRONMENT: "dev"
+
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: ""  # auto-populated by CI via aws sts + vars
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

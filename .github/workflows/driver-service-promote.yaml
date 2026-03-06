@@ -1,0 +1,88 @@
+name: Driver Service — Promote to Prod
+
+on:
+  repository_dispatch:
+    types: [promote-to-prod]
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  IMAGE_TAG: ${{ github.event.client_payload.image_tag }}
+  DYNAMIC_ACCOUNT_ID: ${{ github.event.client_payload.aws_account_id }}
+
+jobs:
+  create-promotion-pr:
+    name: Create Promotion PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Get current prod tag for diff
+        id: current
+        run: |
+          CURRENT=$(yq e '.image.tag' gitops/overlays/prod/values.yaml)
+          echo "tag=$CURRENT" >> $GITHUB_OUTPUT
+
+      - name: Create promotion branch
+        run: |
+          BRANCH="promote/driver-service-${{ env.IMAGE_TAG }}"
+          git checkout -b $BRANCH
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+      - name: Update prod overlay
+        run: |
+          yq e ".image.tag = \"${{ env.IMAGE_TAG }}\"" \
+            -i gitops/overlays/prod/values.yaml
+          yq e ".serviceAccount.annotations[\"eks.amazonaws.com/role-arn\"] = \"arn:aws:iam::${{ env.DYNAMIC_ACCOUNT_ID }}:role/driver-service-prod-irsa\"" \
+            -i gitops/overlays/prod/values.yaml
+
+      - name: Commit & push branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add gitops/overlays/prod/values.yaml
+          git commit -m "promote(driver-service): ${{ steps.current.outputs.tag }} → ${{ env.IMAGE_TAG }}"
+          git push origin ${{ env.BRANCH }}
+
+      - name: Open Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ env.BRANCH }}
+          base: main
+          title: "🚀 promote(driver-service): `${{ steps.current.outputs.tag }}` → `${{ env.IMAGE_TAG }}`"
+          body: |
+            ## Promotion Summary
+
+            | Field        | Value |
+            |--------------|-------|
+            | Service      | `driver-service` |
+            | Previous tag | `${{ steps.current.outputs.tag }}` |
+            | New tag      | `${{ env.IMAGE_TAG }}` |
+            | Tested in    | `driver-service-dev` ✅ Healthy |
+            | Target       | `driver-service-prod` |
+            | Commits diff | [Compare](https://github.com/UA-4697-DevOps/drive-ops/compare/${{ steps.current.outputs.tag }}...${{ env.IMAGE_TAG }}) |
+
+            ### Checklist
+            - [x] Image built and pushed to ECR
+            - [x] Deployed to `dev` successfully
+            - [x] ArgoCD confirmed `Healthy` in `dev`
+            - [ ] Requires approval (branch protection)
+            - [ ] **Merge → ArgoCD auto-syncs prod**
+
+          labels: |
+            promotion
+            driver-service
