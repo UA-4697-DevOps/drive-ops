@@ -1,0 +1,21 @@
+replicaCount: 1
+
+image:
+  tag: v1.0.0
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+
+backend:
+  tripServiceUrl: "http://trip-service.prod.svc.cluster.local:8081"
+  driverServiceUrl: "http://driver-service.prod.svc.cluster.local:8082"
+
+bot:
+  token: ""  # Inject at deploy time via --set or external secrets

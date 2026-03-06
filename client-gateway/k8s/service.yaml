@@ -1,0 +1,20 @@
+# DEPRECATED: This manifest duplicates the Helm chart Service template.
+# Use the Helm chart (charts/client-gateway/templates/service.yaml) as the source of truth.
+# This file should be removed once all deployments migrate to the Helm chart.
+# See: charts/client-gateway/templates/service.yaml
+#
+apiVersion: v1
+kind: Service
+metadata:
+  name: client-gateway
+  namespace: dev
+  labels:
+    app: client-gateway
+spec:
+  selector:
+    app: client-gateway
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP

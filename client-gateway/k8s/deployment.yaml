@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-gateway
+  namespace: dev
+  labels:
+    app: client-gateway
+    version: "0.0.0-dev"
+spec:
+  replicas: 1
+  # Recreate strategy ensures only one pod is ever running at a time.
+  # RollingUpdate (the default) would briefly run two pods during deploys,
+  # causing a split-brain window in Telegram long-polling.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: client-gateway
+  template:
+    metadata:
+      labels:
+        app: client-gateway
+        version: "0.0.0-dev"
+    spec:
+      serviceAccountName: client-gateway-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: client-gateway
+          image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/client-gateway:0.0.0-dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          securityContext:
+            runAsUser: 10001
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: client-gateway-secrets
+                  key: bot-token
+            - name: TRIP_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: client-gateway-config
+                  key: trip-service-url
+            - name: DRIVER_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: client-gateway-config
+                  key: driver-service-url
+            - name: HEALTH_CHECK_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: client-gateway-config
+                  key: health-check-port
+            - name: DEBUG
+              valueFrom:
+                configMapKeyRef:
+                  name: client-gateway-config
+                  key: debug
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: bot-logs
+              mountPath: /app/bot/logs
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: bot-logs
+          emptyDir: {}

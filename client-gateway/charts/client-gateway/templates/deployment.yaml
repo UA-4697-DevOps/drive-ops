@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "client-gateway.name" . }}
+  labels:
+    {{- include "client-gateway.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  # Recreate ensures only one pod is running at a time — required for Telegram
+  # long-polling (a single active getUpdates connection per bot).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ include "client-gateway.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "client-gateway.name" . }}
+    spec:
+      serviceAccountName: {{ include "client-gateway.name" . }}-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ include "client-gateway.name" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.targetPort }}
+          securityContext:
+            runAsUser: 10001
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "client-gateway.name" . }}-secrets
+                  key: bot-token
+            - name: TRIP_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "client-gateway.name" . }}-config
+                  key: trip-service-url
+            - name: DRIVER_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "client-gateway.name" . }}-config
+                  key: driver-service-url
+            - name: HEALTH_CHECK_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "client-gateway.name" . }}-config
+                  key: health-check-port
+            - name: DEBUG
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "client-gateway.name" . }}-config
+                  key: debug
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: bot-logs
+              mountPath: /app/bot/logs
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.targetPort }}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.targetPort }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: bot-logs
+          emptyDir: {}

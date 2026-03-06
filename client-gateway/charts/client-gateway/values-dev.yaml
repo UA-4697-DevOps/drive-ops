@@ -1,0 +1,25 @@
+replicaCount: 1
+
+# Local dev: image is built from source and loaded into the cluster's Docker
+# daemon (Docker Desktop shares the host daemon).
+# pullPolicy: Never ensures Kubernetes uses the local image without attempting
+# a registry pull. Overridden at deploy time by helm-dev-deploy.sh.
+image:
+  repository: client-gateway
+  tag: local
+  pullPolicy: Never
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+
+backend:
+  tripServiceUrl: "http://trip-service.dev.svc.cluster.local:8081"
+  driverServiceUrl: "http://driver-service.dev.svc.cluster.local:8082"
