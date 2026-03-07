@@ -4,6 +4,11 @@ output "vpc_id" {
   value       = module.vpc.vpc_id
 }
 
+output "vpc_cidr" {
+  description = "The CIDR block of the VPC"
+  value       = module.vpc.vpc_cidr
+}
+
 output "public_subnet_ids" {
   description = "List of public subnet IDs for internet-facing workloads"
   value       = module.vpc.public_subnet_ids
@@ -22,6 +27,16 @@ output "sg_app_id" {
 output "sg_db_id" {
   description = "Security group ID for database workloads"
   value       = module.vpc.sg_db_id
+}
+
+output "private_route_table_id" {
+  description = "ID of the private subnet route table — passed to the NAT module to add the default route"
+  value       = module.vpc.private_route_table_id
+}
+
+output "private_subnet_cidrs" {
+  description = "CIDR blocks of private subnets — passed to the NAT module SG ingress allowlist"
+  value       = module.vpc.private_subnet_cidrs
 }
 
 # --- Messaging (SQS) ---
@@ -105,6 +120,17 @@ output "ecr_iam_role_names" {
     trip_service   = module.ecr_trip_service.role_name
     web_client     = module.ecr_web_client.role_name
   }
+}
+
+# --- Encryption (KMS) ---
+output "kms_key_arn" {
+  description = "ARN of the customer-managed KMS key (null when enable_kms = false)"
+  value       = var.enable_kms ? aws_kms_key.cmk[0].arn : null
+}
+
+output "kms_key_id" {
+  description = "ID of the customer-managed KMS key (null when enable_kms = false)"
+  value       = var.enable_kms ? aws_kms_key.cmk[0].key_id : null
 }
 
 # --- Secrets ---
