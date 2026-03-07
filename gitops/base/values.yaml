@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: ""
+  repository: "969283154407.dkr.ecr.us-east-2.amazonaws.com/driver-service"  # overwritten by CI on every deploy
   pullPolicy: IfNotPresent
   tag: "none"
 

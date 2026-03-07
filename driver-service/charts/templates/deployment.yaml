@@ -30,6 +30,7 @@ spec:
             - containerPort: {{ .Values.service.targetPort }}
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             runAsUser: 10001
             capabilities:
               drop:

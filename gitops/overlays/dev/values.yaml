@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  tag: "none"
+  tag: "none"  # auto-updated by CI via yq
 
 autoscaling:
   enabled: false
@@ -11,7 +11,7 @@ env:
   ENVIRONMENT: "dev"
 
 serviceAccount:
-  iamRoleArn: ""  # auto-populated by CI
+  iamRoleArn: ""  # auto-populated by CI via aws sts
 
 resources:
   requests:
@@ -20,3 +20,11 @@ resources:
   limits:
     cpu: 200m
     memory: 128Mi
+
+gateway:
+  url: "http://client-gateway.dev.svc.cluster.local:8080"
+
+sqs:
+  tripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-dev.fifo"
+  driverAssignedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-dev.fifo"
+  tripCompletedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-dev.fifo"
