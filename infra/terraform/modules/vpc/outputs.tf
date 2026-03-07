@@ -22,3 +22,8 @@ output "sg_db_id" {
   description = "The ID of the security group for database workloads"
   value       = aws_security_group.db.id
 }
+
+output "sg_alb_id" {
+  description = "The ID of the security group for Application Load Balancer"
+  value       = aws_security_group.alb.id
+}
