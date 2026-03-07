@@ -1,0 +1,56 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aws-load-balancer-controller
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://aws.github.io/eks-charts
+    chart: aws-load-balancer-controller
+    targetRevision: "1.10.0"
+    helm:
+      valuesObject:
+        # PLACEHOLDER: Update these values after Terraform deployment
+        # Get values from: terragrunt output --terragrunt-working-dir=infra/terragrunt/envs/dev/{eks,shared-infra,aws-lb-controller}
+        clusterName: REPLACE_WITH_CLUSTER_NAME # From eks output: cluster_name
+
+        serviceAccount:
+          create: true
+          name: aws-load-balancer-controller
+          annotations:
+            eks.amazonaws.com/role-arn: REPLACE_WITH_ALB_ROLE_ARN # From aws-lb-controller output: alb_controller_role_arn
+
+        region: us-east-2
+        vpcId: REPLACE_WITH_VPC_ID # From shared-infra output: vpc_id
+
+        # Resource limits for test cluster
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        # Enable service mutator webhook
+        enableServiceMutatorWebhook: true
+
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false # kube-system already exists

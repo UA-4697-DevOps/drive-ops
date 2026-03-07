@@ -37,3 +37,8 @@ output "private_subnet_cidrs" {
   description = "CIDR blocks of all private subnets (used by the NAT module SG ingress)"
   value       = aws_subnet.private[*].cidr_block
 }
+
+output "sg_alb_id" {
+  description = "The ID of the security group for Application Load Balancer"
+  value       = aws_security_group.alb.id
+}
