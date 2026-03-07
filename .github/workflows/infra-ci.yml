@@ -81,6 +81,10 @@ jobs:
           - shared-infra
           - rds
           - state-backend
+          - vpn
+          - bastion
+          - nat
+          - eks
 
     steps:
       - uses: actions/checkout@v6
@@ -106,6 +110,10 @@ jobs:
     env:
       # This satisfies the regex validation in variables.tf without hardcoding it in HCL
       TF_VAR_discord_webhook_url: "https://discord.com/api/webhooks/1234567890/mock-token-for-ci"
+      # Mock allowlist for bastion/VPN validation — not a real IP, passes the
+      # no-0.0.0.0/0 validation rule. Real IPs are injected at deploy time via
+      # the BASTION_ALLOWED_SSH_CIDRS GitHub Actions secret.
+      TG_VAR_BASTION_ALLOWED_SSH_CIDRS: '["203.0.113.10/32"]'
     
     # Permissions required for OIDC authentication
     permissions:
@@ -150,6 +158,10 @@ jobs:
             "envs/dev/shared-infra"
             "envs/dev/rds"
             "envs/dev/state-backend"
+            "envs/dev/bastion"
+            "envs/dev/vpn"
+            "envs/dev/nat"
+            "envs/dev/eks"
           )
 
           for dir in "${modules[@]}"; do

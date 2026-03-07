@@ -30,7 +30,6 @@ inputs = {
   flow_log_retention_in_days = 3
 
   # SQS settings
-  enable_ha         = false
   message_retention = 345600
   max_receive_count = 3
 
