@@ -70,6 +70,10 @@ spec:
                 configMapKeyRef:
                   name: {{ include "driver-service.name" . }}-config
                   key: client-gateway-url
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
 
           resources:
             requests:

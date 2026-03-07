@@ -7,15 +7,16 @@ image:
 
 service:
   type: ClusterIP
-  port: 8000
+  port: 80
+  targetPort: 8082
 
 resources:
   requests:
     cpu: 100m
-    memory: 128Mi
-  limits:
-    cpu: 500m
     memory: 256Mi
+  limits:
+    cpu: 300m
+    memory: 512Mi
 
 autoscaling:
   enabled: false
@@ -25,10 +26,21 @@ autoscaling:
 
 serviceAccount:
   create: true
-  iamRoleArn: ""  # chart reads iamRoleArn, not annotations
+  iamRoleArn: ""
+
+aws:
+  region: us-east-2
+
+sqs:
+  tripCreatedUrl: ""
+  driverAssignedUrl: ""
+  tripCompletedUrl: ""
+
+gateway:
+  url: ""
 
 env:
   LOG_LEVEL: "info"
 
 externalSecret:
-  secretPath: ""  # overridden per environment via ArgoCD parameters
+  secretPath: ""

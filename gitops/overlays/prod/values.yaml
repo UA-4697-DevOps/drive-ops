@@ -1,7 +1,7 @@
 replicaCount: 2
 
 image:
-  tag: "none"
+  tag: "none"  # updated ONLY via promotion PR
 
 autoscaling:
   enabled: true
@@ -14,7 +14,7 @@ env:
   ENVIRONMENT: "prod"
 
 serviceAccount:
-  iamRoleArn: ""  # auto-populated by CI
+  iamRoleArn: ""  # auto-populated by CI via aws sts
 
 resources:
   requests:
@@ -23,3 +23,11 @@ resources:
   limits:
     cpu: 500m
     memory: 256Mi
+
+gateway:
+  url: "http://client-gateway.prod.svc.cluster.local:8080"
+
+sqs:
+  tripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-prod.fifo"
+  driverAssignedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-prod.fifo"
+  tripCompletedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-prod.fifo"
