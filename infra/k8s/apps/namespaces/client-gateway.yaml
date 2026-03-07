@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: client-gateway
+  labels:
+    kubernetes.io/metadata.name: client-gateway
+    env: dev
+    team: platform

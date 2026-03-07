@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: driver-service
+  labels:
+    kubernetes.io/metadata.name: driver-service
+    env: dev
+    team: platform

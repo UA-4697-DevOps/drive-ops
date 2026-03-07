@@ -7,7 +7,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: client-gateway
-  namespace: dev
+  namespace: client-gateway
   labels:
     app: client-gateway
 spec:

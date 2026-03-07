@@ -11,7 +11,7 @@ spec:
     path: infra/k8s/apps/client-gateway
   destination:
     server: https://kubernetes.default.svc
-    namespace: dev
+    namespace: client-gateway
   syncPolicy:
     automated:
       prune: true

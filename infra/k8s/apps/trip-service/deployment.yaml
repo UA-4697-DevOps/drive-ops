@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: trip-service
-  namespace: dev
+  namespace: trip-service
   labels:
     app: trip-service
 spec:

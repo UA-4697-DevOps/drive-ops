@@ -24,8 +24,8 @@ autoscaling:
   enabled: false
 
 backend:
-  tripServiceUrl: "http://trip-service.prod.svc.cluster.local:8081"
-  driverServiceUrl: "http://driver-service.prod.svc.cluster.local:8082"
+  tripServiceUrl: "http://trip-service.trip-service.svc.cluster.local:8081"
+  driverServiceUrl: "http://driver-service.driver-service.svc.cluster.local:8082"
 
 bot:
   token: ""  # Inject at deploy time via --set or external secrets

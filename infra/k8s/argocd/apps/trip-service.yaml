@@ -11,7 +11,7 @@ spec:
     path: infra/k8s/apps/trip-service
   destination:
     server: https://kubernetes.default.svc
-    namespace: dev
+    namespace: trip-service
   syncPolicy:
     automated:
       prune: true

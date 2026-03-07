@@ -29,8 +29,8 @@ autoscaling:
   enabled: false
 
 backend:
-  tripServiceUrl: "http://trip-service.dev.svc.cluster.local:8081"
-  driverServiceUrl: "http://driver-service.dev.svc.cluster.local:8082"
+  tripServiceUrl: "http://trip-service.trip-service.svc.cluster.local:8081"
+  driverServiceUrl: "http://driver-service.driver-service.svc.cluster.local:8082"
 
 livenessProbe:
   httpGet:

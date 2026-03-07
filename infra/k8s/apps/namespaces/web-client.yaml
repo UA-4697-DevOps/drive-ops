@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: web-client
+  labels:
+    kubernetes.io/metadata.name: web-client
+    env: dev
+    team: platform

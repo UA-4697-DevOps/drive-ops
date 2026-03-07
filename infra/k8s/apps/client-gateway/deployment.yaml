@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: client-gateway
-  namespace: dev
+  namespace: client-gateway
   labels:
     app: client-gateway
     version: "0.0.0-dev"
