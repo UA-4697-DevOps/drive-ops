@@ -54,12 +54,13 @@ kubectl logs -n dev -l job-name=k6-trip-service-load-test -f
 ```
 
 ### Load Test Stages
+
 | Stage | Duration | Virtual Users | Purpose |
 |---|---|---|---|
-| Warm-up | 2 min | 0 → 50 | Gradual ramp to baseline |
-| Peak | 3 min | 100 | Sustained load for HPA trigger |
-| Cool-down | 2 min | 100 → 50 | Observe scale-down behavior |
-| Drain | 1 min | 50 → 0 | Complete wind-down |
+| Warm-up | 2 min | Ramp to 50 | Gradual ramp to baseline |
+| Peak | 3 min | Ramp to 100 | Sustained load for HPA trigger |
+| Cool-down | 2 min | Ramp down to 50 | Observe scale-down behavior |
+| Drain | 1 min | Ramp to 0 | Complete wind-down |
 
 ## Monitoring Commands
 
