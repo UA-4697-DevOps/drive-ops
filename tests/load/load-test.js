@@ -136,7 +136,7 @@ export default function () {
                 tags: { endpoint: "get_trip" },
             });
 
-            check(res, {
+            const success = check(res, {
                 "get trip: status 200": (r) => r.status === 200,
                 "get trip: correct id": (r) => {
                     try {
@@ -148,7 +148,10 @@ export default function () {
                 },
             });
 
-            tripFetchedCounter.add(1);
+            if (success) {
+                tripFetchedCounter.add(1);
+            }
+            
             tripGetDuration.add(res.timings.duration);
             errorRate.add(res.status !== 200);
         });
