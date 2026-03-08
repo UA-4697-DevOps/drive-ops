@@ -1,0 +1,139 @@
+# Default values for web-client Helm chart.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# -- Number of replicas for the deployment
+replicaCount: 1
+
+image:
+  # -- Container image repository
+  repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/web-client
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Overrides the image tag whose default is the chart appVersion
+  tag: "0.0.0-dev"
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Override the name of the chart
+nameOverride: ""
+# -- Override the full name of the release
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Specifies whether a service account should be created
+  create: true
+  # -- Annotations to add to the service account
+  annotations: {}
+  # -- The name of the service account to use
+  name: "web-client"
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- Service port
+  port: 80
+  # -- Container target port (nginx listens on 8083)
+  targetPort: 8083
+  # -- Service port name
+  portName: http
+
+ingress:
+  # -- Enable Ingress resource for external access
+  enabled: false
+  # -- Ingress class name (e.g. alb, nginx)
+  className: "alb"
+  # -- Ingress annotations
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+  # -- Ingress host rules
+  hosts:
+    - host: ""
+      paths:
+        - path: /
+          pathType: Prefix
+  # -- TLS configuration
+  tls: []
+
+resources:
+  # -- Resource requests
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  # -- Resource limits
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  # -- Enable horizontal pod autoscaling
+  enabled: false
+  # -- Minimum number of replicas
+  minReplicas: 2
+  # -- Maximum number of replicas
+  maxReplicas: 10
+  # -- Target CPU utilization percentage
+  targetCPUUtilizationPercentage: 80
+  # -- Target memory utilization percentage
+  targetMemoryUtilizationPercentage: 80
+
+# -- Node selector for pod assignment
+nodeSelector: {}
+
+# -- Tolerations for pod assignment
+tolerations: []
+
+# -- Affinity for pod assignment
+affinity: {}
+
+# Health checks configuration
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8083
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8083
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+# Strategy for deployment updates
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# Backend service discovery
+backend:
+  # -- URL of the driver service (K8s internal DNS)
+  driverServiceUrl: "http://driver-service.driver-service.svc.cluster.local:8082"
+
+# Nginx configuration
+nginx:
+  # -- Override the default nginx config template via ConfigMap.
+  # Enabled by default for K8s deployments because the baked-in Docker image
+  # uses resolver 127.0.0.11 (Docker DNS) which does not work in K8s.
+  # The ConfigMap version uses a direct proxy_pass (no resolver needed)
+  # since K8s ClusterIPs are stable for the lifetime of the Service object.
+  configOverride: true
+
+# ConfigMap settings
+configMap:
+  # -- Create ConfigMap
+  create: true

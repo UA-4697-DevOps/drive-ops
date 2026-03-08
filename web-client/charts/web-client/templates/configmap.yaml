@@ -1,0 +1,74 @@
+{{- if .Values.configMap.create -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "web-client.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "web-client.labels" . | nindent 4 }}
+data:
+  driver-service-url: {{ .Values.backend.driverServiceUrl | quote }}
+{{- end }}
+---
+{{- if .Values.nginx.configOverride }}
+# Kubernetes-compatible nginx config template.
+# Replaces the Docker image's baked-in template which uses resolver 127.0.0.11
+# (Docker embedded DNS). In K8s, we use a direct proxy_pass without the
+# resolver/variable trick because ClusterIPs are stable for the Service lifetime.
+# The envsubst mechanism in the nginx image still processes ${DRIVER_SERVICE_URL}.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "web-client.fullname" . }}-nginx
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "web-client.labels" . | nindent 4 }}
+data:
+  default.conf.template: |
+    server {
+        listen       8083;
+        server_name  _;
+
+        root  /usr/share/nginx/html;
+        index index.html;
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        location /health {
+            access_log  off;
+            add_header  Content-Type application/json;
+            return      200 '{"status":"ok"}';
+        }
+
+        # API reverse-proxy → driver-service
+        # In K8s, ${DRIVER_SERVICE_URL} resolves to a stable ClusterIP via
+        # internal DNS (e.g. driver-service.driver-service.svc.cluster.local:8082).
+        # Unlike Docker, no resolver directive is needed — nginx resolves the
+        # FQDN once at config load time and the ClusterIP remains constant.
+        location /api/ {
+            proxy_pass          ${DRIVER_SERVICE_URL}/;
+            proxy_set_header    Host              $host;
+            proxy_set_header    X-Real-IP         $remote_addr;
+            proxy_set_header    X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header    X-Forwarded-Proto $scheme;
+            proxy_read_timeout  10s;
+            proxy_connect_timeout 5s;
+        }
+
+        # Security headers
+        add_header X-Frame-Options       "SAMEORIGIN"   always;
+        add_header X-Content-Type-Options "nosniff"     always;
+        add_header Referrer-Policy       "strict-origin" always;
+
+        # Cache static assets for 1 hour
+        location ~* \.(css|js|ico|png|jpg|svg|woff2?)$ {
+            expires     1h;
+            add_header  Cache-Control "public, no-transform";
+            add_header X-Frame-Options       "SAMEORIGIN"   always;
+            add_header X-Content-Type-Options "nosniff"     always;
+            add_header Referrer-Policy       "strict-origin" always;
+        }
+    }
+{{- end }}
