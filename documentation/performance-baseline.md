@@ -94,10 +94,10 @@ kubectl top nodes
 
 ## Expected Scaling Behavior
 
-1. **Idle** → 2 pods (minReplicas in dev is 1, staging/prod ≥ 2)
+1. **Idle** → pods at `minReplicas` (Dev: 1, Staging: 2, Production: 3)
 2. **Light load** (~50 VUs) → 2-3 pods, CPU utilization ~40-50%
 3. **Peak load** (~100 VUs) → 4-6 pods, CPU utilization ~65-80%
-4. **After scale-down** (5+ min cooldown) → returns to minReplicas
+4. **After scale-down** (5+ min cooldown) → returns to `minReplicas`
 
 ## Updating This Baseline
 
