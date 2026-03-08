@@ -121,7 +121,7 @@ resource "aws_iam_policy" "cluster_autoscaler" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "AutoScalingReadWrite"
+        Sid    = "AutoScalingRead"
         Effect = "Allow"
         Action = [
           "autoscaling:DescribeAutoScalingGroups",
@@ -129,10 +129,22 @@ resource "aws_iam_policy" "cluster_autoscaler" {
           "autoscaling:DescribeLaunchConfigurations",
           "autoscaling:DescribeScalingActivities",
           "autoscaling:DescribeTags",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "AutoScalingWrite"
+        Effect = "Allow"
+        Action = [
           "autoscaling:SetDesiredCapacity",
           "autoscaling:TerminateInstanceInAutoScalingGroup",
         ]
         Resource = "*"
+        Condition = {
+          StringEquals = {
+            "autoscaling:ResourceTag/k8s.io/cluster-autoscaler/${local.cluster_name}" = "owned"
+          }
+        }
       },
       {
         Sid    = "EC2Describe"
@@ -149,7 +161,7 @@ resource "aws_iam_policy" "cluster_autoscaler" {
         Action = [
           "eks:DescribeNodegroup",
         ]
-        Resource = "*"
+        Resource = "arn:aws:eks:${data.aws_region.current.name}:${var.account_id}:nodegroup/${local.cluster_name}/*/*"
       }
     ]
   })
