@@ -35,7 +35,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: k6
-        image: grafana/k6:latest
+        image: grafana/k6:0.55.0
         command: ["k6", "run", "/scripts/load-test.js"]
         env:
         - name: BASE_URL
