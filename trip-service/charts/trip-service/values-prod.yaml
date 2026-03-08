@@ -1,6 +1,6 @@
 # Production environment values for trip-service
 
-replicaCount: 2
+replicaCount: 3
 
 image:
   repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service
