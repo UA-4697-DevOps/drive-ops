@@ -110,7 +110,7 @@ metadata:
   labels:
     k8s-app: metrics-server
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       k8s-app: metrics-server
@@ -195,3 +195,17 @@ spec:
   insecureSkipTLSVerify: true
   groupPriorityMinimum: 100
   versionPriority: 100
+---
+# PodDisruptionBudget – protect metrics-server availability during node drains
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: metrics-server-pdb
+  namespace: kube-system
+  labels:
+    k8s-app: metrics-server
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      k8s-app: metrics-server
