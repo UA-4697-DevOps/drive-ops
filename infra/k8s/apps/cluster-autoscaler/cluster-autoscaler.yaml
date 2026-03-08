@@ -158,7 +158,7 @@ spec:
         - --v=4
         - --stderrthreshold=info
         - --cloud-provider=aws
-        - --skip-nodes-with-local-storage=false
+        - --skip-nodes-with-local-storage=true
         - --expander=least-waste
         # Auto-discover node groups by EKS cluster tag
         # --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/Training-drive-ops-dev # DEV pipeline
