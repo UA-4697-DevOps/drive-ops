@@ -186,11 +186,11 @@ spec:
             - ALL
         volumeMounts:
         - name: ssl-certs
-          mountPath: /etc/ssl/certs/ca-certificates.crt
+          mountPath: /etc/ssl/certs/ca-bundle.crt
           readOnly: true
       volumes:
       - name: ssl-certs
         hostPath:
-          path: /etc/ssl/certs/ca-bundle.crt
+          path: /etc/pki/tls/certs/ca-bundle.crt
       nodeSelector:
         kubernetes.io/os: linux
