@@ -31,7 +31,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: web-client
-          image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/web-client:0.0.0-dev
+          image: nginx:1.27-alpine
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8083
