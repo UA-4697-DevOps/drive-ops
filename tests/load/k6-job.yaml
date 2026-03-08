@@ -40,7 +40,7 @@ spec:
         command: ["k6", "run", "/scripts/load-test.js"]
         env:
         - name: BASE_URL
-          value: "http://trip-service.dev.svc.cluster.local"
+          value: "http://trip-service.dev.svc"
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000
