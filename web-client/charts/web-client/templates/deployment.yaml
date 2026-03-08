@@ -55,6 +55,8 @@ spec:
               mountPath: /var/cache/nginx
             - name: nginx-run
               mountPath: /var/run
+            - name: nginx-conf-d
+              mountPath: /etc/nginx/conf.d
             {{- if .Values.nginx.configOverride }}
             - name: nginx-config
               mountPath: /etc/nginx/templates/default.conf.template
@@ -75,6 +77,8 @@ spec:
         - name: nginx-cache
           emptyDir: {}
         - name: nginx-run
+          emptyDir: {}
+        - name: nginx-conf-d
           emptyDir: {}
         {{- if .Values.nginx.configOverride }}
         - name: nginx-config
