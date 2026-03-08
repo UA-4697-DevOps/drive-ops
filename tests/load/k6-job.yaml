@@ -40,6 +40,16 @@ spec:
         env:
         - name: BASE_URL
           value: "http://trip-service.dev.svc.cluster.local"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop:
+            - ALL
         resources:
           requests:
             cpu: 200m
