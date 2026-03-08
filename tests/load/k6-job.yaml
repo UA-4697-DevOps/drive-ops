@@ -25,6 +25,7 @@ metadata:
     target: trip-service
 spec:
   backoffLimit: 0
+  activeDeadlineSeconds: 600
   ttlSecondsAfterFinished: 3600
   template:
     metadata:
