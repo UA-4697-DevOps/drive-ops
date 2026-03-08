@@ -78,13 +78,15 @@ autoscaling:
   # -- Enable horizontal pod autoscaling
   enabled: false
   # -- Minimum number of replicas
-  minReplicas: 2
+  minReplicas: 1
   # -- Maximum number of replicas
   maxReplicas: 10
   # -- Target CPU utilization percentage
-  targetCPUUtilizationPercentage: 80
+  targetCPUUtilizationPercentage: 70
   # -- Target memory utilization percentage
   targetMemoryUtilizationPercentage: 80
+  # -- Scaling behavior (optional). Controls how fast pods are added/removed.
+  behavior: {}
 
 # -- Node selector for pod assignment
 nodeSelector: {}
