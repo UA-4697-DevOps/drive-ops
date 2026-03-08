@@ -6,7 +6,7 @@ metadata:
   labels:
     app: trip-service
 spec:
-  replicas: 1
+  # replicas managed by HPA (see hpa.yaml)
   selector:
     matchLabels:
       app: trip-service
@@ -82,7 +82,7 @@ spec:
             cpu: 100m
             memory: 256Mi
           limits:
-            cpu: 300m
+            cpu: 500m
             memory: 512Mi
         volumeMounts:
         - name: tmp

@@ -53,3 +53,10 @@ output "kubeconfig_command" {
   description = "AWS CLI command to configure kubectl access to the cluster"
   value       = "aws eks update-kubeconfig --region ${data.aws_region.current.id} --name ${aws_eks_cluster.this.name}"
 }
+
+# --- Cluster Autoscaler ---
+
+output "cluster_autoscaler_role_arn" {
+  description = "ARN of the IRSA role for the Cluster Autoscaler ServiceAccount"
+  value       = aws_iam_role.cluster_autoscaler.arn
+}

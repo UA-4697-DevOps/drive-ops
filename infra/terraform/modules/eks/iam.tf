@@ -79,3 +79,83 @@ resource "aws_iam_role_policy_attachment" "node_ssm" {
   role       = aws_iam_role.node_group.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
+
+# ------------------------------------------------------------------------------
+# 3. CLUSTER AUTOSCALER IRSA ROLE
+# ------------------------------------------------------------------------------
+# Allows the cluster-autoscaler ServiceAccount in kube-system to assume this
+# role via IRSA, granting it permissions to manage Auto Scaling Groups.
+
+data "aws_iam_policy_document" "cluster_autoscaler_assume_role" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:cluster-autoscaler"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_eks_cluster.this.identity[0].oidc[0].issuer, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "cluster_autoscaler" {
+  name                 = "${local.cluster_name}-cluster-autoscaler-role"
+  assume_role_policy   = data.aws_iam_policy_document.cluster_autoscaler_assume_role.json
+  permissions_boundary = local.permissions_boundary
+  tags                 = var.tags
+}
+
+resource "aws_iam_policy" "cluster_autoscaler" {
+  name        = "${local.cluster_name}-cluster-autoscaler-policy"
+  description = "Permissions for Cluster Autoscaler to manage EKS node group Auto Scaling Groups"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AutoScalingReadWrite"
+        Effect = "Allow"
+        Action = [
+          "autoscaling:DescribeAutoScalingGroups",
+          "autoscaling:DescribeAutoScalingInstances",
+          "autoscaling:DescribeLaunchConfigurations",
+          "autoscaling:DescribeScalingActivities",
+          "autoscaling:DescribeTags",
+          "autoscaling:SetDesiredCapacity",
+          "autoscaling:TerminateInstanceInAutoScalingGroup",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "EC2Describe"
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeLaunchTemplateVersions",
+          "ec2:DescribeInstanceTypes",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "EKSDescribe"
+        Effect = "Allow"
+        Action = [
+          "eks:DescribeNodegroup",
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "cluster_autoscaler" {
+  role       = aws_iam_role.cluster_autoscaler.name
+  policy_arn = aws_iam_policy.cluster_autoscaler.arn
+}

@@ -1,0 +1,58 @@
+# ==============================================================================
+# HORIZONTAL POD AUTOSCALER – Trip Service
+# ==============================================================================
+# Automatically scales Trip Service pods based on CPU and memory utilization.
+#
+# Prerequisites:
+#   - Metrics Server must be deployed (provides metrics.k8s.io API)
+#   - Deployment must have resource requests defined
+#
+# Behavior:
+#   - Scale up quickly (60s stabilization) to handle traffic spikes
+#   - Scale down slowly (300s stabilization) to avoid flapping
+# ==============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: trip-service
+  namespace: dev
+  labels:
+    app: trip-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: trip-service
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 4
+        periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 120
+      selectPolicy: Min
