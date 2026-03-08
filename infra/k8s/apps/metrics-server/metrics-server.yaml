@@ -126,14 +126,16 @@ spec:
       priorityClassName: system-cluster-critical
       affinity:
         podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: k8s-app
-                operator: In
-                values:
-                - metrics-server
-            topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: k8s-app
+                  operator: In
+                  values:
+                  - metrics-server
+              topologyKey: kubernetes.io/hostname
       containers:
       - name: metrics-server
         image: registry.k8s.io/metrics-server/metrics-server:v0.7.2
