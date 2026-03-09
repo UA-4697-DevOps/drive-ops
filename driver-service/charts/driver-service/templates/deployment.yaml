@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "driver-service.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "driver-service.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  strategy:
+    {{- toYaml .Values.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "driver-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "driver-service.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "driver-service.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: {{ include "driver-service.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        ports:
+        - name: {{ .Values.service.portName }}
+          containerPort: {{ .Values.service.targetPort }}
+          protocol: TCP
+        env:
+        # Database credentials from ExternalSecret
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.database.secretName }}
+              key: {{ .Values.database.usernameKey }}
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.database.secretName }}
+              key: {{ .Values.database.passwordKey }}
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.database.secretName }}
+              key: {{ .Values.database.hostKey }}
+        - name: DRIVER_DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.database.secretName }}
+              key: {{ .Values.database.dbNameKey }}
+        # AWS Configuration
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "driver-service.fullname" . }}-config
+              key: aws-region
+        # SQS Queue URLs
+        - name: SQS_TRIP_CREATED_URL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "driver-service.fullname" . }}-config
+              key: sqs-trip-created-url
+        - name: SQS_DRIVER_ASSIGNED_URL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "driver-service.fullname" . }}-config
+              key: sqs-driver-assigned-url
+        - name: SQS_TRIP_COMPLETED_URL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "driver-service.fullname" . }}-config
+              key: sqs-trip-completed-url
+        - name: CLIENT_GATEWAY_URL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "driver-service.fullname" . }}-config
+              key: client-gateway-url
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PYTHONPATH
+          value: "/app/src"
+        {{- with .Values.startupProbe }}
+        startupProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        livenessProbe:
+          {{- toYaml .Values.livenessProbe | nindent 10 }}
+        readinessProbe:
+          {{- toYaml .Values.readinessProbe | nindent 10 }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

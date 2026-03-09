@@ -1,0 +1,36 @@
+replicaCount: 2
+
+image:
+  pullPolicy: Always
+  tag: "v1.0.0"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-prod-driver-service-role
+  name: "driver-service"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+config:
+  awsRegion: "us-east-2"
+  sqsTripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-prod.fifo"
+  sqsDriverAssignedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-prod.fifo"
+  sqsTripCompletedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-prod.fifo"
+  clientGatewayUrl: "http://client-gateway.prod.svc.cluster.local:8080"
+
+database:
+  secretName: "driver-service-secrets"
+  secretKey: "database-url"

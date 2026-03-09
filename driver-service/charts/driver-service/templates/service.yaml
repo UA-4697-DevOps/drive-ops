@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "driver-service.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "driver-service.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "driver-service.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: {{ .Values.service.portName }}
+      protocol: TCP
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
