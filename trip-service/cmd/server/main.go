@@ -222,11 +222,11 @@ func main() {
 	r.Handle("/metrics", telemetry.MetricsHandler())
 	r.Get("/health", handler.HealthCheck)
 
-	// Apply OpenTelemetry middleware to application routes only.
-	// This creates a trace span and records metrics for every HTTP request.
-	r.Use(telemetry.Middleware)
-
 	r.Route("/trips", func(r chi.Router) {
+		// Apply OpenTelemetry middleware to application routes only.
+		// This creates a trace span and records metrics for every HTTP request.
+		r.Use(telemetry.Middleware)
+
 		r.Post("/", handler.CreateTrip)
 		r.Get("/{id}", handler.GetTrip)
 		r.Patch("/{id}/assign-driver", handler.AssignDriver)
