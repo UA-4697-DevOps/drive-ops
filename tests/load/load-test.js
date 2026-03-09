@@ -81,17 +81,10 @@ export default function () {
     let tripId = null;
     group("Create Trip", function () {
         const payload = JSON.stringify({
-            rider_id: `rider-${__VU}-${__ITER}`,
-            pickup_location: {
-                latitude: 40.7128 + Math.random() * 0.01,
-                longitude: -74.006 + Math.random() * 0.01,
-                address: "123 Test Street, New York, NY",
-            },
-            dropoff_location: {
-                latitude: 40.7589 + Math.random() * 0.01,
-                longitude: -73.9851 + Math.random() * 0.01,
-                address: "456 Load Test Ave, New York, NY",
-            },
+            passenger_id: "11111111-1111-4111-8111-111111111111",
+            pickup: "Khoryva Street 1, Kyiv, Ukraine",
+            dropoff: "Khoryva Street 999, Kyiv, Ukraine",
+
         });
 
         const params = {
@@ -151,7 +144,7 @@ export default function () {
             if (success) {
                 tripFetchedCounter.add(1);
             }
-            
+
             tripGetDuration.add(res.timings.duration);
             errorRate.add(res.status !== 200);
         });
