@@ -28,6 +28,7 @@ spec:
         app: k6-load-test
         target: trip-service
     spec:
+      automountServiceAccountToken: false
       restartPolicy: Never
       containers:
       - name: k6
