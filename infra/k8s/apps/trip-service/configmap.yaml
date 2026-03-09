@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: trip-service-config
-  namespace: dev
+  namespace: trip-service
   labels:
     app: trip-service
 data:

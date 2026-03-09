@@ -1,0 +1,135 @@
+# Default values for client-gateway Helm chart.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# -- Number of replicas for the deployment
+replicaCount: 1
+
+image:
+  # -- Container image repository
+  repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/client-gateway
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Overrides the image tag whose default is the chart appVersion
+  tag: "0.0.0-dev"
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Override the name of the chart
+nameOverride: ""
+# -- Override the full name of the release
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Specifies whether a service account should be created
+  create: true
+  # -- Annotations to add to the service account (IRSA)
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/client-gateway-role
+  # -- The name of the service account to use
+  name: "client-gateway"
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- Service port
+  port: 80
+  # -- Container target port
+  targetPort: 8080
+  # -- Service port name
+  portName: http
+
+resources:
+  # -- Resource requests
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  # -- Resource limits
+  limits:
+    cpu: 300m
+    memory: 512Mi
+
+# MUST remain disabled — Telegram long-polling requires exactly one instance.
+autoscaling:
+  # -- Enable horizontal pod autoscaling
+  enabled: false
+  # -- Minimum number of replicas
+  minReplicas: 1
+  # -- Maximum number of replicas
+  maxReplicas: 1
+  # -- Target CPU utilization percentage
+  targetCPUUtilizationPercentage: 70
+  # -- Target memory utilization percentage
+  targetMemoryUtilizationPercentage: 80
+
+# -- Node selector for pod assignment
+nodeSelector: {}
+
+# -- Tolerations for pod assignment
+tolerations: []
+
+# -- Affinity for pod assignment
+affinity: {}
+
+# Health checks configuration
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  failureThreshold: 3
+
+# Strategy for deployment updates.
+# Recreate is required — Telegram long-polling only allows a single active
+# getUpdates connection per bot token.
+strategy:
+  type: Recreate
+
+backend:
+  # -- URL of the trip service
+  tripServiceUrl: "http://trip-service.dev.svc.cluster.local:8081"
+  # -- URL of the driver service
+  driverServiceUrl: "http://driver-service.dev.svc.cluster.local:8082"
+
+config:
+  # -- Port the health-check HTTP server listens on
+  healthCheckPort: "8080"
+  # -- Enable debug logging
+  debug: "false"
+
+bot:
+  # -- Telegram bot token; inject at deploy time via --set or external secrets
+  token: ""
+
+# ConfigMap settings
+configMap:
+  # -- Create ConfigMap
+  create: true
+
+# Secret settings
+secret:
+  # -- Create Secret (for local/testing only; use external secrets in production)
+  create: false
+  # -- Bot token (only used if secret.create is true)
+  botToken: ""
+
+ingress:
+  enabled: false
+  host: ""
+  path: /

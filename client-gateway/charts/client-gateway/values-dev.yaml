@@ -1,0 +1,52 @@
+# Development environment values for client-gateway
+
+replicaCount: 1
+
+# Local dev: image is built from source and loaded into the cluster's Docker
+# daemon (Docker Desktop shares the host daemon).
+# pullPolicy: Never ensures Kubernetes uses the local image without attempting
+# a registry pull. Overridden at deploy time by helm-dev-deploy.sh.
+image:
+  repository: client-gateway
+  tag: local
+  pullPolicy: Never
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/client-gateway-role
+  name: "client-gateway"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+
+backend:
+  tripServiceUrl: "http://trip-service.trip-service.svc.cluster.local:8081"
+  driverServiceUrl: "http://driver-service.driver-service.svc.cluster.local:8082"
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  failureThreshold: 3
+
+strategy:
+  type: Recreate  # Required for Telegram long-polling single-instance constraint

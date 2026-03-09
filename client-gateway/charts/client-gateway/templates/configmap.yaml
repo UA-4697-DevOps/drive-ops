@@ -1,0 +1,14 @@
+{{- if .Values.configMap.create -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "client-gateway.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "client-gateway.labels" . | nindent 4 }}
+data:
+  trip-service-url: {{ .Values.backend.tripServiceUrl | quote }}
+  driver-service-url: {{ .Values.backend.driverServiceUrl | quote }}
+  health-check-port: {{ .Values.config.healthCheckPort | quote }}
+  debug: {{ .Values.config.debug | quote }}
+{{- end }}
