@@ -1,0 +1,199 @@
+# --- Web Client Deployment (monitoring copy) ---
+# Minimal nginx deployment for the observability stack with an
+# nginx-prometheus-exporter sidecar that provides Prometheus metrics.
+#
+# This manifest lives in infra/k8s/monitoring/ (like trip-service.yaml) because
+# it is part of the observability stack. The production deployment with full
+# config, HPA, and ECR image is managed separately in infra/k8s/apps/web-client/.
+#
+# Architecture:
+#   nginx container (port 8083) ─── stub_status ──→ exporter sidecar (port 9113) ──→ Prometheus
+#
+# Exposed metrics (via nginx-prometheus-exporter):
+#   nginx_up                   — 1 if nginx is reachable, 0 otherwise
+#   nginx_connections_active   — currently open connections
+#   nginx_connections_accepted — total accepted connections (counter)
+#   nginx_connections_handled  — total handled connections (counter)
+#   nginx_connections_reading  — connections reading request headers
+#   nginx_connections_writing  — connections writing responses
+#   nginx_connections_waiting  — keep-alive connections idle
+#   nginx_http_requests_total  — total HTTP requests processed (counter)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-client-nginx-monitoring
+  namespace: default
+  labels:
+    app: web-client
+data:
+  default.conf: |
+    server {
+        listen 8083;
+        server_name _;
+
+        root  /usr/share/nginx/html;
+        index index.html;
+
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        location /health {
+            access_log  off;
+            add_header  Content-Type application/json;
+            return      200 '{"status":"ok"}';
+        }
+
+        # nginx stub_status — exposes raw connection/request counters.
+        # The nginx-prometheus-exporter sidecar scrapes this endpoint and
+        # translates it into Prometheus exposition format on port 9113.
+        location /nginx_status {
+            stub_status on;
+            access_log  off;
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-client
+  namespace: default
+  labels:
+    app: web-client
+    team: platform
+    env: dev
+    service: web-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-client
+  template:
+    metadata:
+      labels:
+        app: web-client
+        team: platform
+        env: dev
+        service: web-client
+    spec:
+      # Pod-level security: nginx alpine image runs as UID 101 (nginx user)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        # --- Container 1: nginx ---
+        - name: nginx
+          image: nginx:1.27-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 101
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8083
+              name: http
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+              readOnly: true
+            # emptyDirs required because readOnlyRootFilesystem: true
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: nginx-tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8083
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8083
+            initialDelaySeconds: 3
+            periodSeconds: 10
+
+        # --- Container 2: nginx-prometheus-exporter (sidecar) ---
+        # Reads nginx stub_status on localhost:8083 and re-exposes the data
+        # as Prometheus metrics on port 9113 at /metrics.
+        # Prometheus scrapes this sidecar every 15 seconds.
+        - name: nginx-exporter
+          image: nginx/nginx-prometheus-exporter:1.4
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534  # nobody
+            capabilities:
+              drop: ["ALL"]
+          args:
+            - --nginx.scrape-uri=http://localhost:8083/nginx_status
+          ports:
+            - containerPort: 9113
+              name: metrics
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9113
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9113
+            initialDelaySeconds: 10
+            periodSeconds: 15
+
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: web-client-nginx-monitoring
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: nginx-tmp
+          emptyDir: {}
+---
+# --- Web Client Metrics Service ---
+# Exposes the nginx-prometheus-exporter sidecar inside the cluster.
+# Prometheus scrapes this at: web-client.default.svc.cluster.local:9113
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-client
+  namespace: default
+  labels:
+    app: web-client
+spec:
+  type: ClusterIP
+  selector:
+    app: web-client
+  ports:
+    - port: 9113
+      targetPort: metrics
+      protocol: TCP
+      name: metrics

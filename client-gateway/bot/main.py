@@ -17,6 +17,16 @@ from . import passenger
 from . import driver
 from .logger_utils import create_trip_request_logger, generate_correlation_id
 from .api_client import APIClient
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator as _Instrumentator
+    _HAS_PROMETHEUS = True
+except ImportError:
+    _HAS_PROMETHEUS = False
+try:
+    from .telemetry import init_tracing, instrument_app as _instrument_app
+    _HAS_OTEL = True
+except ImportError:
+    _HAS_OTEL = False
 
 logger = create_trip_request_logger()
 
@@ -1197,6 +1207,10 @@ async def change_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Create FastAPI app for health endpoint
 app = FastAPI(title="Client Gateway Health API", version="1.0.0")
 
+# Expose /metrics for Prometheus scraping (no-op when package not installed)
+if _HAS_PROMETHEUS:
+    _Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+
 @app.get("/health")
 async def health_check():
     """
@@ -1308,6 +1322,15 @@ async def main_async():
     Registers signal handlers to ensure both services shut down gracefully.
     Coordinates shutdown to signal uvicorn before task cancellation.
     """
+    # Initialise OTel tracing and attach auto-instrumentation
+    _shutdown_tracing = None
+    if _HAS_OTEL:
+        try:
+            _shutdown_tracing = init_tracing()
+            _instrument_app(app)
+        except Exception as _e:
+            logger.warning("OTel init failed (non-fatal): %s", _e, extra={'correlationId': 'STARTUP'})
+
     # Create shutdown event for signal handling
     shutdown_event = asyncio.Event()
     
@@ -1361,6 +1384,10 @@ async def main_async():
             logger.warning("Exception during task cancellation: %s", str(e), extra={'correlationId': 'SHUTDOWN'})
     
     logger.info("All services have shut down", extra={'correlationId': 'SHUTDOWN'})
+
+    # Flush and shut down OTel span exporter
+    if _shutdown_tracing:
+        _shutdown_tracing()
 
 def main():
     """

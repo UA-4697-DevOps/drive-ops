@@ -1,0 +1,202 @@
+# --- Driver Service KPI Dashboard ---
+# Pre-built Grafana dashboard for the Driver Service (Python/FastAPI).
+# Mounted into the Grafana pod and auto-loaded by the dashboard provider.
+#
+# Metrics come from prometheus-fastapi-instrumentator, which by default exposes:
+#   http_requests_total          — counter of all requests (method, handler, status)
+#   http_request_duration_seconds — histogram of request durations
+#   http_requests_in_progress     — gauge of currently in-flight requests
+#   http_request_size_bytes       — histogram of request body sizes
+#   http_response_size_bytes      — histogram of response body sizes
+#
+# Dashboard panels:
+#   1. Request Rate     — req/s by method and handler
+#   2. Error Rate       — 4xx and 5xx errors per second
+#   3. Latency (p50/p95/p99) — response time percentiles
+#   4. Active Requests  — in-flight HTTP requests (gauge)
+#   5. Response Size    — average response size over time
+#   6. Request Duration by Endpoint — top-level latency heat per handler
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-driver-service
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  driver-service.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "title": "Request Rate (req/s)",
+          "description": "HTTP requests per second grouped by method and handler. Uses rate() over the counter metric exposed by prometheus-fastapi-instrumentator.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{job=\"driver-service\"}[1m])) by (method, handler)",
+              "legendFormat": "{{method}} {{handler}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 15,
+                "gradientMode": "scheme"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Error Rate (4xx & 5xx / s)",
+          "description": "Rate of client (4xx) and server (5xx) errors. High values indicate application problems.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{job=\"driver-service\",status=~\"4..|5..\"}[1m])) by (method, handler, status)",
+              "legendFormat": "{{status}} {{method}} {{handler}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 15
+              },
+              "color": { "mode": "palette-classic" }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Latency Percentiles (p50 / p95 / p99)",
+          "description": "Response time distribution. p50 = median, p95 = 95th percentile, p99 = tail latency.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"driver-service\"}[1m])) by (le, handler))",
+              "legendFormat": "p50 {{handler}}"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"driver-service\"}[1m])) by (le, handler))",
+              "legendFormat": "p95 {{handler}}"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"driver-service\"}[1m])) by (le, handler))",
+              "legendFormat": "p99 {{handler}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 10
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Active Requests",
+          "description": "Number of HTTP requests currently being processed by FastAPI. A sustained high value may indicate slow handlers or DB bottlenecks.",
+          "type": "gauge",
+          "gridPos": { "h": 6, "w": 8, "x": 0, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(http_requests_in_progress{job=\"driver-service\"})",
+              "legendFormat": "in-flight"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 50 },
+                  { "color": "red", "value": 100 }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Avg Response Size",
+          "description": "Average HTTP response body size. Useful to detect unexpectedly large payloads or empty error responses.",
+          "type": "timeseries",
+          "gridPos": { "h": 6, "w": 8, "x": 8, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_response_size_bytes_sum{job=\"driver-service\"}[1m])) by (handler) / sum(rate(http_response_size_bytes_count{job=\"driver-service\"}[1m])) by (handler)",
+              "legendFormat": "{{handler}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 10,
+                "gradientMode": "scheme"
+              },
+              "color": { "mode": "palette-classic" }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Avg Latency by Endpoint",
+          "description": "Average response time per endpoint. Helps identify slow handlers that need optimisation.",
+          "type": "timeseries",
+          "gridPos": { "h": 6, "w": 8, "x": 16, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_request_duration_seconds_sum{job=\"driver-service\"}[1m])) by (handler) / sum(rate(http_request_duration_seconds_count{job=\"driver-service\"}[1m])) by (handler)",
+              "legendFormat": "{{handler}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "bars",
+                "fillOpacity": 30,
+                "gradientMode": "scheme"
+              },
+              "color": { "mode": "palette-classic" }
+            },
+            "overrides": []
+          }
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["driver-service", "python", "fastapi", "monitoring"],
+      "templating": { "list": [] },
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "Driver Service KPIs",
+      "uid": "driver-service-kpis",
+      "version": 1
+    }

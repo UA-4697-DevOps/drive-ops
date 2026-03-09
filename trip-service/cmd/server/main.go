@@ -24,8 +24,7 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-
-	_ "trip-service/docs" // Import generated docs
+	//_ "trip-service/docs" // Import generated docs
 )
 
 // @title           Trip Service API

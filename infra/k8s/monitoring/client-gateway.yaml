@@ -1,0 +1,148 @@
+# --- Client Gateway Deployment (monitoring copy) ---
+# Minimal K8s Deployment for the Client Gateway so that:
+#   1. Prometheus can scrape /metrics via the ClusterIP Service (port 8080)
+#   2. Jaeger receives traces via OTEL_EXPORTER_OTLP_ENDPOINT
+#
+# This manifest lives in infra/k8s/monitoring/ because it is part of the
+# observability stack. The production deployment (with full credentials,
+# Telegram token, scaling, etc.) is managed separately via the Helm chart in
+# client-gateway/charts/client-gateway/.
+#
+# Instrumentation is done in the application code (bot/main.py) using:
+#   - prometheus-fastapi-instrumentator → exposes /metrics for Prometheus
+#   - opentelemetry-sdk                → sends trace spans to Jaeger via OTLP gRPC
+#
+# NOTE: The image tag and some environment variables below are placeholders.
+#       Replace them with your actual ECR image and configuration.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-gateway
+  namespace: default
+  labels:
+    app: client-gateway
+    team: platform
+    env: dev
+    service: client-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client-gateway
+  template:
+    metadata:
+      labels:
+        app: client-gateway
+        team: platform
+        env: dev
+        service: client-gateway
+    spec:
+      # Pod-level security: run as non-root with seccomp
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: client-gateway
+          image: client-gateway:latest    # Replace with your ECR image URI
+          # Container-level security: least-privilege hardening
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          env:
+            # --- Python runtime ---
+            - name: PYTHONUNBUFFERED
+              value: "1"
+
+            # --- Telegram Bot ---
+            # BOT_TOKEN is the secret Telegram bot API token
+            - name: BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: client-gateway-secret
+                  key: bot-token
+
+            # --- Upstream service URLs ---
+            - name: TRIP_SERVICE_URL
+              value: "http://trip-service.default.svc.cluster.local:8081"
+            - name: DRIVER_SERVICE_URL
+              value: "http://driver-service.default.svc.cluster.local:8082"
+
+            # --- Health check port (matches containerPort above) ---
+            - name: HEALTH_CHECK_PORT
+              value: "8080"
+
+            # --- OpenTelemetry ---
+            # Tells the OTel SDK where to send trace spans (Jaeger OTLP gRPC)
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://jaeger.monitoring.svc.cluster.local:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "client-gateway"
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            # logger_utils.py creates a RotatingFileHandler at /app/bot/logs/bot.log.
+            # With readOnlyRootFilesystem: true, this emptyDir makes that path writable.
+            - name: bot-logs
+              mountPath: /app/bot/logs
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 15
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: bot-logs
+          emptyDir: {}
+---
+# --- Client Gateway ClusterIP Service ---
+# Exposes Client Gateway inside the cluster at:
+#   client-gateway.default.svc.cluster.local:8080
+#
+# This is the DNS name that Prometheus uses in its scrape config
+# (see prometheus-config.yaml, job_name: "client-gateway").
+apiVersion: v1
+kind: Service
+metadata:
+  name: client-gateway
+  namespace: default
+  labels:
+    app: client-gateway
+    team: platform
+    env: dev
+    service: client-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: client-gateway
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http

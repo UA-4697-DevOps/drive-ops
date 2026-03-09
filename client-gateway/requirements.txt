@@ -7,3 +7,9 @@ httpx>=0.21.0,<1.0.0
 fastapi>=0.100.0
 uvicorn>=0.22.0
 python-json-logger>=2.0.0,<3.0.0
+prometheus-fastapi-instrumentator==7.0.2
+opentelemetry-api==1.29.0
+opentelemetry-sdk==1.29.0
+opentelemetry-exporter-otlp-proto-grpc==1.29.0
+opentelemetry-instrumentation-fastapi==0.50b0
+opentelemetry-instrumentation-httpx==0.50b0

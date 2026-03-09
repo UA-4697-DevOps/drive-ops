@@ -1,0 +1,147 @@
+# --- Driver Service Deployment (monitoring copy) ---
+# Minimal K8s Deployment for the Driver Service so that:
+#   1. Prometheus can scrape /metrics via the ClusterIP Service (port 8082)
+#   2. Jaeger receives traces via OTEL_EXPORTER_OTLP_ENDPOINT
+#
+# This manifest lives in infra/k8s/monitoring/ because it is part of the
+# observability stack. The production deployment (with full credentials,
+# SQS config, scaling, etc.) is managed separately in infra/k8s/apps/driver-service/.
+#
+# Instrumentation is done in the application code (src/main.py) using:
+#   - prometheus-fastapi-instrumentator → exposes /metrics for Prometheus
+#   - opentelemetry-sdk                → sends trace spans to Jaeger via OTLP gRPC
+#
+# NOTE: The image tag and some environment variables below are placeholders.
+#       Replace them with your actual ECR image and configuration.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: driver-service
+  namespace: default
+  labels:
+    app: driver-service
+    team: platform
+    env: dev
+    service: driver-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: driver-service
+  template:
+    metadata:
+      labels:
+        app: driver-service
+        team: platform
+        env: dev
+        service: driver-service
+    spec:
+      # Pod-level security: run as non-root with seccomp
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: driver-service
+          image: driver-service:latest    # Replace with your ECR image URI
+          # Container-level security: least-privilege hardening
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8082
+              name: http
+              protocol: TCP
+          env:
+            # --- Python runtime ---
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: PYTHONPATH
+              value: "/app/src"
+
+            # --- Database ---
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: driver-service-db
+                  key: db-url
+
+            # --- SQS Queues (placeholder — not needed for monitoring only) ---
+            # Non-empty placeholder values are required: the pydantic validator
+            # (require_runtime_vars) rejects empty strings with ValueError.
+            # The SQS consumer will fail to connect (no real credentials) but the
+            # failure is caught in a try/except so the service still starts.
+            - name: AWS_REGION
+              value: "us-east-2"
+            - name: SQS_TRIP_CREATED_URL
+              value: "https://sqs.us-east-2.amazonaws.com/000000000000/placeholder"
+            - name: SQS_DRIVER_ASSIGNED_URL
+              value: "https://sqs.us-east-2.amazonaws.com/000000000000/placeholder"
+            - name: SQS_TRIP_COMPLETED_URL
+              value: "https://sqs.us-east-2.amazonaws.com/000000000000/placeholder"
+
+            # --- Client Gateway ---
+            - name: CLIENT_GATEWAY_URL
+              value: "http://client-gateway.default.svc.cluster.local:8080"
+
+            # --- OpenTelemetry ---
+            # Tells the OTel SDK where to send trace spans (Jaeger OTLP gRPC)
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://jaeger.monitoring.svc.cluster.local:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "driver-service"
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 15
+            periodSeconds: 15
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+# --- Driver Service ClusterIP Service ---
+# Exposes Driver Service inside the cluster at:
+#   driver-service.default.svc.cluster.local:8082
+#
+# This is the DNS name that Prometheus uses in its scrape config
+# (see prometheus-config.yaml, job_name: "driver-service").
+apiVersion: v1
+kind: Service
+metadata:
+  name: driver-service
+  namespace: default
+  labels:
+    app: driver-service
+spec:
+  type: ClusterIP
+  selector:
+    app: driver-service
+  ports:
+    - port: 8082
+      targetPort: http
+      protocol: TCP
+      name: http
