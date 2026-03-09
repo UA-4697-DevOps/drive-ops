@@ -19,7 +19,11 @@ resources:
     memory: 256Mi
 
 autoscaling:
-  enabled: false
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
 
 config:
   awsRegion: "us-east-2"
