@@ -166,6 +166,7 @@ module "rds_secrets" {
   db_identifier       = var.db_identifier
   rds_master_username = var.rds_master_username
   discord_webhook_url = var.discord_webhook_url
+  telegram_bot_token  = var.telegram_bot_token
 
   tags = merge(var.common_tags, {
     Component = "secrets-manager"

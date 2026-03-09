@@ -35,3 +35,11 @@ variable "discord_webhook_url" {
   sensitive   = true
   default     = "https://discord.com/api/webhooks/PLACEHOLDER"
 }
+
+variable "telegram_bot_token" {
+  description = "Telegram Bot Token for client-gateway (Optional: can be set manually in Console later)"
+  type        = string
+  sensitive   = true
+  nullable    = true
+  default     = null
+}

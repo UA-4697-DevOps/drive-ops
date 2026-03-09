@@ -18,3 +18,9 @@ output "discord_secret_arn" {
   description = "ARN of the Secrets Manager secret containing the Discord Webhook URL"
   value       = aws_secretsmanager_secret.discord_webhook.arn
 }
+
+# --- Telegram Bot Token Output ---
+output "telegram_bot_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing the Telegram Bot Token"
+  value       = aws_secretsmanager_secret.telegram_bot_token.arn
+}
