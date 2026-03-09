@@ -29,6 +29,11 @@ output "sg_db_id" {
   value       = module.vpc.sg_db_id
 }
 
+output "sg_alb_id" {
+  description = "Security group ID for Application Load Balancer"
+  value       = module.vpc.sg_alb_id
+}
+
 output "private_route_table_id" {
   description = "ID of the private subnet route table — passed to the NAT module to add the default route"
   value       = module.vpc.private_route_table_id
