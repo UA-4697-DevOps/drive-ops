@@ -23,8 +23,8 @@ metadata:
     # IRSA role created by Terraform EKS module (iam.tf)
     # This value must be replaced by the deployment pipeline per-environment
     # After terragrunt apply, verify with: terragrunt output cluster_autoscaler_role_arn
-    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-dev-eks-cluster-autoscaler-role # DEV pipeline
-    # eks.amazonaws.com/role-arn: REPLACE_WITH_CLUSTER_AUTOSCALER_ROLE_ARN # needed pipeline placeholder
+    # eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-dev-eks-cluster-autoscaler-role # DEV pipeline
+    eks.amazonaws.com/role-arn: REPLACE_WITH_CLUSTER_AUTOSCALER_ROLE_ARN # needed pipeline placeholder
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -161,9 +161,9 @@ spec:
         - --skip-nodes-with-local-storage=true
         - --expander=least-waste
         # Auto-discover node groups by EKS cluster tag
-        - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/Training-drive-ops-dev # DEV pipeline
+        # - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/Training-drive-ops-dev # DEV pipeline
         # Auto-discover node groups by EKS cluster tag (must be replaced by pipeline)
-        # - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/REPLACE_WITH_CLUSTER_NAME # needed pipeline placeholder
+        - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/REPLACE_WITH_CLUSTER_NAME # needed pipeline placeholder
         # Scale-down settings
         - --scale-down-delay-after-add=5m
         - --scale-down-delay-after-delete=1m

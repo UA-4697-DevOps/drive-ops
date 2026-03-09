@@ -1,0 +1,72 @@
+name: Deploy Cluster Autoscaler
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/k8s/apps/cluster-autoscaler/**"
+      - ".github/workflows/deploy-cluster-autoscaler.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TERRAFORM_VERSION: "1.10.0"
+  TERRAGRUNT_VERSION: "0.68.0"
+  AWS_REGION: "us-east-2"
+
+jobs:
+  deploy-autoscaler:
+    name: Deploy Cluster Autoscaler
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false # Important for clean Terragrunt outputs
+
+      - name: Setup Terragrunt
+        run: |
+          curl -sL https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64 -o terragrunt
+          chmod +x terragrunt
+          sudo mv terragrunt /usr/local/bin/
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/Training-trip-service-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get Cluster Details from Terragrunt
+        id: tg-outputs
+        working-directory: infra/terragrunt/envs/dev/eks
+        run: |
+          # Ensure inputs/plugins are initialized
+          terragrunt init -reconfigure
+          echo "cluster_name=$(terragrunt output -raw cluster_name)" >> "$GITHUB_OUTPUT"
+          echo "role_arn=$(terragrunt output -raw cluster_autoscaler_role_arn)" >> "$GITHUB_OUTPUT"
+
+      - name: Configure kubectl
+        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ steps.tg-outputs.outputs.cluster_name }}
+
+      - name: Substitute Variables in Manifest
+        run: |
+          sed -i "s|REPLACE_WITH_CLUSTER_NAME|${{ steps.tg-outputs.outputs.cluster_name }}|g" infra/k8s/apps/cluster-autoscaler/cluster-autoscaler.yaml
+          sed -i "s|REPLACE_WITH_CLUSTER_AUTOSCALER_ROLE_ARN|${{ steps.tg-outputs.outputs.role_arn }}|g" infra/k8s/apps/cluster-autoscaler/cluster-autoscaler.yaml
+
+      - name: Apply Manifest
+        run: |
+          kubectl apply -f infra/k8s/apps/cluster-autoscaler/cluster-autoscaler.yaml
+          
+      - name: Verify Cluster Autoscaler
+        run: |
+          kubectl wait --for=condition=available deployment/cluster-autoscaler -n kube-system --timeout=120s
