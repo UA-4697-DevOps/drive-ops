@@ -15,7 +15,6 @@ spec:
       validate:
         message: >-
           Privileged containers are not allowed.
-<<<<<<< HEAD
         anyPattern:
           - spec:
               containers:
@@ -27,12 +26,3 @@ spec:
                   containers:
                     - securityContext:
                         privileged: "false"
-=======
-        pattern:
-          spec:
-            =(template):
-              spec:
-                containers:
-                  - =(securityContext):
-                      =(privileged): "false"
->>>>>>> 41e6728 (Create kyverno policies)
