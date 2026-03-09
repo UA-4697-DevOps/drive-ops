@@ -7,8 +7,8 @@ metadata:
   labels:
     {{- include "trip-service.labels" . | nindent 4 }}
 data:
-  aws-region: {{ .Values.config.awsRegion | quote }}
-  sqs-trip-created-url: {{ .Values.config.sqsTripCreatedUrl | quote }}
-  sqs-driver-assigned-url: {{ .Values.config.sqsDriverAssignedUrl | quote }}
-  sqs-trip-completed-url: {{ .Values.config.sqsTripCompletedUrl | quote }}
+  aws-region: {{ tpl .Values.config.awsRegion . | quote }}
+  sqs-trip-created-url: {{ tpl .Values.config.sqsTripCreatedUrl . | quote }}
+  sqs-driver-assigned-url: {{ tpl .Values.config.sqsDriverAssignedUrl . | quote }}
+  sqs-trip-completed-url: {{ tpl .Values.config.sqsTripCompletedUrl . | quote }}
 {{- end }}

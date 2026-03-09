@@ -3,14 +3,14 @@
 replicaCount: 2
 
 image:
-  repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service
+  repository: "{{ .Values.aws.accountId }}.dkr.ecr.{{ .Values.aws.region }}.amazonaws.com/trip-service"
   pullPolicy: IfNotPresent
   tag: "v1.0.0"
 
 serviceAccount:
   create: true
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-staging-trip-service-role
+    eks.amazonaws.com/role-arn: "arn:aws:iam::{{ .Values.aws.accountId }}:role/Training-drive-ops-staging-trip-service-role"
   name: "trip-service"
 
 resources:
@@ -25,10 +25,10 @@ autoscaling:
   enabled: false
 
 config:
-  awsRegion: "us-east-2"
-  sqsTripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-staging.fifo"
-  sqsDriverAssignedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-staging.fifo"
-  sqsTripCompletedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-staging.fifo"
+  awsRegion: "{{ .Values.aws.region }}"
+  sqsTripCreatedUrl: "https://sqs.{{ .Values.aws.region }}.amazonaws.com/{{ .Values.aws.accountId }}/trip-created-staging.fifo"
+  sqsDriverAssignedUrl: "https://sqs.{{ .Values.aws.region }}.amazonaws.com/{{ .Values.aws.accountId }}/driver-assigned-staging.fifo"
+  sqsTripCompletedUrl: "https://sqs.{{ .Values.aws.region }}.amazonaws.com/{{ .Values.aws.accountId }}/trip-completed-staging.fifo"
   servicePort: ":8081"
 
 database:

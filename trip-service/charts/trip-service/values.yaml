@@ -5,9 +5,16 @@
 # -- Number of replicas for the deployment
 replicaCount: 1
 
+# -- AWS global configuration
+aws:
+  # -- AWS Account ID for IAM roles and ECR (REQUIRED)
+  accountId: ""
+  # -- AWS Region
+  region: "us-east-2"
+
 image:
   # -- Container image repository
-  repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service
+  repository: "{{ .Values.aws.accountId }}.dkr.ecr.{{ .Values.aws.region }}.amazonaws.com/trip-service"
   # -- Image pull policy
   pullPolicy: Always
   # -- Overrides the image tag whose default is the chart appVersion
@@ -27,7 +34,7 @@ serviceAccount:
   # -- Annotations to add to the service account (IRSA)
   # Replace role ARN with actual IRSA role after Terraform provisioning
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-dev-trip-service-role
+    eks.amazonaws.com/role-arn: "arn:aws:iam::{{ .Values.aws.accountId }}:role/Training-drive-ops-dev-trip-service-role"
   # -- The name of the service account to use
   name: "trip-service"
 
@@ -105,11 +112,11 @@ config:
   # -- AWS region
   awsRegion: "us-east-2"
   # -- SQS queue URL for trip created events
-  sqsTripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-dev.fifo"
+  sqsTripCreatedUrl: "https://sqs.{{ .Values.aws.region }}.amazonaws.com/{{ .Values.aws.accountId }}/trip-created-dev.fifo"
   # -- SQS queue URL for driver assigned events
-  sqsDriverAssignedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-dev.fifo"
+  sqsDriverAssignedUrl: "https://sqs.{{ .Values.aws.region }}.amazonaws.com/{{ .Values.aws.accountId }}/driver-assigned-dev.fifo"
   # -- SQS queue URL for trip completed events
-  sqsTripCompletedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-dev.fifo"
+  sqsTripCompletedUrl: "https://sqs.{{ .Values.aws.region }}.amazonaws.com/{{ .Values.aws.accountId }}/trip-completed-dev.fifo"
   # -- Service port
   servicePort: ":8081"
 

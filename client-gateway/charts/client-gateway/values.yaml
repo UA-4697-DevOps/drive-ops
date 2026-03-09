@@ -24,8 +24,8 @@ fullnameOverride: ""
 
 # -- AWS global configuration
 aws:
-  # -- AWS Account ID for IAM roles and ECR
-  accountId: "969283154407"
+  # -- AWS Account ID for IAM roles and ECR (REQUIRED)
+  accountId: ""
   # -- AWS Region
   region: "us-east-2"
 
