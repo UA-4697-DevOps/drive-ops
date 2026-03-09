@@ -63,11 +63,6 @@ startupProbe:
 strategy:
   type: Recreate  # Required for Telegram long-polling single-instance constraint
 
-# Pod disruption budget for production
-podDisruptionBudget:
-  enabled: true
-  minAvailable: 0
-
 # Pod annotations for production monitoring
 podAnnotations:
   prometheus.io/scrape: "true"
