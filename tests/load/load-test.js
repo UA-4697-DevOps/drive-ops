@@ -117,7 +117,7 @@ export default function () {
         }
 
         tripCreateDuration.add(res.timings.duration);
-        errorRate.add(res.status !== 201);
+        errorRate.add(!success);
     });
 
     sleep(1);
@@ -146,7 +146,7 @@ export default function () {
             }
 
             tripGetDuration.add(res.timings.duration);
-            errorRate.add(res.status !== 200);
+            errorRate.add(!success);
         });
     }
 
