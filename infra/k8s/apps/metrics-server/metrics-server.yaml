@@ -184,6 +184,7 @@ spec:
           capabilities:
             drop:
             - ALL
+        volumeMounts:
         - name: tmp-dir
           mountPath: /tmp
         - name: ca-certs
