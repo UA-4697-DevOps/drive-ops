@@ -42,3 +42,11 @@ data:
         static_configs:
           - targets: ["driver-service.default.svc.cluster.local:8082"]
         metrics_path: "/metrics"
+
+      # Job 5: Client Gateway — Python Telegram bot + FastAPI health server metrics
+      # Metrics exposed by prometheus-fastapi-instrumentator at /metrics on port 8080.
+      # See infra/k8s/monitoring/client-gateway.yaml for the deployment.
+      - job_name: "client-gateway"
+        static_configs:
+          - targets: ["client-gateway.default.svc.cluster.local:8080"]
+        metrics_path: "/metrics"

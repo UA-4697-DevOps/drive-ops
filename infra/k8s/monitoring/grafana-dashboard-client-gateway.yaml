@@ -1,0 +1,215 @@
+# --- Client Gateway KPI Dashboard ---
+# Pre-built Grafana dashboard for the Client Gateway (Python Telegram bot + FastAPI).
+# Mounted into the Grafana pod and auto-loaded by the dashboard provider.
+#
+# Metrics come from prometheus-fastapi-instrumentator, which by default exposes:
+#   http_requests_total           — counter of all requests (method, handler, status)
+#   http_request_duration_seconds — histogram of request durations
+#   http_requests_in_progress     — gauge of currently in-flight requests
+#   http_request_size_bytes       — histogram of request body sizes
+#   http_response_size_bytes      — histogram of response body sizes
+#
+# Dashboard panels:
+#   1. Service Status       — is the pod up? (Prometheus up metric)
+#   2. Request Rate         — req/s by method and handler
+#   3. Error Rate           — 4xx and 5xx errors per second
+#   4. Latency (p50/p95/p99)— response time percentiles
+#   5. Active Requests      — in-flight HTTP requests (gauge)
+#   6. Upstream Call Rate   — httpx calls to trip-service and driver-service (OTel)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-client-gateway
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  client-gateway.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "title": "Service Status",
+          "description": "1 = client-gateway pod is up and reachable by Prometheus. 0 = pod is down or unreachable.",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "up{job=\"client-gateway\"}",
+              "legendFormat": "Status"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              },
+              "mappings": [
+                { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+              ]
+            },
+            "overrides": []
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "value_and_name", "colorMode": "background" }
+        },
+        {
+          "title": "Request Rate (req/s)",
+          "description": "HTTP requests per second to the FastAPI health/metrics endpoints, grouped by method and handler.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 10, "x": 4, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{job=\"client-gateway\"}[1m])) by (method, handler)",
+              "legendFormat": "{{method}} {{handler}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 15,
+                "gradientMode": "scheme"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Error Rate (req/s)",
+          "description": "Rate of 4xx client errors and 5xx server errors per second. Spikes indicate upstream failures or bad requests.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 10, "x": 14, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{job=\"client-gateway\", status_code=~\"4..\"}[1m]))",
+              "legendFormat": "4xx errors"
+            },
+            {
+              "expr": "sum(rate(http_requests_total{job=\"client-gateway\", status_code=~\"5..\"}[1m]))",
+              "legendFormat": "5xx errors"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 20,
+                "gradientMode": "scheme"
+              },
+              "color": { "mode": "palette-classic" }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "4xx errors" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] },
+              { "matcher": { "id": "byName", "options": "5xx errors" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+            ]
+          }
+        },
+        {
+          "title": "Response Latency (p50 / p95 / p99)",
+          "description": "Request duration percentiles. p99 spikes indicate occasional slow requests; p50 is the median experience.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"client-gateway\"}[1m])) by (le))",
+              "legendFormat": "p50"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"client-gateway\"}[1m])) by (le))",
+              "legendFormat": "p95"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"client-gateway\"}[1m])) by (le))",
+              "legendFormat": "p99"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 10,
+                "gradientMode": "scheme"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Active (In-Flight) Requests",
+          "description": "Number of HTTP requests currently being processed by the FastAPI server. Sustained high values may indicate saturation.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "http_requests_in_progress{job=\"client-gateway\"}",
+              "legendFormat": "In-flight"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 30
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Upstream Call Rate (httpx via OTel)",
+          "description": "Rate of outbound HTTP calls from client-gateway to trip-service and driver-service, captured by OTel httpx instrumentation. Requires Jaeger datasource; falls back to no data when OTel is disabled.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_client_duration_milliseconds_count{job=\"client-gateway\"}[1m])) by (http_host)",
+              "legendFormat": "→ {{http_host}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 15,
+                "gradientMode": "scheme"
+              }
+            },
+            "overrides": []
+          }
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["client-gateway", "telegram", "fastapi"],
+      "time": { "from": "now-1h", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Client Gateway",
+      "uid": "client-gateway",
+      "version": 1
+    }

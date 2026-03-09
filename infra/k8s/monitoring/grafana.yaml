@@ -118,6 +118,8 @@ spec:
                   name: grafana-dashboard-web-client
               - configMap:
                   name: grafana-dashboard-driver-service
+              - configMap:
+                  name: grafana-dashboard-client-gateway
         # emptyDir volumes for writable paths (ephemeral, cleared on pod restart)
         - name: grafana-data
           emptyDir: {}
