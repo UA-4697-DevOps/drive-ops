@@ -37,3 +37,17 @@ resource "aws_secretsmanager_secret_version" "discord_webhook_val" {
     url = var.discord_webhook_url
   })
 }
+
+# --- 3. Telegram Bot Token ---
+resource "aws_secretsmanager_secret" "telegram_bot_token" {
+  name        = "${var.project_name}/${var.env}/client-gateway/bot"
+  description = "Telegram Bot Token for client-gateway"
+  tags        = var.tags
+}
+
+resource "aws_secretsmanager_secret_version" "telegram_bot_token_val" {
+  secret_id = aws_secretsmanager_secret.telegram_bot_token.id
+  secret_string = jsonencode({
+    token = var.telegram_bot_token
+  })
+}
