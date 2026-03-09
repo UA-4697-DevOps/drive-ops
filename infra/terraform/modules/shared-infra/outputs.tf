@@ -153,3 +153,8 @@ output "discord_secret_arn" {
   description = "ARN of the Secrets Manager secret containing the Discord Webhook URL"
   value       = module.rds_secrets.discord_secret_arn
 }
+
+output "telegram_bot_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing the Telegram Bot Token"
+  value       = module.rds_secrets.telegram_bot_secret_arn
+}
