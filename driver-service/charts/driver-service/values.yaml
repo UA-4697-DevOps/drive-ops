@@ -109,3 +109,6 @@ configMap:
 secret:
   # -- Create Secret (for local/testing only, ESO handles prod)
   create: false
+
+externalSecret:
+  secretPath: "drive-ops/dev/rds/credentials"
