@@ -41,11 +41,13 @@ spec:
               containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
           env:
+            {{- if .Values.configMap.create }}
             - name: DRIVER_SERVICE_URL
               valueFrom:
                 configMapKeyRef:
                   name: {{ include "web-client.fullname" . }}-config
                   key: driver-service-url
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

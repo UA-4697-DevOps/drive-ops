@@ -18,6 +18,8 @@ spec:
       app: web-client
   template:
     metadata:
+      annotations:
+        configmap.reloader.stakater.com/reload: "web-client-config,web-client-nginx"
       labels:
         app: web-client
         version: "0.0.0-dev"
@@ -31,7 +33,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: web-client
-          image: nginx:1.27-alpine
+          image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/web-client:0.0.0-dev
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8083

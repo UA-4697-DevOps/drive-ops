@@ -76,7 +76,13 @@ echo "=== Current Pods ==="
 kubectl get pods -n "$NAMESPACE" -o wide 2>/dev/null || warn "Cannot list pods"
 echo ""
 
-BASELINE_PODS=$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
+get_ready_replicas() {
+    local replicas
+    replicas="$(kubectl get deployment web-client -n "$NAMESPACE" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"
+    echo "${replicas:-0}"
+}
+
+BASELINE_PODS=$(get_ready_replicas)
 log "Baseline pod count: ${BASELINE_PODS}"
 
 # ---------------------------------------------------------------------------
@@ -116,7 +122,7 @@ echo "=== Pods After Load ==="
 kubectl get pods -n "$NAMESPACE" -o wide 2>/dev/null || warn "Cannot list pods"
 echo ""
 
-POST_PODS=$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
+POST_PODS=$(get_ready_replicas)
 log "Post-load pod count: ${POST_PODS} (was: ${BASELINE_PODS})"
 
 if [ "$POST_PODS" -gt "$BASELINE_PODS" ]; then
@@ -136,13 +142,13 @@ echo ""
 
 for i in {1..6}; do
     sleep 60
-    CURRENT=$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
+    CURRENT=$(get_ready_replicas)
     log "T+${i}min — pods: ${CURRENT}"
     kubectl get hpa -n "$NAMESPACE" --no-headers 2>/dev/null || true
     echo ""
 done
 
-FINAL_PODS=$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
+FINAL_PODS=$(get_ready_replicas)
 log "Final pod count: ${FINAL_PODS} (baseline was: ${BASELINE_PODS})"
 
 if [ "$FINAL_PODS" -le "$BASELINE_PODS" ]; then

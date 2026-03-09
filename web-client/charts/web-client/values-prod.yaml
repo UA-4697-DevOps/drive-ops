@@ -53,7 +53,9 @@ ingress:
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/certificate-arn: <your-acm-certificate-arn>  #this is mock value, replace with actual ARN
     alb.ingress.kubernetes.io/healthcheck-path: /health
   hosts:
     - host: ""
@@ -108,7 +110,7 @@ podDisruptionBudget:
 podAnnotations:
   prometheus.io/scrape: "true"
   prometheus.io/port: "8083"
-  prometheus.io/path: "/health"
+  prometheus.io/path: "/metrics"
 
 securityContext:
   allowPrivilegeEscalation: false
