@@ -1,0 +1,33 @@
+replicaCount: 2
+
+image:
+  pullPolicy: Always
+  tag: "staging"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-staging-driver-service-role
+  name: "driver-service"
+
+resources:
+  limits:
+    cpu: 300m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+
+config:
+  awsRegion: "us-east-2"
+  sqsTripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-staging.fifo"
+  sqsDriverAssignedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-staging.fifo"
+  sqsTripCompletedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-staging.fifo"
+  clientGatewayUrl: "http://client-gateway.staging.svc.cluster.local:8080"
+
+database:
+  secretName: "driver-service-secrets"
+  secretKey: "database-url"

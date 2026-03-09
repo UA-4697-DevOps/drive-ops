@@ -1,0 +1,110 @@
+# Default values for driver-service Helm chart
+replicaCount: 1
+
+image:
+  repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/driver-service
+  pullPolicy: Always
+  tag: "latest"
+
+
+imagePullSecrets: []
+
+
+nameOverride: ""
+
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: ""  
+  name: "driver-service"
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8082
+  portName: http
+
+resources:
+  limits:
+    cpu: 300m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8082
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8082
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  failureThreshold: 3
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+config:
+  awsRegion: "us-east-2"
+  sqsTripCreatedUrl: ""    
+  sqsDriverAssignedUrl: "" 
+  sqsTripCompletedUrl: "" 
+  clientGatewayUrl: ""     
+
+database:
+  secretName: "driver-service-secrets"
+  secretKey: "database-url"
+
+externalSecrets:
+  enabled: false
+  secretName: "drive-ops/dev/driver-service/config"
+  region: "us-east-2"
+
+configMap:
+  create: true
+
+secret:
+  create: false
+  databaseUrl: ""
