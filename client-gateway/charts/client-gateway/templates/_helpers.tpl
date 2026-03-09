@@ -62,10 +62,28 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
+AWS Account ID
+*/}}
+{{- define "client-gateway.awsAccountId" -}}
+{{- required "A valid .Values.aws.accountId is required!" .Values.aws.accountId -}}
+{{- end }}
+
+{{/*
 Image name
 */}}
 {{- define "client-gateway.image" -}}
 {{- $tag := .Values.image.tag | default .Chart.AppVersion -}}
+{{- $_ := include "client-gateway.awsAccountId" . -}}
 {{- $repository := tpl .Values.image.repository . -}}
 {{- printf "%s:%s" $repository $tag -}}
+{{- end }}
+
+{{/*
+Service Account Role ARN
+*/}}
+{{- define "client-gateway.roleArn" -}}
+{{- if .Values.serviceAccount.roleArn -}}
+{{- $_ := include "client-gateway.awsAccountId" . -}}
+{{- tpl .Values.serviceAccount.roleArn . -}}
+{{- end -}}
 {{- end }}
