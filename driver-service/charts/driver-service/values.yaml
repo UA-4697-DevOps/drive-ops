@@ -94,17 +94,18 @@ config:
   clientGatewayUrl: ""     
 
 database:
+  # -- Secret name created by ExternalSecret
   secretName: "driver-service-secrets"
-  secretKey: "database-url"
-
-externalSecrets:
-  enabled: false
-  secretName: "drive-ops/dev/driver-service/config"
-  region: "us-east-2"
+  # -- Secret keys matching ExternalSecret target
+  usernameKey: "DB_USERNAME"
+  passwordKey: "DB_PASSWORD"
+  hostKey: "DB_HOST"
+  dbNameKey: "DRIVER_DB_NAME"
 
 configMap:
+  # -- Create ConfigMap
   create: true
 
 secret:
+  # -- Create Secret (for local/testing only, ESO handles prod)
   create: false
-  databaseUrl: ""
