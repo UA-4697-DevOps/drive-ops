@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+  labels:
+    app: prometheus
+data:
+  prometheus.yml: |
+    # Global defaults applied to all scrape jobs
+    global:
+      scrape_interval: 15s        # How often Prometheus pulls metrics from targets
+      evaluation_interval: 15s    # How often Prometheus evaluates alerting rules
+
+    # Scrape configurations — each job defines a group of targets
+    scrape_configs:
+      # Job 1: Prometheus scrapes itself (for meta-monitoring)
+      - job_name: "prometheus"
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      # Job 2: Trip Service — the main application we are monitoring
+      # Prometheus will HTTP GET http://trip-service.default.svc.cluster.local:8081/metrics
+      # every 15 seconds and parse the Prometheus exposition format response
+      - job_name: "trip-service"
+        static_configs:
+          - targets: ["trip-service.default.svc.cluster.local:8081"]
+        metrics_path: "/metrics"    # Default path, shown explicitly for clarity

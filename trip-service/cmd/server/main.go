@@ -17,6 +17,7 @@ import (
 	"trip-service/internal/broker"
 	"trip-service/internal/repository"
 	"trip-service/internal/service"
+	"trip-service/internal/telemetry"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
@@ -91,6 +92,25 @@ func main() {
 	appCtx, appCancel := context.WithCancel(context.Background())
 	defer appCancel()
 
+	// --- OpenTelemetry Initialization ---
+	// Must happen early so the global TracerProvider and MeterProvider are set
+	// before any instrumented code runs. The shutdown function flushes pending
+	// spans and metrics on application exit.
+	otelShutdown, err := telemetry.Init(appCtx)
+	if err != nil {
+		log.Fatalf("Failed to initialise OpenTelemetry: %v", err)
+	}
+	defer func() {
+		// Use a fresh context — appCtx is already canceled by the shutdown
+		// sequence (line 275) before this defer runs, so passing it here
+		// would prevent the BatchSpanProcessor from flushing pending spans.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := otelShutdown(shutdownCtx); err != nil {
+			log.Printf("OpenTelemetry shutdown error: %v", err)
+		}
+	}()
+
 	// Helper for retry logic
 	connectWithRetry := func(desc string, fn func() error) error {
 		var err error
@@ -114,7 +134,7 @@ func main() {
 	}
 
 	var db *gorm.DB
-	err := connectWithRetry("Postgres", func() error {
+	err = connectWithRetry("Postgres", func() error {
 		var err error
 		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		return err
@@ -195,8 +215,18 @@ func main() {
 
 	// 6. Router setup
 	r := chi.NewRouter()
+
+	// Prometheus metrics endpoint — scraped by Prometheus every 15s.
+	// Registered WITHOUT telemetry middleware to avoid self-instrumentation
+	// noise (every scrape would create spans, inflate counters, etc.).
+	r.Handle("/metrics", telemetry.MetricsHandler())
 	r.Get("/health", handler.HealthCheck)
+
 	r.Route("/trips", func(r chi.Router) {
+		// Apply OpenTelemetry middleware to application routes only.
+		// This creates a trace span and records metrics for every HTTP request.
+		r.Use(telemetry.Middleware)
+
 		r.Post("/", handler.CreateTrip)
 		r.Get("/{id}", handler.GetTrip)
 		r.Patch("/{id}/assign-driver", handler.AssignDriver)

@@ -1,0 +1,196 @@
+# --- Trip Service KPI Dashboard ---
+# Pre-built Grafana dashboard stored as JSON inside a ConfigMap.
+# This gets mounted into the Grafana pod and auto-loaded by the dashboard provider.
+#
+# Dashboard panels:
+#   1. Request Rate     — requests per second, broken down by endpoint and method
+#   2. Error Rate       — 4xx and 5xx responses per second by endpoint
+#   3. Latency (p50/p95/p99) — response time percentiles by endpoint
+#   4. Active Requests  — currently in-flight HTTP requests (gauge)
+#   5. Goroutines       — number of active Go goroutines (runtime health)
+#   6. Memory Usage     — Go heap allocation in bytes (runtime health)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-trip-service
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  trip-service.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "title": "Request Rate (req/s)",
+          "description": "HTTP requests per second grouped by method and route. Uses the rate() function over the counter metric.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_server_requests_total{job=\"trip-service\"}[1m])) by (method, route)",
+              "legendFormat": "{{method}} {{route}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 15,
+                "gradientMode": "scheme"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Error Rate (4xx & 5xx / s)",
+          "description": "Rate of client (4xx) and server (5xx) errors. High values here indicate problems.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_server_requests_total{job=\"trip-service\",status=~\"4..|5..\"}[1m])) by (method, route, status)",
+              "legendFormat": "{{status}} {{method}} {{route}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 15
+              },
+              "color": { "mode": "palette-classic" }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Latency Percentiles (p50 / p95 / p99)",
+          "description": "Response time distribution. p50 = median, p95 = 95th percentile (most users), p99 = tail latency.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(http_server_request_duration_seconds_bucket{job=\"trip-service\"}[1m])) by (le, route))",
+              "legendFormat": "p50 {{route}}"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{job=\"trip-service\"}[1m])) by (le, route))",
+              "legendFormat": "p95 {{route}}"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket{job=\"trip-service\"}[1m])) by (le, route))",
+              "legendFormat": "p99 {{route}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 10
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Active Requests",
+          "description": "Number of HTTP requests currently being processed. A sustained high value may indicate slow handlers.",
+          "type": "gauge",
+          "gridPos": { "h": 6, "w": 8, "x": 0, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(http_server_active_requests{job=\"trip-service\"})",
+              "legendFormat": "in-flight"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 50 },
+                  { "color": "red", "value": 100 }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Goroutines",
+          "description": "Number of active Go goroutines. A steady increase may indicate a goroutine leak.",
+          "type": "timeseries",
+          "gridPos": { "h": 6, "w": 8, "x": 8, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "go_goroutines{job=\"trip-service\"}",
+              "legendFormat": "goroutines"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 10,
+                "gradientMode": "scheme"
+              },
+              "color": { "fixedColor": "purple", "mode": "fixed" }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Memory Usage (Heap)",
+          "description": "Go heap memory allocation. Helps detect memory leaks or excessive allocation.",
+          "type": "timeseries",
+          "gridPos": { "h": 6, "w": 8, "x": 16, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "go_memstats_heap_alloc_bytes{job=\"trip-service\"}",
+              "legendFormat": "heap alloc"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 10,
+                "gradientMode": "scheme"
+              },
+              "color": { "fixedColor": "orange", "mode": "fixed" }
+            },
+            "overrides": []
+          }
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["trip-service", "go", "monitoring"],
+      "templating": { "list": [] },
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "Trip Service KPIs",
+      "uid": "trip-service-kpis",
+      "version": 1
+    }

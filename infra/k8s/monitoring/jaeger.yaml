@@ -1,0 +1,120 @@
+# --- Jaeger All-in-One Deployment ---
+# Jaeger is a distributed tracing backend. It receives trace spans from
+# applications via OTLP (OpenTelemetry Protocol), stores them, and provides
+# a web UI for searching and visualizing request traces.
+#
+# "All-in-one" bundles three Jaeger components into a single binary:
+#   1. Collector  — receives spans from applications (port 4317 for OTLP gRPC)
+#   2. Query      — serves the search/visualization API
+#   3. UI         — the web frontend (port 16686)
+#
+# Storage: in-memory (data is lost on restart). For production, you would
+# configure Elasticsearch or Cassandra as a persistent backend.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: monitoring
+  labels:
+    app: jaeger
+    team: platform
+    env: dev
+    service: jaeger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+        team: platform
+        env: dev
+        service: jaeger
+    spec:
+      # Pod-level security: run as Jaeger's non-root UID and apply seccomp
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: jaeger
+          image: jaegertracing/jaeger:2.5.0
+          # Container-level security: least-privilege hardening
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          # Environment variables configure the all-in-one binary
+          env:
+            # COLLECTOR_OTLP_ENABLED: accept traces via OTLP protocol
+            # (the protocol that OpenTelemetry SDKs use to export spans)
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+          ports:
+            # OTLP gRPC receiver — Trip Service sends spans here
+            - containerPort: 4317
+              name: otlp-grpc
+              protocol: TCP
+            # Jaeger UI + Query API — developers browse traces here
+            - containerPort: 16686
+              name: ui
+              protocol: TCP
+          # Writable tmp dir — Jaeger uses /tmp for badger in-memory storage
+          volumeMounts:
+            - name: jaeger-tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          # Readiness: Jaeger exposes a health endpoint on port 14269
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 14269
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 14269
+            initialDelaySeconds: 10
+            periodSeconds: 15
+      volumes:
+        - name: jaeger-tmp
+          emptyDir: {}
+---
+# --- Jaeger Service ---
+# Exposes two ports inside the cluster:
+#   - 4317 (otlp-grpc): Trip Service connects here to send trace spans
+#   - 16686 (ui): Grafana and developers connect here to view traces
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: monitoring
+  labels:
+    app: jaeger
+spec:
+  type: ClusterIP
+  selector:
+    app: jaeger
+  ports:
+    # OTLP gRPC — the "intake" for traces from applications
+    - port: 4317
+      targetPort: otlp-grpc
+      protocol: TCP
+      name: otlp-grpc
+    # UI + Query API — the "output" for developers
+    - port: 16686
+      targetPort: ui
+      protocol: TCP
+      name: ui
