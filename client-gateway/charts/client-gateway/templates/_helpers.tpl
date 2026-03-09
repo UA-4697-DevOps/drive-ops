@@ -65,6 +65,7 @@ Create the name of the service account to use
 Image name
 */}}
 {{- define "client-gateway.image" -}}
-{{- $tag := .Values.image.tag | default .Chart.AppVersion }}
-{{- printf "%s:%s" .Values.image.repository $tag }}
+{{- $tag := .Values.image.tag | default .Chart.AppVersion -}}
+{{- $repository := tpl .Values.image.repository . -}}
+{{- printf "%s:%s" $repository $tag -}}
 {{- end }}

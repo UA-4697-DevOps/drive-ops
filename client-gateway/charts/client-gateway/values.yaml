@@ -6,8 +6,9 @@
 replicaCount: 1
 
 image:
-  # -- Container image repository
-  repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/client-gateway
+  # -- Container image repository.
+  # -- Supports templating via tpl in the _helpers.tpl.
+  repository: "{{ .Values.aws.accountId }}.dkr.ecr.{{ .Values.aws.region }}.amazonaws.com/client-gateway"
   # -- Image pull policy
   pullPolicy: IfNotPresent
   # -- Overrides the image tag whose default is the chart appVersion
@@ -21,12 +22,21 @@ nameOverride: ""
 # -- Override the full name of the release
 fullnameOverride: ""
 
+# -- AWS global configuration
+aws:
+  # -- AWS Account ID for IAM roles and ECR
+  accountId: "969283154407"
+  # -- AWS Region
+  region: "us-east-2"
+
 serviceAccount:
   # -- Specifies whether a service account should be created
   create: true
-  # -- Annotations to add to the service account (IRSA)
-  annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/client-gateway-role
+  # -- IAM role ARN for IRSA; if empty, no role-arn annotation will be added.
+  # -- Supports templating via tpl function in the serviceaccount template.
+  roleArn: "arn:aws:iam::{{ .Values.aws.accountId }}:role/client-gateway-role"
+  # -- Additional annotations to add to the service account
+  annotations: {}
   # -- The name of the service account to use
   name: "client-gateway"
 

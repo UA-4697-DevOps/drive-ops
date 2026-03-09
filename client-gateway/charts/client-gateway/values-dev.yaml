@@ -13,8 +13,7 @@ image:
 
 serviceAccount:
   create: true
-  annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/client-gateway-role
+  roleArn: "arn:aws:iam::{{ .Values.aws.accountId }}:role/client-gateway-role"
   name: "client-gateway"
 
 resources:
@@ -50,3 +49,12 @@ readinessProbe:
 
 strategy:
   type: Recreate  # Required for Telegram long-polling single-instance constraint
+
+bot:
+  # -- Telegram bot token; provided via ExternalSecret or --set at deploy time.
+  token: ""
+
+secret:
+  # -- Set to true to let Helm manage the secret (using bot.token).
+  # -- Set to false if using ExternalSecret (preferred for dev/prod).
+  create: false
