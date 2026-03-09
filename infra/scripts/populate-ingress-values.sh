@@ -80,7 +80,18 @@ done
 # 1. Read ACM certificate ARN
 # ============================================================
 echo -e "${YELLOW}→ Reading certificate_arn from ${ENV}/acm...${NC}"
-CERT_ARN=$(cd "$TG_ACM_DIR" && terragrunt output -raw certificate_arn 2>/dev/null)
+CERT_OUTPUT=$(mktemp)
+cd "$TG_ACM_DIR" && terragrunt output -raw certificate_arn > "$CERT_OUTPUT" 2>&1
+CERT_EXIT=$?
+if [[ $CERT_EXIT -ne 0 ]]; then
+  CERT_ERR=$(cat "$CERT_OUTPUT")
+  echo -e "${RED}✗ Failed to read certificate_arn from ${ENV}/acm (exit code: $CERT_EXIT)${NC}"
+  echo -e "${RED}   Error: ${CERT_ERR}${NC}"
+  rm -f "$CERT_OUTPUT"
+  exit $CERT_EXIT
+fi
+CERT_ARN=$(cat "$CERT_OUTPUT")
+rm -f "$CERT_OUTPUT"
 
 if [[ -z "$CERT_ARN" ]]; then
   echo -e "${RED}✗ certificate_arn is empty. Has 'terragrunt apply' been run in ${ENV}/acm?${NC}"
@@ -93,7 +104,18 @@ echo ""
 # 2. Read public subnet IDs (returned as JSON array, need CSV)
 # ============================================================
 echo -e "${YELLOW}→ Reading public_subnet_ids from ${ENV}/shared-infra...${NC}"
-SUBNET_JSON=$(cd "$TG_SHARED_DIR" && terragrunt output -json public_subnet_ids 2>/dev/null)
+SUBNET_OUTPUT=$(mktemp)
+cd "$TG_SHARED_DIR" && terragrunt output -json public_subnet_ids > "$SUBNET_OUTPUT" 2>&1
+SUBNET_EXIT=$?
+if [[ $SUBNET_EXIT -ne 0 ]]; then
+  SUBNET_ERR=$(cat "$SUBNET_OUTPUT")
+  echo -e "${RED}✗ Failed to read public_subnet_ids from ${ENV}/shared-infra (exit code: $SUBNET_EXIT)${NC}"
+  echo -e "${RED}   Error: ${SUBNET_ERR}${NC}"
+  rm -f "$SUBNET_OUTPUT"
+  exit $SUBNET_EXIT
+fi
+SUBNET_JSON=$(cat "$SUBNET_OUTPUT")
+rm -f "$SUBNET_OUTPUT"
 SUBNET_IDS=$(echo "$SUBNET_JSON" | jq -r '[.[]] | join(",")')
 
 if [[ -z "$SUBNET_IDS" ]]; then
@@ -106,7 +128,18 @@ echo -e "  ${GREEN}✓${NC} public_subnet_ids = ${CYAN}${SUBNET_IDS}${NC}"
 # 3. Read ALB security group ID
 # ============================================================
 echo -e "${YELLOW}→ Reading sg_alb_id from ${ENV}/shared-infra...${NC}"
-ALB_SG=$(cd "$TG_SHARED_DIR" && terragrunt output -raw sg_alb_id 2>/dev/null)
+ALB_OUTPUT=$(mktemp)
+cd "$TG_SHARED_DIR" && terragrunt output -raw sg_alb_id > "$ALB_OUTPUT" 2>&1
+ALB_EXIT=$?
+if [[ $ALB_EXIT -ne 0 ]]; then
+  ALB_ERR=$(cat "$ALB_OUTPUT")
+  echo -e "${RED}✗ Failed to read sg_alb_id from ${ENV}/shared-infra (exit code: $ALB_EXIT)${NC}"
+  echo -e "${RED}   Error: ${ALB_ERR}${NC}"
+  rm -f "$ALB_OUTPUT"
+  exit $ALB_EXIT
+fi
+ALB_SG=$(cat "$ALB_OUTPUT")
+rm -f "$ALB_OUTPUT"
 
 if [[ -z "$ALB_SG" ]]; then
   echo -e "${RED}✗ sg_alb_id is empty. Has 'terragrunt apply' been run in ${ENV}/shared-infra?${NC}"
@@ -126,12 +159,14 @@ for manifest in "${INGRESS_FILES[@]}"; do
     continue
   fi
 
-  # Use a temp file to apply all three substitutions atomically
+  # Use a temp file to apply all three substitutions atomically.
+  # Use regexes to match the entire annotation line, making replacements idempotent
+  # (i.e., subsequent runs will re-replace actual values, not just placeholders).
   TMP=$(mktemp)
   sed \
-    -e "s|REPLACE_WITH_ACM_CERT_ARN|${CERT_ARN}|g" \
-    -e "s|REPLACE_WITH_PUBLIC_SUBNET_IDS|${SUBNET_IDS}|g" \
-    -e "s|REPLACE_WITH_ALB_SG_ID|${ALB_SG}|g" \
+    -e "s#\(alb.ingress.kubernetes.io/certificate-arn:\).*#\1 ${CERT_ARN} # From acm output: certificate_arn#" \
+    -e "s#\(alb.ingress.kubernetes.io/subnets:\).*#\1 ${SUBNET_IDS} # From shared-infra output: public_subnet_ids (comma-separated)#" \
+    -e "s#\(alb.ingress.kubernetes.io/security-groups:\).*#\1 ${ALB_SG} # From shared-infra output: sg_alb_id#" \
     "$manifest" > "$TMP"
   mv "$TMP" "$manifest"
 

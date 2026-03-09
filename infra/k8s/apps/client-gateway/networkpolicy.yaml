@@ -13,9 +13,10 @@ spec:
     - Ingress
 ---
 # Allow ingress from the ALB to client-gateway pods.
-# The AWS ALB (target-type=ip) forwards requests directly to pod IPs from within
-# the VPC CIDR (10.0.0.0/16). This rule permits that traffic on the pod's listen
-# port (8080) so that HTTP/HTTPS requests routed by the ALB can reach the bot.
+# The AWS ALB (target-type=ip) forwards requests directly to pod IPs.
+# This rule relies on AWS Security Groups managed by the ALB Ingress Controller
+# to restrict traffic to the ALB only; the NetworkPolicy here targets client-gateway pods
+# by label selector to ensure the ALB can reach them on port 8080.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -28,10 +29,7 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    - from:
-        - ipBlock:
-            cidr: 10.0.0.0/16
-      ports:
+    - ports:
         - protocol: TCP
           port: 8080
 ---
@@ -90,7 +88,14 @@ spec:
   policyTypes:
     - Egress
   egress:
-    - ports:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
         - protocol: UDP
           port: 53
         - protocol: TCP
