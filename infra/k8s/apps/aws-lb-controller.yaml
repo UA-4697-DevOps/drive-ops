@@ -13,8 +13,13 @@ spec:
     targetRevision: "1.10.0"
     helm:
       valuesObject:
-        # PLACEHOLDER: Update these values after Terraform deployment
+        # ⚠️ IMPORTANT: Replace these placeholders before enabling auto-sync!
         # Get values from: terragrunt output --terragrunt-working-dir=infra/terragrunt/envs/dev/{eks,shared-infra,aws-lb-controller}
+        # Required replacements:
+        #   - clusterName: REPLACE_WITH_CLUSTER_NAME → eks output: cluster_name
+        #   - eks.amazonaws.com/role-arn: REPLACE_WITH_ALB_ROLE_ARN → aws-lb-controller output: alb_controller_role_arn
+        #   - vpcId: REPLACE_WITH_VPC_ID → shared-infra output: vpc_id
+        # After replacing, enable auto-sync by uncommenting spec.syncPolicy.automated below
         clusterName: REPLACE_WITH_CLUSTER_NAME # From eks output: cluster_name
 
         serviceAccount:
@@ -49,8 +54,10 @@ spec:
     namespace: kube-system
 
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+    # ⚠️ AUTOMATED SYNC DISABLED: Placeholders must be replaced first!
+    # Uncomment 'automated' section after replacing REPLACE_WITH_* placeholders above
+    # automated:
+    #   prune: true
+    #   selfHeal: true
     syncOptions:
       - CreateNamespace=false # kube-system already exists

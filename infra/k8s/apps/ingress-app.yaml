@@ -11,12 +11,19 @@ spec:
     repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
     targetRevision: HEAD
     path: infra/k8s/apps/ingress
+    # ⚠️ NOTE: The ingress manifests in infra/k8s/apps/ingress/ contain placeholders
+    # that must be replaced after Terraform deployment:
+    #   - REPLACE_WITH_ACM_CERT_ARN
+    #   - REPLACE_WITH_PUBLIC_SUBNET_IDS
+    #   - REPLACE_WITH_ALB_SG_ID
   destination:
     server: https://kubernetes.default.svc
     namespace: dev
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+    # ⚠️ AUTOMATED SYNC DISABLED: Placeholders in ingress.yaml must be replaced first!
+    # Uncomment 'automated' section after replacing placeholders in infra/k8s/apps/ingress/ingress.yaml
+    # automated:
+    #   prune: true
+    #   selfHeal: true
     syncOptions:
       - CreateNamespace=true

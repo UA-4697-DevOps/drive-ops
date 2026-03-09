@@ -13,8 +13,11 @@ spec:
     targetRevision: "1.15.0"
     helm:
       valuesObject:
-        # PLACEHOLDER: Update role ARN after Terraform deployment
+        # ⚠️ IMPORTANT: Replace placeholder before enabling auto-sync!
         # Get value from: terragrunt output --terragrunt-working-dir=infra/terragrunt/envs/dev/external-dns external_dns_role_arn
+        # Required replacement:
+        #   - eks.amazonaws.com/role-arn: REPLACE_WITH_EXTERNAL_DNS_ROLE_ARN → external-dns output: external_dns_role_arn
+        # After replacing, enable auto-sync by uncommenting spec.syncPolicy.automated below
         provider: aws
 
         serviceAccount:
@@ -48,8 +51,10 @@ spec:
     namespace: external-dns
 
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+    # ⚠️ AUTOMATED SYNC DISABLED: Placeholder must be replaced first!
+    # Uncomment 'automated' section after replacing REPLACE_WITH_EXTERNAL_DNS_ROLE_ARN placeholder above
+    # automated:
+    #   prune: true
+    #   selfHeal: true
     syncOptions:
       - CreateNamespace=true
