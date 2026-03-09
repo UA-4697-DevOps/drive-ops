@@ -4,13 +4,8 @@
 # Runs the k6 load test script inside the cluster against the Trip Service.
 #
 # Prerequisites:
-#   1. Create the ConfigMap with the test script:
-#      kubectl create configmap k6-load-test \
-#        --from-file=load-test.js=tests/load/load-test.js \
-#        -n dev
-#
-#   2. Apply this Job:
-#      kubectl apply -f tests/load/k6-job.yaml
+#   1. Apply the Kustomization (creates ConfigMap and Job):
+#      kubectl apply -k tests/load
 #
 #   3. Watch results:
 #      kubectl logs -n dev -l job-name=k6-trip-service-load-test -f

@@ -10,7 +10,7 @@
 //   k6 run -e BASE_URL=http://trip-service.dev.svc.cluster.local load-test.js
 //
 // Usage (in-cluster via Kubernetes Job):
-//   kubectl apply -f k6-job.yaml
+//   kubectl apply -k .
 // ==============================================================================
 
 import http from "k6/http";
