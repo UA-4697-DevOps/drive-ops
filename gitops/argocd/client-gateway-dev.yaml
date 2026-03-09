@@ -16,6 +16,12 @@ spec:
     server: https://kubernetes.default.svc
     namespace: client-gateway
   syncPolicy:
+    # Automated sync is intentionally disabled until all placeholder values in
+    # infra/k8s/apps/client-gateway/ingress.yaml (ACM cert ARN, public subnet IDs, ALB SG ID)
+    # and infra/k8s/apps/client-gateway/serviceaccount.yaml (IRSA role ARN) have been
+    # populated by running infra/scripts/populate-client-gateway-ingress.sh after
+    # Terraform apply, and the updated manifests have been committed to the repo.
+    # Re-enable by adding: automated: { prune: true, selfHeal: true }
     syncOptions:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground
