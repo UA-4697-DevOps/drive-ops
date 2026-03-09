@@ -63,7 +63,7 @@ func Init(ctx context.Context) (shutdown func(context.Context) error, err error)
 	res, err := resource.Merge(
 		resource.Default(),
 		resource.NewWithAttributes(
-			semconv.SchemaURL,
+			resource.Default().SchemaURL(),
 			semconv.ServiceName("trip-service"),
 			semconv.ServiceVersion("1.0.0"),
 		),
