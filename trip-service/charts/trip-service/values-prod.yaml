@@ -1,6 +1,6 @@
 # Production environment values for trip-service
 
-replicaCount: 2
+replicaCount: 3
 
 image:
   repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service
@@ -15,14 +15,36 @@ serviceAccount:
 
 resources:
   limits:
-    cpu: 200m
-    memory: 256Mi
+    cpu: 500m
+    memory: 512Mi
   requests:
-    cpu: 50m
-    memory: 128Mi
+    cpu: 150m
+    memory: 256Mi
 
 autoscaling:
-  enabled: false
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 65
+  targetMemoryUtilizationPercentage: 75
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 4
+        periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 120
+      selectPolicy: Min
 
 config:
   awsRegion: "us-east-2"
@@ -75,7 +97,7 @@ strategy:
 # Pod disruption budget for production
 podDisruptionBudget:
   enabled: true
-  minAvailable: 1  # Allow one pod to be disrupted during maintenance
+  minAvailable: 2  # Allow one pod to be disrupted during maintenance
 
 # Production affinity rules
 affinity:

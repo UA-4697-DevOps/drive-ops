@@ -50,11 +50,11 @@ service:
 resources:
   # -- Resource limits
   limits:
-    cpu: 200m
-    memory: 256Mi
+    cpu: 500m
+    memory: 512Mi
   # -- Resource requests
   requests:
-    cpu: 50m
+    cpu: 100m
     memory: 128Mi
 
 autoscaling:
