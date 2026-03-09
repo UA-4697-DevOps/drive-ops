@@ -66,5 +66,5 @@ Image name
 */}}
 {{- define "web-client.image" -}}
 {{- $tag := .Values.image.tag | default .Chart.AppVersion }}
-{{- printf "%s:%s" .Values.image.repository $tag }}
+{{- printf "%s:%s" .Values.image.repository $tag | quote }}
 {{- end }}

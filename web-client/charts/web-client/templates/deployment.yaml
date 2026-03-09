@@ -16,9 +16,17 @@ spec:
       {{- include "web-client.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
+      {{- $cms := list }}
+      {{- if .Values.configMap.create }}{{- $cms = append $cms (printf "%s-config" (include "web-client.fullname" .)) }}{{- end }}
+      {{- if .Values.nginx.configOverride }}{{- $cms = append $cms (printf "%s-nginx" (include "web-client.fullname" .)) }}{{- end }}
+      {{- if or $cms .Values.podAnnotations }}
       annotations:
+        {{- if $cms }}
+        configmap.reloader.stakater.com/reload: {{ join "," $cms | quote }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- end }}
       labels:
         {{- include "web-client.selectorLabels" . | nindent 8 }}
