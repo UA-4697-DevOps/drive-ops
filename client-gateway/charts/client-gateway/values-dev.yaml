@@ -50,3 +50,15 @@ readinessProbe:
 
 strategy:
   type: Recreate  # Required for Telegram long-polling single-instance constraint
+
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+  hosts:
+    - host: driver.dev.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
