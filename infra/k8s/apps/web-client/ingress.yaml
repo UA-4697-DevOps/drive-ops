@@ -1,8 +1,8 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: client-gateway-ingress
-  namespace: client-gateway
+  name: web-client-ingress
+  namespace: web-client
   annotations:
     # Infrastructure values below are populated by infra/scripts/populate-ingress-values.sh
     # after Terraform is applied. Run it once, then commit the updated manifest.
@@ -16,12 +16,13 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
 
-    # SSL/TLS Configuration
+    # SSL/TLS Configuration — HTTP:80 is kept to enable the ssl-redirect action;
+    # the ALB automatically returns 301 → HTTPS for any HTTP request.
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
     alb.ingress.kubernetes.io/certificate-arn: REPLACE_WITH_ACM_CERT_ARN # From acm output: certificate_arn
 
-    # Health Check (client-gateway health endpoint)
+    # Health Check (web-client nginx health endpoint)
     alb.ingress.kubernetes.io/healthcheck-path: /health
     alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
     alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
@@ -33,25 +34,24 @@ metadata:
     alb.ingress.kubernetes.io/security-groups: REPLACE_WITH_ALB_SG_ID # From shared-infra output: sg_alb_id
 
     # Tags
-    alb.ingress.kubernetes.io/tags: Environment=dev,ManagedBy=ArgoCD,Project=drive-ops,Service=client-gateway
+    alb.ingress.kubernetes.io/tags: Environment=dev,ManagedBy=ArgoCD,Project=drive-ops,Service=web-client
 
-    # Group with other Ingresses to share the same ALB
+    # Share the same ALB as client-gateway to save cost (grouped by ALB controller)
     alb.ingress.kubernetes.io/group.name: driveops-dev
 
-    # External DNS annotation
-    external-dns.alpha.kubernetes.io/hostname: api.driveops.dmytrominochkin.cloud
+    # External DNS annotation — apex domain for the user-facing web app
+    external-dns.alpha.kubernetes.io/hostname: driveops.dmytrominochkin.cloud
 
 spec:
   ingressClassName: alb
   rules:
-  # API Gateway (Telegram Bot)
-  - host: api.driveops.dmytrominochkin.cloud
+  - host: driveops.dmytrominochkin.cloud
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: client-gateway
+            name: web-client
             port:
               number: 80
