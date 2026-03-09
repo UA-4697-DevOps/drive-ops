@@ -1,0 +1,84 @@
+name: Validate K8s Manifests
+
+# Validates raw Kubernetes manifests with kubectl dry-run and kubeconform schema
+# validation on every PR that touches infra/k8s/apps/. No cluster required.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/k8s/apps/**'
+      - 'gitops/argocd/**'
+      - '.github/workflows/validate-k8s-manifests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/k8s/apps/**'
+      - 'gitops/argocd/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kubeconform:
+    name: Schema Validation (kubeconform)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: Validate infra/k8s/apps manifests
+        run: |
+          kubeconform \
+            -strict \
+            -summary \
+            -ignore-missing-schemas \
+            -kubernetes-version 1.29.0 \
+            infra/k8s/apps/**/*.yaml
+
+      - name: Validate gitops/argocd Application manifests
+        run: |
+          # ArgoCD CRD schema from upstream
+          kubeconform \
+            -strict \
+            -summary \
+            -ignore-missing-schemas \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            gitops/argocd/*.yaml
+
+  kubectl-dry-run:
+    name: kubectl --dry-run=client
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Dry-run client-gateway manifests
+        run: |
+          kubectl apply --dry-run=client -f infra/k8s/apps/client-gateway/
+
+      - name: Dry-run client-gateway ArgoCD Application
+        run: |
+          # Validates Application manifest structure client-side without a cluster
+          kubectl apply --dry-run=client \
+            --validate=false \
+            -f infra/k8s/apps/client-gateway.yaml \
+            -f gitops/argocd/client-gateway-dev.yaml
+
+      - name: Dry-run all other managed app manifests
+        run: |
+          for dir in infra/k8s/apps/*/; do
+            [ -d "$dir" ] || continue
+            echo "--- dry-run: $dir"
+            kubectl apply --dry-run=client -f "$dir"
+          done

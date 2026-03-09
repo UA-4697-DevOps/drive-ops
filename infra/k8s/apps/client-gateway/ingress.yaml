@@ -4,8 +4,13 @@ metadata:
   name: client-gateway-ingress
   namespace: client-gateway
   annotations:
-    # PLACEHOLDER: Update certificate ARN, subnets, and security groups after Terraform deployment
-    # Get values from: terragrunt output --terragrunt-working-dir=infra/terragrunt/envs/dev/{acm,shared-infra}
+    # Infrastructure values below are populated by infra/scripts/populate-client-gateway-ingress.sh
+    # after Terraform is applied. Run it once, then commit the updated manifest.
+    #
+    # How to retrieve values manually:
+    #   ACM cert   : cd infra/terragrunt/envs/dev/acm && terragrunt output certificate_arn
+    #   Subnets    : cd infra/terragrunt/envs/dev/shared-infra && terragrunt output public_subnet_ids
+    #   ALB SG     : cd infra/terragrunt/envs/dev/shared-infra && terragrunt output sg_alb_id
 
     # ALB Configuration
     alb.ingress.kubernetes.io/scheme: internet-facing
