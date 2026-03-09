@@ -10,6 +10,26 @@ spec:
   policyTypes:
     - Ingress
 ---
+# Allow ingress from ALB (via VPC CIDR) for health checks and API traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: client-gateway-allow-ingress
+  namespace: client-gateway
+spec:
+  podSelector:
+    matchLabels:
+      app: client-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.0.0.0/16
+      ports:
+        - protocol: TCP
+          port: 8080
+---
 # Allow egress from client-gateway pods to trip-service namespace
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
