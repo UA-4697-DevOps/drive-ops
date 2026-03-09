@@ -24,10 +24,20 @@ data "aws_iam_policy_document" "external_dns" {
     effect = "Allow"
     actions = [
       "route53:ListHostedZones",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ReadRoute53HostedZoneRecords"
+    effect = "Allow"
+    actions = [
       "route53:ListResourceRecordSets",
       "route53:ListTagsForResource",
     ]
-    resources = ["*"]
+    resources = [
+      "arn:aws:route53:::hostedzone/${var.zone_id}",
+    ]
   }
 }
 
