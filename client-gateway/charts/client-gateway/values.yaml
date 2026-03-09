@@ -136,6 +136,8 @@ configMap:
 secret:
   # -- Create Secret (for local/testing only; use external secrets in production)
   create: false
+  # -- Name of an existing secret to use for BOT_TOKEN. If set, this takes precedence over the generated secret name.
+  existingSecretName: ""
   # -- Bot token (only used if secret.create is true)
   botToken: ""
 

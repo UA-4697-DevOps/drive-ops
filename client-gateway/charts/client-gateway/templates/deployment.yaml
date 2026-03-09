@@ -45,11 +45,13 @@ spec:
           env:
             - name: PYTHONUNBUFFERED
               value: "1"
+            {{- if or .Values.secret.create .Values.secret.existingSecretName }}
             - name: BOT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "client-gateway.fullname" . }}-secrets
+                  name: {{ default (printf "%s-secrets" (include "client-gateway.fullname" .)) .Values.secret.existingSecretName }}
                   key: bot-token
+            {{- end }}
             - name: TRIP_SERVICE_URL
               valueFrom:
                 configMapKeyRef:
