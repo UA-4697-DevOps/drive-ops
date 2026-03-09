@@ -99,3 +99,9 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
             failureThreshold: 3
+          volumeMounts:
+            - name: tmp-emptydir
+              mountPath: /tmp
+      volumes:
+        - name: tmp-emptydir
+          emptyDir: {}
