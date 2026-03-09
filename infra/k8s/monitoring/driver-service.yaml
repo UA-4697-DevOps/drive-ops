@@ -73,18 +73,22 @@ spec:
                   key: db-url
 
             # --- SQS Queues (placeholder — not needed for monitoring only) ---
+            # Non-empty placeholder values are required: the pydantic validator
+            # (require_runtime_vars) rejects empty strings with ValueError.
+            # The SQS consumer will fail to connect (no real credentials) but the
+            # failure is caught in a try/except so the service still starts.
             - name: AWS_REGION
               value: "us-east-2"
             - name: SQS_TRIP_CREATED_URL
-              value: ""
+              value: "https://sqs.us-east-2.amazonaws.com/000000000000/placeholder"
             - name: SQS_DRIVER_ASSIGNED_URL
-              value: ""
+              value: "https://sqs.us-east-2.amazonaws.com/000000000000/placeholder"
             - name: SQS_TRIP_COMPLETED_URL
-              value: ""
+              value: "https://sqs.us-east-2.amazonaws.com/000000000000/placeholder"
 
-            # --- Client Gateway (placeholder) ---
+            # --- Client Gateway ---
             - name: CLIENT_GATEWAY_URL
-              value: ""
+              value: "http://client-gateway.default.svc.cluster.local:8080"
 
             # --- OpenTelemetry ---
             # Tells the OTel SDK where to send trace spans (Jaeger OTLP gRPC)
