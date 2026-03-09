@@ -2,10 +2,11 @@
 # Grafana is a visualization and dashboarding tool. It queries Prometheus
 # for metrics and Jaeger for traces, then presents them in configurable panels.
 #
-# Three ConfigMaps are mounted into Grafana's provisioning directories:
-#   1. grafana-datasources       → /etc/grafana/provisioning/datasources/
-#   2. grafana-dashboard-provider → /etc/grafana/provisioning/dashboards/
-#   3. grafana-dashboard-trip-service → /var/lib/grafana/dashboards/
+# ConfigMaps are mounted into Grafana's provisioning directories:
+#   1. grafana-datasources              → /etc/grafana/provisioning/datasources/
+#   2. grafana-dashboard-provider       → /etc/grafana/provisioning/dashboards/
+#   3. grafana-dashboard-trip-service ┐
+#   4. grafana-dashboard-web-client   ┘→ /var/lib/grafana/dashboards/ (projected)
 #
 # On startup, Grafana reads these and auto-configures everything.
 # No manual UI clicks needed.
@@ -107,8 +108,16 @@ spec:
           configMap:
             name: grafana-dashboard-provider
         - name: dashboards
-          configMap:
-            name: grafana-dashboard-trip-service
+          # projected volume combines multiple ConfigMaps into one mount directory;
+          # each ConfigMap's keys become separate files under /var/lib/grafana/dashboards/
+          projected:
+            sources:
+              - configMap:
+                  name: grafana-dashboard-trip-service
+              - configMap:
+                  name: grafana-dashboard-web-client
+              - configMap:
+                  name: grafana-dashboard-driver-service
         # emptyDir volumes for writable paths (ephemeral, cleared on pod restart)
         - name: grafana-data
           emptyDir: {}

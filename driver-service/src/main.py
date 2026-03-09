@@ -25,6 +25,8 @@ from src.services.driver_notification_service import DriverNotificationService
 from src.clients.gateway_client import ClientGatewayClient
 from src.clients.sqs_publisher import SQSPublisher
 from src.services.driver_response_service import DriverResponseService
+from src.telemetry.tracing import init_tracing, instrument_app
+from prometheus_fastapi_instrumentator import Instrumentator
 
 # Logging Setup
 logging.basicConfig(
@@ -42,6 +44,7 @@ gateway_client = None
 notification_service = None
 sqs_publisher = None
 response_service = None
+shutdown_tracing = None
 
 # Background Task references for graceful shutdown
 trip_sqs_consumer_task = None
@@ -51,10 +54,13 @@ trip_sqs_consumer_task = None
 async def lifespan(app: FastAPI):
     """Lifecycle manager for FastAPI application startup and shutdown"""
     global gateway_client, notification_service, sqs_publisher, response_service
-    global trip_sqs_consumer_task
+    global trip_sqs_consumer_task, shutdown_tracing
 
     # --- STARTUP PHASE ---
     logger.info("Starting Driver Service (SQS Unified Mode)...")
+
+    # Initialise OpenTelemetry tracing (Jaeger)
+    shutdown_tracing = init_tracing()
 
     # Attach storage to app state for access in endpoint dependencies
     app.state.drivers_storage = drivers
@@ -123,6 +129,9 @@ async def lifespan(app: FastAPI):
     # --- SHUTDOWN PHASE ---
     logger.info("Shutting down Driver Service...")
 
+    if shutdown_tracing:
+        shutdown_tracing()
+
     # [FIXED] Simplified shutdown: RabbitMQ logic removed
     if trip_sqs_consumer_task:
         trip_sqs_consumer_task.cancel()
@@ -151,6 +160,18 @@ app = FastAPI(
 
   lifespan=lifespan
 )
+
+# --- Observability ---
+# Prometheus /metrics endpoint (scraped by Prometheus every 15s)
+Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+
+# OpenTelemetry auto-instrumentation (FastAPI spans → Jaeger, HTTPX spans, SQLAlchemy spans)
+try:
+    from src.database import engine as _db_engine
+    instrument_app(app, _db_engine.sync_engine)
+except Exception:
+    # If DB engine is unavailable at import time, instrument without SQLAlchemy
+    instrument_app(app)
 
 # Helper for dependency injection
 def get_notification_service():

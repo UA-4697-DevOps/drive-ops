@@ -1,0 +1,178 @@
+# --- Web Client (nginx) KPI Dashboard ---
+# Pre-built Grafana dashboard for the web-client nginx deployment.
+# Mounted into the Grafana pod and auto-loaded by the dashboard provider.
+#
+# Dashboard panels:
+#   1. Status             — nginx_up: is nginx reachable? (stat)
+#   2. Active Connections — currently open connections (gauge)
+#   3. Request Rate       — HTTP requests per second (timeseries)
+#   4. Connection States  — reading / writing / waiting breakdown (timeseries)
+#   5. Connection Rate    — accepted vs handled connections per second (timeseries)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-web-client
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  web-client.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "title": "Status",
+          "description": "1 = nginx is up and reachable by the exporter. 0 = nginx is down.",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "nginx_up{job=\"web-client\"}",
+              "legendFormat": "nginx"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+              ],
+              "thresholds": {
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              },
+              "color": { "mode": "thresholds" }
+            },
+            "overrides": []
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" }
+        },
+        {
+          "title": "Active Connections",
+          "description": "Number of currently active connections to nginx. Includes reading, writing, and waiting states.",
+          "type": "gauge",
+          "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "nginx_connections_active{job=\"web-client\"}",
+              "legendFormat": "active"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 100 },
+                  { "color": "red", "value": 500 }
+                ]
+              },
+              "color": { "mode": "thresholds" },
+              "min": 0
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Request Rate (req/s)",
+          "description": "HTTP requests per second served by nginx. Derived from the nginx_http_requests_total counter using rate().",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 16, "x": 8, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rate(nginx_http_requests_total{job=\"web-client\"}[1m])",
+              "legendFormat": "requests/s"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 15,
+                "gradientMode": "scheme"
+              },
+              "color": { "fixedColor": "blue", "mode": "fixed" }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Connection States",
+          "description": "Breakdown of active connections by state:\n- reading: nginx is reading the request header\n- writing: nginx is writing a response back to the client\n- waiting: keep-alive connection idle, waiting for the next request",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "nginx_connections_reading{job=\"web-client\"}",
+              "legendFormat": "reading"
+            },
+            {
+              "expr": "nginx_connections_writing{job=\"web-client\"}",
+              "legendFormat": "writing"
+            },
+            {
+              "expr": "nginx_connections_waiting{job=\"web-client\"}",
+              "legendFormat": "waiting"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 10
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "title": "Connection Rate (accepted vs handled / s)",
+          "description": "Rate of accepted vs handled connections per second. A persistent gap indicates dropped connections.",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "rate(nginx_connections_accepted{job=\"web-client\"}[1m])",
+              "legendFormat": "accepted/s"
+            },
+            {
+              "expr": "rate(nginx_connections_handled{job=\"web-client\"}[1m])",
+              "legendFormat": "handled/s"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "connps",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "smooth",
+                "fillOpacity": 10
+              }
+            },
+            "overrides": []
+          }
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["web-client", "nginx", "monitoring"],
+      "templating": { "list": [] },
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "Web Client (nginx) KPIs",
+      "uid": "web-client-kpis",
+      "version": 1
+    }
