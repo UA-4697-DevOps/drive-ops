@@ -50,7 +50,7 @@ inputs = {
   discord_webhook_url = get_env("TF_VAR_discord_webhook_url", "https://discord.com/api/webhooks/1234567890/dummy_token")
 
   # --- Client-Gateway Secrets ---
-  telegram_bot_token = get_env("TF_VAR_telegram_bot_token", "PLACEHOLDER")
+  telegram_bot_token = get_env("TF_VAR_telegram_bot_token")
 
   # Common tags
   common_tags = {

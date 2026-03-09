@@ -16,9 +16,6 @@ spec:
     server: https://kubernetes.default.svc
     namespace: client-gateway
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
     syncOptions:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground

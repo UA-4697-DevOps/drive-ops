@@ -46,6 +46,7 @@ resource "aws_secretsmanager_secret" "telegram_bot_token" {
 }
 
 resource "aws_secretsmanager_secret_version" "telegram_bot_token_val" {
+  count     = var.telegram_bot_token != null ? 1 : 0
   secret_id = aws_secretsmanager_secret.telegram_bot_token.id
   secret_string = jsonencode({
     token = var.telegram_bot_token

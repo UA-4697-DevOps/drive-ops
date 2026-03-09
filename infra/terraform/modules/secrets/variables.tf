@@ -40,5 +40,6 @@ variable "telegram_bot_token" {
   description = "Telegram Bot Token for client-gateway (Optional: can be set manually in Console later)"
   type        = string
   sensitive   = true
-  default     = "PLACEHOLDER"
+  nullable    = true
+  default     = null
 }
