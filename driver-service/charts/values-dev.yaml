@@ -1,0 +1,19 @@
+replicaCount: 1
+
+image:
+  tag: latest
+  pullPolicy: Always
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+
+gateway:
+  url: "http://client-gateway.dev.svc.cluster.local:8080"

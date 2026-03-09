@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: driver-service-prod
+  namespace: argocd
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: devops-releases
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: devops-alerts
+spec:
+  project: drive-ops
+  source:
+    repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
+    targetRevision: main
+    path: driver-service/charts
+    helm:
+      valueFiles:
+        - ../../gitops/base/values.yaml
+        - ../../gitops/overlays/prod/values.yaml
+      parameters:
+        - name: externalSecret.secretPath
+          value: drive-ops/prod/rds/credentials
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: driver-service-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - ServerSideApply=true
+    retry:
+      limit: 2
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

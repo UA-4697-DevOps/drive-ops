@@ -9,7 +9,6 @@ dist/
 *.log
 .terragrunt-cache/
 .terraform/
-
 # === Python ===
 __pycache__/
 *.py[cod]
@@ -33,8 +32,6 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
-
 # === Infrastructure ===
 .terraform/
 *.tfstate
@@ -49,14 +46,12 @@ rabbitmq_data/
 # Added for Terratest safety
 z_terratest_mock_provider_override.tf
 tfplan.out
-
 # === Web ===
 node_modules/
 npm-debug.log*
 yarn-error.log*
 .next/
 .nuxt/
-
 # === Go ===
 *.exe
 *.exe~
@@ -67,12 +62,10 @@ yarn-error.log*
 *.out
 vendor/
 go.work
-
 # Swagger generated files
 **/docs/docs.go
 **/docs/swagger.json
 **/docs/swagger.yaml
-
 # === Critical ===
 .env
 .env.local
@@ -84,7 +77,6 @@ go.work
 # Local override files for sensitive configuration (see infra/terragrunt/envs/*/env_vars.yaml)
 .env_vars.local.yaml
 *_vars.local.yaml
-
 # Kubernetes secrets
 **/k8s/secret*.yaml
 **/k8s/secret*.yml

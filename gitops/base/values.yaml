@@ -1,0 +1,46 @@
+replicaCount: 1
+
+image:
+  repository: "969283154407.dkr.ecr.us-east-2.amazonaws.com/driver-service"  # overwritten by CI on every deploy
+  pullPolicy: IfNotPresent
+  tag: "none"
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8082
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 300m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+serviceAccount:
+  create: true
+  iamRoleArn: ""
+
+aws:
+  region: us-east-2
+
+sqs:
+  tripCreatedUrl: ""
+  driverAssignedUrl: ""
+  tripCompletedUrl: ""
+
+gateway:
+  url: ""
+
+env:
+  LOG_LEVEL: "info"
+
+externalSecret:
+  secretPath: ""

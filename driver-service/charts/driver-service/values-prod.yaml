@@ -34,3 +34,6 @@ config:
 database:
   secretName: "driver-service-secrets"
   secretKey: "database-url"
+
+externalSecret:
+  secretPath: "drive-ops/prod/rds/credentials"
