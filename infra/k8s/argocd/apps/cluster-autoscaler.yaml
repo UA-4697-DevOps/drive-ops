@@ -1,0 +1,49 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster-autoscaler
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://kubernetes.github.io/autoscaler
+    chart: cluster-autoscaler
+    targetRevision: 9.43.2
+    helm:
+      values: |
+        autoDiscovery:
+          clusterName: drive-ops-dev
+        awsRegion: us-east-2
+        rbac:
+          serviceAccount:
+            create: true
+            name: cluster-autoscaler
+            annotations:
+              # After running: cd infra/terragrunt/envs/dev/cluster-autoscaler && terragrunt apply
+              # Retrieve with: terragrunt output -raw role_arn
+              eks.amazonaws.com/role-arn: "" # Replace with Cluster Autoscaler IRSA role ARN
+        extraArgs:
+          balance-similar-node-groups: true
+          skip-nodes-with-system-pods: false
+          expander: least-waste
+          scale-down-delay-after-add: 5m
+          scale-down-unneeded-time: 5m
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ApplyOutOfSyncOnly=true
