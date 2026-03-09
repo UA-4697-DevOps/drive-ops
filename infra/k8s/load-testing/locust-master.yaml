@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: locust-master
+  namespace: load-testing
+  labels:
+    app: locust-master
+spec:
+  selector:
+    app: locust-master
+  ports:
+    - name: web-ui
+      port: 8089
+      targetPort: 8089
+    - name: worker-comm
+      port: 5557
+      targetPort: 5557
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-master
+  namespace: load-testing
+  labels:
+    app: locust-master
+    role: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: locust-master
+  template:
+    metadata:
+      labels:
+        app: locust-master
+        role: master
+    spec:
+      containers:
+        - name: locust-master
+          image: locustio/locust:2.32.3
+          args:
+            - "--master"
+            - "--locustfile=/scripts/locustfile.py"
+            - "--host=$(TARGET_HOST)"
+          ports:
+            - containerPort: 8089
+            - containerPort: 5557
+          env:
+            - name: TARGET_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: locust-config
+                  key: target_host
+          volumeMounts:
+            - name: locust-scripts
+              mountPath: /scripts
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8089
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8089
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: locust-scripts
+          configMap:
+            name: locust-scripts

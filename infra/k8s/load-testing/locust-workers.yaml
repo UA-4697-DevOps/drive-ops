@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-worker
+  namespace: load-testing
+  labels:
+    app: locust-worker
+    role: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: locust-worker
+  template:
+    metadata:
+      labels:
+        app: locust-worker
+        role: worker
+    spec:
+      containers:
+        - name: locust-worker
+          image: locustio/locust:2.32.3
+          args:
+            - "--worker"
+            - "--locustfile=/scripts/locustfile.py"
+            - "--master-host=locust-master.load-testing.svc.cluster.local"
+            - "--master-port=5557"
+          env:
+            - name: TARGET_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: locust-config
+                  key: target_host
+          volumeMounts:
+            - name: locust-scripts
+              mountPath: /scripts
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "200Mi"
+            limits:
+              cpu: "400m"
+              memory: "400Mi"
+      volumes:
+        - name: locust-scripts
+          configMap:
+            name: locust-scripts
