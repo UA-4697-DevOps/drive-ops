@@ -1,0 +1,63 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: aws-load-balancer-controller
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://aws.github.io/eks-charts
+    chart: aws-load-balancer-controller
+    targetRevision: "1.10.0"
+    helm:
+      valuesObject:
+        # ⚠️ IMPORTANT: Replace these placeholders before enabling auto-sync!
+        # Get values from: terragrunt output --terragrunt-working-dir=infra/terragrunt/envs/dev/{eks,shared-infra,aws-lb-controller}
+        # Required replacements:
+        #   - clusterName: REPLACE_WITH_CLUSTER_NAME → eks output: cluster_name
+        #   - eks.amazonaws.com/role-arn: REPLACE_WITH_ALB_ROLE_ARN → aws-lb-controller output: alb_controller_role_arn
+        #   - vpcId: REPLACE_WITH_VPC_ID → shared-infra output: vpc_id
+        # After replacing, enable auto-sync by uncommenting spec.syncPolicy.automated below
+        clusterName: REPLACE_WITH_CLUSTER_NAME # From eks output: cluster_name
+
+        serviceAccount:
+          create: true
+          name: aws-load-balancer-controller
+          annotations:
+            eks.amazonaws.com/role-arn: REPLACE_WITH_ALB_ROLE_ARN # From aws-lb-controller output: alb_controller_role_arn
+
+        region: us-east-2
+        vpcId: REPLACE_WITH_VPC_ID # From shared-infra output: vpc_id
+
+        # Resource limits for test cluster
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        # Enable service mutator webhook
+        enableServiceMutatorWebhook: true
+
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+
+  syncPolicy:
+    # ⚠️ AUTOMATED SYNC DISABLED: Placeholders must be replaced first!
+    # Uncomment 'automated' section after replacing REPLACE_WITH_* placeholders above
+    # automated:
+    #   prune: true
+    #   selfHeal: true
+    syncOptions:
+      - CreateNamespace=false # kube-system already exists
