@@ -16,7 +16,7 @@ spec:
         # ⚠️ IMPORTANT: Replace placeholder before enabling auto-sync!
         # Get value from: terragrunt output --terragrunt-working-dir=infra/terragrunt/envs/dev/external-dns external_dns_role_arn
         # Required replacement:
-        #   - eks.amazonaws.com/role-arn: REPLACE_WITH_EXTERNAL_DNS_ROLE_ARN → external-dns output: external_dns_role_arn
+        #   - eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-dev-external-dns-role → external-dns output: external_dns_role_arn
         # After replacing, enable auto-sync by uncommenting spec.syncPolicy.automated below
         provider: aws
 
@@ -24,7 +24,7 @@ spec:
           create: true
           name: external-dns
           annotations:
-            eks.amazonaws.com/role-arn: REPLACE_WITH_EXTERNAL_DNS_ROLE_ARN # From external-dns output: external_dns_role_arn
+            eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-dev-external-dns-role # From external-dns output: external_dns_role_arn
 
         policy: sync
 
@@ -52,9 +52,9 @@ spec:
 
   syncPolicy:
     # ⚠️ AUTOMATED SYNC DISABLED: Placeholder must be replaced first!
-    # Uncomment 'automated' section after replacing REPLACE_WITH_EXTERNAL_DNS_ROLE_ARN placeholder above
-    # automated:
-    #   prune: true
-    #   selfHeal: true
+    # Uncomment 'automated' section after replacing arn:aws:iam::969283154407:role/Training-drive-ops-dev-external-dns-role placeholder above
+    automated:
+      prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true

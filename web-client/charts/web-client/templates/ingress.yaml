@@ -20,7 +20,7 @@ metadata:
     # the ALB automatically returns 301 → HTTPS for any HTTP request.
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
-    alb.ingress.kubernetes.io/certificate-arn: REPLACE_WITH_ACM_CERT_ARN # From acm output: certificate_arn
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-2:969283154407:certificate/48dd9e5e-6e92-4caa-88ab-95636766268c # From acm output: certificate_arn
 
     # Health Check (web-client nginx health endpoint)
     alb.ingress.kubernetes.io/healthcheck-path: /health
@@ -30,8 +30,8 @@ metadata:
     alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
 
     # Network Configuration
-    alb.ingress.kubernetes.io/subnets: REPLACE_WITH_PUBLIC_SUBNET_IDS # From shared-infra output: public_subnet_ids (comma-separated)
-    alb.ingress.kubernetes.io/security-groups: REPLACE_WITH_ALB_SG_ID # From shared-infra output: sg_alb_id
+    alb.ingress.kubernetes.io/subnets: subnet-0a0dcdc19a2f78e4d,subnet-0658bcf6b0175cad2 # From shared-infra output: public_subnet_ids (comma-separated)
+    alb.ingress.kubernetes.io/security-groups: sg-0d93c034f6a242aa0 # From shared-infra output: sg_alb_id
 
     # Tags
     alb.ingress.kubernetes.io/tags: Environment=dev,ManagedBy=ArgoCD,Project=drive-ops,Service=web-client

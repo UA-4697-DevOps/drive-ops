@@ -24,8 +24,8 @@ spec:
     #   - public_subnet_ids: terragrunt output --terragrunt-working-dir=infra/terragrunt/envs/dev/shared-infra public_subnet_ids
     #   - sg_alb_id: terragrunt output --terragrunt-working-dir=infra/terragrunt/envs/dev/shared-infra sg_alb_id
     # After replacing placeholders, uncomment the automated section below
-    # automated:
-    #   prune: true
-    #   selfHeal: true
+    automated:
+      prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true

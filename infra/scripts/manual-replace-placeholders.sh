@@ -6,15 +6,15 @@
 # ==============================================================================
 
 # ========== PASTE YOUR VALUES HERE ==========
-CLUSTER_NAME="PASTE_VALUE_HERE"
-VPC_ID="PASTE_VALUE_HERE"
-PUBLIC_SUBNETS="PASTE_VALUE_HERE"  # comma-separated
-ALB_SG_ID="PASTE_VALUE_HERE"
-ALB_ROLE_ARN="PASTE_VALUE_HERE"
-EXTERNAL_DNS_ROLE_ARN="PASTE_VALUE_HERE"
-ESO_ROLE_ARN="PASTE_VALUE_HERE"
-CLUSTER_AUTOSCALER_ROLE_ARN="PASTE_VALUE_HERE"
-CERT_ARN="PASTE_VALUE_HERE"
+CLUSTER_NAME="Training-drive-ops-dev-eks"
+VPC_ID="vpc-00f7c0f744f4032d4"
+PUBLIC_SUBNETS="subnet-0a0dcdc19a2f78e4d,subnet-0658bcf6b0175cad2"
+ALB_SG_ID="sg-0d93c034f6a242aa0"
+ALB_ROLE_ARN="arn:aws:iam::969283154407:role/Training-drive-ops-dev-alb-controller-role"
+EXTERNAL_DNS_ROLE_ARN="arn:aws:iam::969283154407:role/Training-drive-ops-dev-external-dns-role"
+ESO_ROLE_ARN="arn:aws:iam::969283154407:role/Training-drive-ops-dev-eso-role"
+CLUSTER_AUTOSCALER_ROLE_ARN="arn:aws:iam::969283154407:role/Training-drive-ops-dev-cluster-autoscaler-role"
+CERT_ARN="arn:aws:acm:us-east-2:969283154407:certificate/48dd9e5e-6e92-4caa-88ab-95636766268c"
 # ============================================
 
 set -euo pipefail
