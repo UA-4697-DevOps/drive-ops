@@ -158,6 +158,10 @@ resource "aws_eks_cluster" "this" {
     public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
   }
 
+  access_config {
+    authentication_mode = "API_AND_CONFIG_MAP"
+  }
+
   # Envelope encryption for Kubernetes secrets (only when a CMK ARN is supplied)
   dynamic "encryption_config" {
     for_each = var.kms_key_arn != null ? [var.kms_key_arn] : []
@@ -273,4 +277,48 @@ resource "aws_eks_node_group" "this" {
     aws_iam_role_policy_attachment.node_ecr_read,
     aws_iam_role_policy_attachment.node_ssm,
   ]
+}
+
+# ------------------------------------------------------------------------------
+# 6. BASTION → EKS CONTROL PLANE ACCESS
+# ------------------------------------------------------------------------------
+
+# Allow the bastion to reach the EKS API server (port 443)
+resource "aws_security_group_rule" "bastion_to_eks_api" {
+  count = var.bastion_security_group_id != null ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  description              = "Allow Bastion to communicate with EKS Control Plane API"
+  security_group_id        = aws_security_group.eks_cluster.id
+  source_security_group_id = var.bastion_security_group_id
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Grant the bastion role admin access inside the cluster
+resource "aws_eks_access_entry" "bastion" {
+  count = var.bastion_role_arn != null ? 1 : 0
+
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = var.bastion_role_arn
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "bastion_admin" {
+  count = var.bastion_role_arn != null ? 1 : 0
+
+  cluster_name  = aws_eks_cluster.this.name
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = var.bastion_role_arn
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.bastion]
 }

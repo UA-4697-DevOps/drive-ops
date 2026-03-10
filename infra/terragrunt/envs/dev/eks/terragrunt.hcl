@@ -55,6 +55,7 @@ dependency "bastion" {
 
   mock_outputs = {
     bastion_security_group_id = "sg-mock-bastion"
+    bastion_role_arn           = "arn:aws:iam::969283154407:role/Training-drive-ops-dev-bastion-role"
   }
 }
 
@@ -102,6 +103,10 @@ inputs = {
   # No custom SG rules are applied in this stack yet.
   # If SSH from bastion to worker nodes is required, add the rule in a follow-up change.
   custom_security_group_rules = {}
+
+  # Bastion → EKS integration (network + RBAC)
+  bastion_security_group_id = dependency.bastion.outputs.bastion_security_group_id
+  bastion_role_arn           = dependency.bastion.outputs.bastion_role_arn
 
   tags = {
     Component = "eks"

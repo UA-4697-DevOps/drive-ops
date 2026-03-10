@@ -62,6 +62,23 @@ resource "aws_iam_role_policy_attachment" "bastion_ssm" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+# EKS — allow the bastion to run `aws eks update-kubeconfig`
+resource "aws_iam_role_policy" "bastion_eks_describe" {
+  name = "Training-${var.project_name}-${var.env}-bastion-eks-describe"
+  role = aws_iam_role.bastion.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["eks:DescribeCluster"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 resource "aws_iam_instance_profile" "bastion" {
   name = "Training-${var.project_name}-${var.env}-bastion-profile"
   role = aws_iam_role.bastion.name
