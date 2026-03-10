@@ -6,6 +6,9 @@ metadata:
   labels:
     app: web-client
     version: "0.0.0-dev"
+    team: platform
+    env: dev
+    service: web-client
 spec:
   replicas: 1
   strategy:
@@ -41,6 +44,7 @@ spec:
           securityContext:
             runAsUser: 101
             runAsNonRoot: true
+            privileged: false
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
