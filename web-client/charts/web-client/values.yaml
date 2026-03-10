@@ -75,6 +75,18 @@ ingress:
           pathType: Prefix
   # -- TLS configuration
   tls: []
+  # -- ACM certificate ARN for HTTPS (set per environment)
+  certificateArn: ""
+  # -- Comma-separated public subnet IDs for ALB
+  subnets: ""
+  # -- ALB security group ID
+  securityGroups: ""
+  # -- ALB group name for sharing ALB across services
+  groupName: ""
+  # -- Hostname for external-dns and ALB routing
+  host: ""
+  # -- ALB resource tags
+  tags: "ManagedBy=ArgoCD,Project=drive-ops,Service=web-client"
 
 resources:
   # -- Resource requests

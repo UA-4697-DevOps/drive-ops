@@ -100,33 +100,55 @@ fi
 echo ""
 echo -e "${YELLOW}Replacing placeholders in Kubernetes manifests...${NC}"
 
+# Helper: verify a token exists in a file before substituting
+check_token() {
+  local file="$1" token="$2"
+  if ! grep -qF "$token" "$file"; then
+    echo -e "${RED}ERROR: token '$token' not found in $file — already replaced or wrong file?${NC}"
+    exit 1
+  fi
+}
+
 # === AWS Load Balancer Controller ===
 echo "  - infra/k8s/apps/aws-lb-controller.yaml"
+check_token infra/k8s/apps/aws-lb-controller.yaml "REPLACE_WITH_CLUSTER_NAME"
+check_token infra/k8s/apps/aws-lb-controller.yaml "REPLACE_WITH_ALB_ROLE_ARN"
+check_token infra/k8s/apps/aws-lb-controller.yaml "REPLACE_WITH_VPC_ID"
 sed -i.bak "s|REPLACE_WITH_CLUSTER_NAME|$CLUSTER_NAME|g" infra/k8s/apps/aws-lb-controller.yaml
 sed -i.bak "s|REPLACE_WITH_ALB_ROLE_ARN|$ALB_ROLE_ARN|g" infra/k8s/apps/aws-lb-controller.yaml
 sed -i.bak "s|REPLACE_WITH_VPC_ID|$VPC_ID|g" infra/k8s/apps/aws-lb-controller.yaml
 
 # === External DNS ===
 echo "  - infra/k8s/apps/external-dns.yaml"
+check_token infra/k8s/apps/external-dns.yaml "REPLACE_WITH_EXTERNAL_DNS_ROLE_ARN"
 sed -i.bak "s|REPLACE_WITH_EXTERNAL_DNS_ROLE_ARN|$EXTERNAL_DNS_ROLE_ARN|g" infra/k8s/apps/external-dns.yaml
 
 # === External Secrets Operator ===
 echo "  - infra/k8s/apps/external-secrets/helm-release.yaml"
+check_token infra/k8s/apps/external-secrets/helm-release.yaml "REPLACE_WITH_ESO_ROLE_ARN"
 sed -i.bak "s|REPLACE_WITH_ESO_ROLE_ARN|$ESO_ROLE_ARN|g" infra/k8s/apps/external-secrets/helm-release.yaml
 
 # === Cluster Autoscaler ===
 echo "  - infra/k8s/apps/cluster-autoscaler/cluster-autoscaler.yaml"
+check_token infra/k8s/apps/cluster-autoscaler/cluster-autoscaler.yaml "REPLACE_WITH_CLUSTER_AUTOSCALER_ROLE_ARN"
+check_token infra/k8s/apps/cluster-autoscaler/cluster-autoscaler.yaml "REPLACE_WITH_CLUSTER_NAME"
 sed -i.bak "s|REPLACE_WITH_CLUSTER_AUTOSCALER_ROLE_ARN|$CLUSTER_AUTOSCALER_ROLE_ARN|g" infra/k8s/apps/cluster-autoscaler/cluster-autoscaler.yaml
 sed -i.bak "s|REPLACE_WITH_CLUSTER_NAME|$CLUSTER_NAME|g" infra/k8s/apps/cluster-autoscaler/cluster-autoscaler.yaml
 
 # === Client Gateway Ingress ===
 echo "  - client-gateway/charts/client-gateway/templates/ingress.yaml"
+check_token client-gateway/charts/client-gateway/templates/ingress.yaml "REPLACE_WITH_ACM_CERT_ARN"
+check_token client-gateway/charts/client-gateway/templates/ingress.yaml "REPLACE_WITH_PUBLIC_SUBNET_IDS"
+check_token client-gateway/charts/client-gateway/templates/ingress.yaml "REPLACE_WITH_ALB_SG_ID"
 sed -i.bak "s|REPLACE_WITH_ACM_CERT_ARN|$CERT_ARN|g" client-gateway/charts/client-gateway/templates/ingress.yaml
 sed -i.bak "s|REPLACE_WITH_PUBLIC_SUBNET_IDS|$PUBLIC_SUBNETS|g" client-gateway/charts/client-gateway/templates/ingress.yaml
 sed -i.bak "s|REPLACE_WITH_ALB_SG_ID|$ALB_SG_ID|g" client-gateway/charts/client-gateway/templates/ingress.yaml
 
 # === Web Client Ingress ===
 echo "  - web-client/charts/web-client/templates/ingress.yaml"
+check_token web-client/charts/web-client/templates/ingress.yaml "REPLACE_WITH_ACM_CERT_ARN"
+check_token web-client/charts/web-client/templates/ingress.yaml "REPLACE_WITH_PUBLIC_SUBNET_IDS"
+check_token web-client/charts/web-client/templates/ingress.yaml "REPLACE_WITH_ALB_SG_ID"
 sed -i.bak "s|REPLACE_WITH_ACM_CERT_ARN|$CERT_ARN|g" web-client/charts/web-client/templates/ingress.yaml
 sed -i.bak "s|REPLACE_WITH_PUBLIC_SUBNET_IDS|$PUBLIC_SUBNETS|g" web-client/charts/web-client/templates/ingress.yaml
 sed -i.bak "s|REPLACE_WITH_ALB_SG_ID|$ALB_SG_ID|g" web-client/charts/web-client/templates/ingress.yaml

@@ -2,14 +2,14 @@
 
 replicaCount: 1
 
-# Local dev: image is built from source and loaded into the cluster's Docker
-# daemon (Docker Desktop shares the host daemon).
-# pullPolicy: IfNotPresent ensures Kubernetes uses the local image without attempting
-# a registry pull. Overridden at deploy time by helm-dev-deploy.sh.
+# Dev environment: image is pulled from ECR
+# (969283154407.dkr.ecr.us-east-2.amazonaws.com/client-gateway).
+# pullPolicy: Always — ensures the latest dev image is always pulled from ECR,
+# preventing stale cached images on nodes when using a mutable tag (0.0.0-dev).
 image:
   repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/client-gateway
   tag: "0.0.0-dev"
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 serviceAccount:
   create: true
