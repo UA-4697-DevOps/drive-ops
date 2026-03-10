@@ -28,8 +28,13 @@ variable "oidc_provider_arn" {
 }
 
 variable "oidc_provider_url" {
-  description = "OIDC issuer URL without the https:// prefix"
+  description = "OIDC issuer URL without the https:// prefix (e.g., 'oidc.eks.us-east-2.amazonaws.com/id/EXAMPLEID')"
   type        = string
+
+  validation {
+    condition     = !startswith(var.oidc_provider_url, "http://") && !startswith(var.oidc_provider_url, "https://") && !endswith(var.oidc_provider_url, "/")
+    error_message = "oidc_provider_url must not start with 'http://' or 'https://' and must not end with '/'. Pass the issuer host only (e.g., 'oidc.eks.us-east-2.amazonaws.com/id/EXAMPLEID')."
+  }
 }
 
 variable "zone_id" {

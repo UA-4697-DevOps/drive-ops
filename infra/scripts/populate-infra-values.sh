@@ -281,7 +281,7 @@ echo -e "  ${GREEN}✓${NC} cert_manager_role_arn = ${CYAN}${CM_ROLE_ARN}${NC}"
 echo ""
 
 # ============================================================
-# 8. Patch Ingress manifests
+# 9. Patch Ingress manifests
 # ============================================================
 echo -e "${YELLOW}→ Patching Ingress manifests...${NC}"
 
@@ -311,7 +311,7 @@ echo -e "${GREEN}✓ All Ingress manifests populated (env=${ENV})${NC}"
 echo ""
 
 # ============================================================
-# 9. Patch AWS Load Balancer Controller ArgoCD Application
+# 10. Patch AWS Load Balancer Controller ArgoCD Application
 # ============================================================
 echo -e "${YELLOW}→ Patching AWS LB Controller manifest...${NC}"
 if [[ -f "$ALB_CONTROLLER_APP" ]]; then
@@ -329,7 +329,7 @@ else
 fi
 
 # ============================================================
-# 10. Patch External DNS ArgoCD Application
+# 11. Patch External DNS ArgoCD Application
 # ============================================================
 echo -e "${YELLOW}→ Patching External DNS manifest...${NC}"
 if [[ -f "$EXTERNAL_DNS_APP" ]]; then
@@ -345,7 +345,7 @@ else
 fi
 
 # ============================================================
-# 11. Patch cert-manager ArgoCD Application
+# 12. Patch cert-manager ArgoCD Application
 # ============================================================
 echo -e "${YELLOW}→ Patching cert-manager manifest...${NC}"
 if [[ -f "$CERT_MANAGER_APP" ]]; then
