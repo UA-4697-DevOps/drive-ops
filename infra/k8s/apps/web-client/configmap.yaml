@@ -6,7 +6,7 @@ metadata:
   labels:
     app: web-client
 data:
-  driver-service-url: "http://driver-service.driver-service.svc.cluster.local:8082"
+  driver-service-url: "http://driver-service.driver-service.svc.cluster.local"
 ---
 # Kubernetes-compatible nginx config template.
 # Replaces the Docker image's baked-in template which uses resolver 127.0.0.11

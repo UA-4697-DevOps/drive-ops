@@ -23,9 +23,48 @@ spec:
         - protocol: TCP
           port: 8081
 ---
-# Allow egress from trip-service to AWS (SQS, RDS) — no namespace restriction needed
-# for external traffic; this is left as default-allow. Add explicit rules here
-# if you later enforce egress restrictions cluster-wide.
+# Allow egress from trip-service to AWS (SQS, RDS) and DNS.
+# SQS uses HTTPS (port 443); AWS endpoint IPs are dynamic so we allow 0.0.0.0/0.
+# RDS is in the private subnets (10.0.10.0/24, 10.0.11.0/24) on port 5432.
+---
+# Allow egress to SQS (HTTPS) — trip-created publisher, driver-assigned & trip-completed consumer
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: trip-service-egress-https
+  namespace: trip-service
+spec:
+  podSelector:
+    matchLabels:
+      app: trip-service
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443
+---
+# Allow egress to RDS PostgreSQL in private subnets
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: trip-service-egress-rds
+  namespace: trip-service
+spec:
+  podSelector:
+    matchLabels:
+      app: trip-service
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.10.0/24
+        - ipBlock:
+            cidr: 10.0.11.0/24
+      ports:
+        - protocol: TCP
+          port: 5432
 ---
 # Allow DNS egress (required for SQS, RDS lookups)
 apiVersion: networking.k8s.io/v1

@@ -1,6 +1,18 @@
 ---
+# Default deny all ingress to the web-client namespace.
+# Explicit allow rules below open only the ports that are required.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-client-default-deny-ingress
+  namespace: web-client
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
 # Allow ingress to web-client from any source (user-facing service).
-# In production, restrict to the Ingress controller namespace if desired.
+# The ALB (target-type=ip) forwards requests directly to pod IPs on port 8083.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -36,7 +48,7 @@ spec:
               kubernetes.io/metadata.name: driver-service
       ports:
         - protocol: TCP
-          port: 8082
+          port: 80
 ---
 # Allow egress to kube-dns (required for service discovery)
 apiVersion: networking.k8s.io/v1

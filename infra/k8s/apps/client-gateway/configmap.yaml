@@ -6,7 +6,7 @@ metadata:
   labels:
     app: client-gateway
 data:
-  trip-service-url:    "http://trip-service.trip-service.svc.cluster.local:8081"
-  driver-service-url:  "http://driver-service.driver-service.svc.cluster.local:8082"
+  trip-service-url:    "http://trip-service.trip-service.svc.cluster.local"
+  driver-service-url:  "http://driver-service.driver-service.svc.cluster.local"
   health-check-port: "8080"
   debug: "false"

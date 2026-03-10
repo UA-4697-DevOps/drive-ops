@@ -1,0 +1,45 @@
+---
+# ClusterIssuer for Let's Encrypt using DNS-01 challenge via Route53.
+# Uses the cert-manager IRSA service account for AWS credentials.
+#
+# For dev: uses Let's Encrypt staging to avoid rate limits.
+# For prod: switch to https://acme-v02.api.letsencrypt.org/directory
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-dns
+spec:
+  acme:
+    # Let's Encrypt staging (safe for dev). Switch to production URL for prod:
+    # server: https://acme-v02.api.letsencrypt.org/directory
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: devops@driveops.dmytrominochkin.cloud
+    privateKeySecretRef:
+      name: letsencrypt-dns-account-key
+    solvers:
+      - dns01:
+          route53:
+            region: us-east-2
+            # IRSA: cert-manager SA in cert-manager namespace has the required
+            # Route53 permissions via the IAM role attached by IRSA annotation.
+            # No explicit accessKeyID/secretAccessKeySecretRef needed.
+---
+# Wildcard Certificate for internal service-to-service TLS.
+# Issued by Let's Encrypt via DNS-01 challenge.
+# Services can mount this secret for in-cluster HTTPS.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: driveops-internal-tls
+  namespace: cert-manager
+spec:
+  secretName: driveops-internal-tls
+  issuerRef:
+    name: letsencrypt-dns
+    kind: ClusterIssuer
+  commonName: "*.driveops.dmytrominochkin.cloud"
+  dnsNames:
+    - "*.driveops.dmytrominochkin.cloud"
+    - "driveops.dmytrominochkin.cloud"
+  duration: 2160h    # 90 days
+  renewBefore: 720h  # 30 days before expiry

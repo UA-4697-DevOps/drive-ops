@@ -16,4 +16,4 @@ autoscaling:
   enabled: false
 
 gateway:
-  url: "http://client-gateway.dev.svc.cluster.local:8080"
+  url: "http://client-gateway.client-gateway.svc.cluster.local:80"

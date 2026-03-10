@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: driver-service
-  namespace: dev
+  namespace: driver-service
   labels:
     app: driver-service
     version: "1.0.0"

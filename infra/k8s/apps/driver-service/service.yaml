@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: driver-service
-  namespace: dev
+  namespace: driver-service
   labels:
     app: driver-service
 spec:

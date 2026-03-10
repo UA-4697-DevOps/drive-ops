@@ -53,6 +53,7 @@ TG_SHARED_DIR="${REPO_ROOT}/infra/terragrunt/envs/${ENV}/shared-infra"
 TG_EKS_DIR="${REPO_ROOT}/infra/terragrunt/envs/${ENV}/eks"
 TG_ALB_DIR="${REPO_ROOT}/infra/terragrunt/envs/${ENV}/aws-lb-controller"
 TG_EDNS_DIR="${REPO_ROOT}/infra/terragrunt/envs/${ENV}/external-dns"
+TG_CM_DIR="${REPO_ROOT}/infra/terragrunt/envs/${ENV}/cert-manager"
 
 # Manifests to patch — add more here as new public Ingresses are introduced
 INGRESS_FILES=(
@@ -63,6 +64,7 @@ INGRESS_FILES=(
 # ArgoCD Application manifests to patch
 ALB_CONTROLLER_APP="${REPO_ROOT}/infra/k8s/apps/aws-lb-controller.yaml"
 EXTERNAL_DNS_APP="${REPO_ROOT}/infra/k8s/apps/external-dns.yaml"
+CERT_MANAGER_APP="${REPO_ROOT}/infra/k8s/apps/cert-manager.yaml"
 
 echo -e "${BLUE}============================================================${NC}"
 echo -e "${BLUE}  Populate infrastructure values — env=${ENV}${NC}"
@@ -82,7 +84,7 @@ done
 # ============================================================
 # Validate dirs
 # ============================================================
-for dir in "$TG_ACM_DIR" "$TG_SHARED_DIR" "$TG_EKS_DIR" "$TG_ALB_DIR" "$TG_EDNS_DIR"; do
+for dir in "$TG_ACM_DIR" "$TG_SHARED_DIR" "$TG_EKS_DIR" "$TG_ALB_DIR" "$TG_EDNS_DIR" "$TG_CM_DIR"; do
   if [[ ! -d "$dir" ]]; then
     echo -e "${RED}✗ Terragrunt env directory not found: ${dir}${NC}"
     echo "  Only 'dev' is fully wired. For other envs, add a terragrunt.hcl first."
@@ -253,6 +255,29 @@ if [[ -z "$EDNS_ROLE_ARN" ]]; then
   exit 1
 fi
 echo -e "  ${GREEN}✓${NC} external_dns_role_arn = ${CYAN}${EDNS_ROLE_ARN}${NC}"
+
+# ============================================================
+# 8. Read cert-manager IAM Role ARN
+# ============================================================
+echo -e "${YELLOW}→ Reading cert_manager_role_arn from ${ENV}/cert-manager...${NC}"
+CM_ROLE_OUTPUT=$(mktemp)
+cd "$TG_CM_DIR" && terragrunt output -raw cert_manager_role_arn > "$CM_ROLE_OUTPUT" 2>&1
+CM_ROLE_EXIT=$?
+if [[ $CM_ROLE_EXIT -ne 0 ]]; then
+  CM_ROLE_ERR=$(cat "$CM_ROLE_OUTPUT")
+  echo -e "${RED}✗ Failed to read cert_manager_role_arn from ${ENV}/cert-manager (exit code: $CM_ROLE_EXIT)${NC}"
+  echo -e "${RED}   Error: ${CM_ROLE_ERR}${NC}"
+  rm -f "$CM_ROLE_OUTPUT"
+  exit $CM_ROLE_EXIT
+fi
+CM_ROLE_ARN=$(cat "$CM_ROLE_OUTPUT")
+rm -f "$CM_ROLE_OUTPUT"
+
+if [[ -z "$CM_ROLE_ARN" ]]; then
+  echo -e "${RED}✗ cert_manager_role_arn is empty. Has 'terragrunt apply' been run in ${ENV}/cert-manager?${NC}"
+  exit 1
+fi
+echo -e "  ${GREEN}✓${NC} cert_manager_role_arn = ${CYAN}${CM_ROLE_ARN}${NC}"
 echo ""
 
 # ============================================================
@@ -317,6 +342,22 @@ if [[ -f "$EXTERNAL_DNS_APP" ]]; then
   echo -e "  ${GREEN}✓${NC} Patched: ${REL_PATH}"
 else
   echo -e "  ${YELLOW}⚠ Skipping (not found): ${EXTERNAL_DNS_APP}${NC}"
+fi
+
+# ============================================================
+# 11. Patch cert-manager ArgoCD Application
+# ============================================================
+echo -e "${YELLOW}→ Patching cert-manager manifest...${NC}"
+if [[ -f "$CERT_MANAGER_APP" ]]; then
+  TMP=$(mktemp)
+  sed \
+    -e "s#\(eks.amazonaws.com/role-arn:\).*#\1 ${CM_ROLE_ARN} # From cert-manager output: cert_manager_role_arn#" \
+    "$CERT_MANAGER_APP" > "$TMP"
+  mv "$TMP" "$CERT_MANAGER_APP"
+  REL_PATH="${CERT_MANAGER_APP#${REPO_ROOT}/}"
+  echo -e "  ${GREEN}✓${NC} Patched: ${REL_PATH}"
+else
+  echo -e "  ${YELLOW}⚠ Skipping (not found): ${CERT_MANAGER_APP}${NC}"
 fi
 
 echo ""

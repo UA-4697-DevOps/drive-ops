@@ -55,3 +55,66 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+---
+# Allow egress to SQS (HTTPS) — driver-assigned publisher, trip-created consumer
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: driver-service-egress-https
+  namespace: driver-service
+spec:
+  podSelector:
+    matchLabels:
+      app: driver-service
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443
+---
+# Allow egress to RDS PostgreSQL in private subnets
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: driver-service-egress-rds
+  namespace: driver-service
+spec:
+  podSelector:
+    matchLabels:
+      app: driver-service
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.10.0/24
+        - ipBlock:
+            cidr: 10.0.11.0/24
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# Allow egress to client-gateway (webhook: POST /notify-driver)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: driver-service-egress-client-gateway
+  namespace: driver-service
+spec:
+  podSelector:
+    matchLabels:
+      app: driver-service
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: client-gateway
+          podSelector:
+            matchLabels:
+              app: client-gateway
+      ports:
+        - protocol: TCP
+          port: 80

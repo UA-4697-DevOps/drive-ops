@@ -1,0 +1,77 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    targetRevision: "v1.16.3"
+    helm:
+      valuesObject:
+        # ⚠️ IMPORTANT: Replace placeholder before enabling auto-sync!
+        # Get value from: terragrunt output --terragrunt-working-dir=infra/terragrunt/envs/dev/cert-manager cert_manager_role_arn
+        # Required replacement:
+        #   - eks.amazonaws.com/role-arn: REPLACE_WITH_CERT_MANAGER_ROLE_ARN → cert-manager output: cert_manager_role_arn
+        # After replacing, enable auto-sync by uncommenting spec.syncPolicy.automated below
+
+        # Install CRDs as part of the Helm release
+        crds:
+          enabled: true
+          keep: true
+
+        serviceAccount:
+          create: true
+          name: cert-manager
+          annotations:
+            eks.amazonaws.com/role-arn: REPLACE_WITH_CERT_MANAGER_ROLE_ARN # From cert-manager output: cert_manager_role_arn
+
+        # DNS-01 solver needs permissions to manage Route53
+        securityContext:
+          runAsNonRoot: true
+          fsGroup: 1001
+
+        # Resource limits for test cluster
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+        webhook:
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+
+        cainjector:
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+
+  syncPolicy:
+    # ⚠️ AUTOMATED SYNC DISABLED: Placeholder must be replaced first!
+    # Uncomment 'automated' section after replacing REPLACE_WITH_CERT_MANAGER_ROLE_ARN placeholder above
+    # automated:
+    #   prune: true
+    #   selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

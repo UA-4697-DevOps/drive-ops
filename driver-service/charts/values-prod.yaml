@@ -18,7 +18,7 @@ autoscaling:
   targetCPUUtilizationPercentage: 70
 
 gateway:
-  url: "http://client-gateway.prod.svc.cluster.local:8080"
+  url: "http://client-gateway.client-gateway.svc.cluster.local:80"
 
 sqs:
   tripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/<ACCOUNT_ID>/trip-created-prod.fifo"

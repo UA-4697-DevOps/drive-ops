@@ -51,8 +51,9 @@ dependency "shared_infra" {
 }
 
 inputs = {
-  # Disabled by default. Flip to true when private-subnet egress is needed.
-  enabled = false
+  # Enabled: private-subnet egress required for EKS pods to reach
+  # SQS, Telegram API, ECR, and other external services.
+  enabled = true
 
   project_name = local.common_vars.project_name
   env          = local.env_vars.env

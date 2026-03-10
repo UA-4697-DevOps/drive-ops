@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager-resources
+  namespace: argocd
+  annotations:
+    # Wave 1: Deploy after cert-manager (wave 0) so CRDs are available
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
+    targetRevision: main
+    path: infra/k8s/apps/cert-manager
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    # Automated sync: safe because these are declarative CRDs (ClusterIssuer, Certificate)
+    # that only take effect once cert-manager is running.
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
