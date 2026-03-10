@@ -3,12 +3,17 @@ kind: Application
 metadata:
   name: trip-service
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
 spec:
   project: default
   source:
     repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
     targetRevision: HEAD
-    path: infra/k8s/apps/trip-service
+    path: trip-service/charts/trip-service
+    helm:
+      valueFiles:
+        - values-dev.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: trip-service

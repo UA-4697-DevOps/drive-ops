@@ -1,44 +1,57 @@
-{{- if .Values.ingress.enabled -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "web-client.fullname" . }}
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "web-client.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
+  name: web-client-ingress
+  namespace: web-client
   annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+    # Infrastructure values below are populated by infra/scripts/populate-ingress-values.sh
+    # after Terraform is applied. Run it once, then commit the updated manifest.
+    #
+    # How to retrieve values manually:
+    #   ACM cert   : cd infra/terragrunt/envs/dev/acm && terragrunt output certificate_arn
+    #   Subnets    : cd infra/terragrunt/envs/dev/shared-infra && terragrunt output public_subnet_ids
+    #   ALB SG     : cd infra/terragrunt/envs/dev/shared-infra && terragrunt output sg_alb_id
+
+    # ALB Configuration
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+
+    # SSL/TLS Configuration — HTTP:80 is kept to enable the ssl-redirect action;
+    # the ALB automatically returns 301 → HTTPS for any HTTP request.
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/certificate-arn: REPLACE_WITH_ACM_CERT_ARN # From acm output: certificate_arn
+
+    # Health Check (web-client nginx health endpoint)
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
+
+    # Network Configuration
+    alb.ingress.kubernetes.io/subnets: REPLACE_WITH_PUBLIC_SUBNET_IDS # From shared-infra output: public_subnet_ids (comma-separated)
+    alb.ingress.kubernetes.io/security-groups: REPLACE_WITH_ALB_SG_ID # From shared-infra output: sg_alb_id
+
+    # Tags
+    alb.ingress.kubernetes.io/tags: Environment=dev,ManagedBy=ArgoCD,Project=drive-ops,Service=web-client
+
+    # Share the same ALB as client-gateway to save cost (grouped by ALB controller)
+    alb.ingress.kubernetes.io/group.name: driveops-dev
+
+    # External DNS annotation — apex domain for the user-facing web app
+    external-dns.alpha.kubernetes.io/hostname: driveops.dmytrominochkin.cloud
+
 spec:
-  {{- if .Values.ingress.className }}
-  ingressClassName: {{ .Values.ingress.className }}
-  {{- end }}
-  {{- if .Values.ingress.tls }}
-  tls:
-    {{- range .Values.ingress.tls }}
-    - hosts:
-        {{- range .hosts }}
-        - {{ . | quote }}
-        {{- end }}
-      secretName: {{ .secretName }}
-    {{- end }}
-  {{- end }}
+  ingressClassName: alb
   rules:
-    {{- range .Values.ingress.hosts }}
-    - {{- if .host }}
-      host: {{ .host | quote }}
-      {{- end }}
-      http:
-        paths:
-          {{- range .paths }}
-          - path: {{ .path }}
-            pathType: {{ .pathType }}
-            backend:
-              service:
-                name: {{ include "web-client.fullname" $ }}
-                port:
-                  number: {{ $.Values.service.port }}
-          {{- end }}
-    {{- end }}
-{{- end }}
+  - host: driveops.dmytrominochkin.cloud
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web-client
+            port:
+              number: 80

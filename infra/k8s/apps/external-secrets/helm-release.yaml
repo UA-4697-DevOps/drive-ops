@@ -16,7 +16,7 @@ spec:
           create: true
           name: external-secrets
           annotations:
-            eks.amazonaws.com/role-arn: REPLACE_WITH_ESO_ROLE_ARN
+            eks.amazonaws.com/role-arn: REPLACE_WITH_ESO_ROLE_ARN # From external-secrets output: eso_role_arn
         replicaCount: 1
         resources:
           requests:
@@ -29,8 +29,11 @@ spec:
     server: https://kubernetes.default.svc
     namespace: external-secrets
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+    # ⚠️ AUTOMATED SYNC DISABLED: Placeholder must be replaced first!
+    # Get value from: terragrunt output --terragrunt-working-dir=infra/terragrunt/envs/dev/external-secrets eso_role_arn
+    # After replacing REPLACE_WITH_ESO_ROLE_ARN above, uncomment the automated section below
+    # automated:
+    #   prune: true
+    #   selfHeal: true
     syncOptions:
       - CreateNamespace=true

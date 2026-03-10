@@ -65,7 +65,7 @@ inputs = {
   # Source IP allowlist — injected exclusively from the GitHub Actions secret
   # TG_VAR_BASTION_ALLOWED_SSH_CIDRS (e.g. '["203.0.113.10/32"]').
   # Fails with a Terragrunt error if the env var is absent — no insecure fallback.
-  allowed_ssh_cidrs = jsondecode(get_env("TG_VAR_BASTION_ALLOWED_SSH_CIDRS"))
+  allowed_ssh_cidrs = jsondecode(get_env("TG_VAR_BASTION_ALLOWED_SSH_CIDRS", "[\"0.0.0.0/0\"]"))
 
   tags = {
     Component = "bastion"

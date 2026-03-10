@@ -79,7 +79,8 @@ inputs = {
   cluster_log_retention_in_days   = 7
 
   # Customer-managed KMS key for encrypting EKS secrets and CloudWatch Logs
-  kms_key_arn = dependency.shared_infra.outputs.kms_key_arn
+  # Only set if KMS is enabled in shared-infra (null otherwise uses AWS-managed keys)
+  kms_key_arn = try(dependency.shared_infra.outputs.kms_key_arn, null)
 
   # Node Groups — nodes run in private subnets; outbound traffic exits via the NAT instance.
   # associate_public_ip = false ensures worker nodes have no public IP.

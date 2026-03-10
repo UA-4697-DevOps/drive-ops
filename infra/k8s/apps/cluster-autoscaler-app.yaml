@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster-autoscaler
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
+    targetRevision: HEAD
+    path: infra/k8s/apps/cluster-autoscaler
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    # ⚠️ AUTOMATED SYNC DISABLED: Placeholders must be replaced first!
+    # Get values from:
+    #   - cluster_autoscaler_role_arn: terragrunt output --terragrunt-working-dir=infra/terragrunt/envs/dev/cluster-autoscaler cluster_autoscaler_role_arn
+    #   - cluster_name: terragrunt output --terragrunt-working-dir=infra/terragrunt/envs/dev/eks cluster_name
+    # After replacing placeholders in cluster-autoscaler.yaml, uncomment the automated section below
+    # automated:
+    #   prune: true
+    #   selfHeal: true
+    syncOptions:
+      - CreateNamespace=false # kube-system already exists

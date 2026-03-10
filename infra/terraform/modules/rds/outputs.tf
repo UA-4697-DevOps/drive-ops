@@ -85,3 +85,17 @@ output "performance_insights_retention_period" {
   description = "The number of days Performance Insights data is retained. Null if Performance Insights is disabled."
   value       = aws_db_instance.main.performance_insights_retention_period
 }
+
+# ============================================================================
+# Service-Specific Secrets Outputs
+# ============================================================================
+
+output "driver_service_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing driver-service RDS connection info"
+  value       = data.aws_secretsmanager_secret.driver_service.arn
+}
+
+output "trip_service_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing trip-service RDS connection info"
+  value       = data.aws_secretsmanager_secret.trip_service.arn
+}
