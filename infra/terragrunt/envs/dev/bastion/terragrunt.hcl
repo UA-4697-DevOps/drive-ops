@@ -62,10 +62,10 @@ inputs = {
   # EC2 Key Pair that MUST already exist in AWS (create manually or via CLI)
   key_name = "bastion-key"
 
-  # Source IP allowlist — injected exclusively from the GitHub Actions secret
+  # Source IP allowlist — injected exclusively from the environment variable
   # TG_VAR_BASTION_ALLOWED_SSH_CIDRS (e.g. '["203.0.113.10/32"]').
   # Fails with a Terragrunt error if the env var is absent — no insecure fallback.
-  allowed_ssh_cidrs = jsondecode(get_env("TG_VAR_BASTION_ALLOWED_SSH_CIDRS", "[\"0.0.0.0/0\"]"))
+  allowed_ssh_cidrs = jsondecode(get_env("TG_VAR_BASTION_ALLOWED_SSH_CIDRS"))
 
   tags = {
     Component = "bastion"

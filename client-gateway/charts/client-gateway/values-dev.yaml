@@ -4,12 +4,12 @@ replicaCount: 1
 
 # Local dev: image is built from source and loaded into the cluster's Docker
 # daemon (Docker Desktop shares the host daemon).
-# pullPolicy: Never ensures Kubernetes uses the local image without attempting
+# pullPolicy: IfNotPresent ensures Kubernetes uses the local image without attempting
 # a registry pull. Overridden at deploy time by helm-dev-deploy.sh.
 image:
-  repository: client-gateway
-  tag: local
-  pullPolicy: Never
+  repository: 969283154407.dkr.ecr.us-east-2.amazonaws.com/client-gateway
+  tag: "0.0.0-dev"
+  pullPolicy: IfNotPresent
 
 serviceAccount:
   create: true

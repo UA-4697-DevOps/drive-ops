@@ -25,8 +25,18 @@ echo "========================================"
 echo ""
 
 # Validate values
-if [[ "$CLUSTER_NAME" == "PASTE_VALUE_HERE" ]]; then
-  echo "ERROR: Please edit this script and paste your values first!"
+declare -a ERRORS=()
+for VAR_NAME in CLUSTER_NAME VPC_ID PUBLIC_SUBNETS ALB_SG_ID ALB_ROLE_ARN EXTERNAL_DNS_ROLE_ARN ESO_ROLE_ARN CLUSTER_AUTOSCALER_ROLE_ARN CERT_ARN; do
+  VAR_VALUE="${!VAR_NAME}"
+  if [[ -z "$VAR_VALUE" || "$VAR_VALUE" == "PASTE_VALUE_HERE" ]]; then
+    ERRORS+=("  - $VAR_NAME is not set (empty or still PASTE_VALUE_HERE)")
+  fi
+done
+if [[ ${#ERRORS[@]} -gt 0 ]]; then
+  echo "ERROR: The following variables are missing or unpopulated:"
+  printf '%s\n' "${ERRORS[@]}"
+  echo ""
+  echo "Please edit this script and paste your values first!"
   exit 1
 fi
 

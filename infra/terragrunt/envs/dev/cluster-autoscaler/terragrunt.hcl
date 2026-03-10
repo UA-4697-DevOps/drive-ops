@@ -30,6 +30,7 @@ inputs = {
   account_id        = local.env_vars.account_id
   oidc_provider_arn = dependency.eks.outputs.oidc_provider_arn
   oidc_provider_url = dependency.eks.outputs.oidc_provider_url
+  cluster_name      = dependency.eks.outputs.cluster_name
   namespace         = "kube-system"
 
   tags = {
