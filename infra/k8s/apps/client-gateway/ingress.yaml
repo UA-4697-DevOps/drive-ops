@@ -54,4 +54,4 @@ spec:
           service:
             name: client-gateway
             port:
-              number: 80
+              number: 8080

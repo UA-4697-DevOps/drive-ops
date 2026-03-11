@@ -51,7 +51,7 @@ service:
   # -- Service type
   type: ClusterIP
   # -- Service port
-  port: 80
+  port: 8083
   # -- Container target port (nginx listens on 8083)
   targetPort: 8083
   # -- Service port name

@@ -54,4 +54,4 @@ spec:
           service:
             name: web-client
             port:
-              number: 80
+              number: 8083
