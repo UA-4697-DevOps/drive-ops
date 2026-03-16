@@ -91,64 +91,74 @@ data "aws_iam_policy_document" "vpn_assume_role" {
   }
 }
 
-resource "aws_iam_role" "vpn" {
-  name                 = "Training-${var.project_name}-${var.env}-vpn-role"
-  assume_role_policy   = data.aws_iam_policy_document.vpn_assume_role.json
-  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+module "iam_role" {
+  source = "../iam-role"
+
+  role_name               = "Training-${var.project_name}-${var.env}-vpn-role"
+  assume_role_policy      = data.aws_iam_policy_document.vpn_assume_role.json
+  create_instance_profile = true
+  permissions_boundary    = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+
+  managed_policy_arns = [
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  ]
+
+  inline_policies = {
+    vpn_secrets = jsonencode({
+      Version = "2012-10-17"
+      Statement = concat(
+        [
+          {
+            Effect = "Allow"
+            Action = [
+              "secretsmanager:CreateSecret",
+              "secretsmanager:DescribeSecret",
+              "secretsmanager:GetSecretValue",
+              "secretsmanager:PutSecretValue",
+            ]
+            Resource = "arn:aws:secretsmanager:${var.aws_region}:${var.account_id}:secret:${var.project_name}/${var.env}/openvpn/*"
+          },
+        ],
+        var.kms_key_arn != null ? [
+          {
+            Effect = "Allow"
+            Action = [
+              "kms:Decrypt",
+              "kms:DescribeKey",
+              "kms:GenerateDataKey",
+            ]
+            Resource = var.kms_key_arn
+          },
+        ] : []
+      )
+    })
+  }
 
   tags = merge(var.tags, {
     Name = "Training-${var.project_name}-${var.env}-vpn-role"
   })
 }
 
-# SSM Session Manager — administrative access without opening port 22
-resource "aws_iam_role_policy_attachment" "vpn_ssm" {
-  role       = aws_iam_role.vpn.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+#-------------- Moved IAM Role, Instance Profile, and Policies to module/iam-role --------------
+
+moved {
+  from = aws_iam_role.vpn
+  to   = module.iam_role.aws_iam_role.this
 }
 
-# Least-privilege Secrets Manager — only OpenVPN PKI secrets for this project/env
-resource "aws_iam_role_policy" "vpn_secrets" {
-  name = "${var.project_name}-${var.env}-vpn-secrets-policy"
-  role = aws_iam_role.vpn.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = concat(
-      [
-        {
-          Effect = "Allow"
-          Action = [
-            "secretsmanager:CreateSecret",
-            "secretsmanager:DescribeSecret",
-            "secretsmanager:GetSecretValue",
-            "secretsmanager:PutSecretValue",
-          ]
-          Resource = "arn:aws:secretsmanager:${var.aws_region}:${var.account_id}:secret:${var.project_name}/${var.env}/openvpn/*"
-        },
-      ],
-      var.kms_key_arn != null ? [
-        {
-          Effect = "Allow"
-          Action = [
-            "kms:Decrypt",
-            "kms:DescribeKey",
-            "kms:GenerateDataKey",
-          ]
-          Resource = var.kms_key_arn
-        },
-      ] : []
-    )
-  })
+moved {
+  from = aws_iam_instance_profile.vpn
+  to   = module.iam_role.aws_iam_instance_profile.this[0]
 }
 
-resource "aws_iam_instance_profile" "vpn" {
-  name = "Training-${var.project_name}-${var.env}-vpn-profile"
-  role = aws_iam_role.vpn.name
+moved {
+  from = aws_iam_role_policy_attachment.vpn_ssm
+  to   = module.iam_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"]
+}
 
-  tags = merge(var.tags, {
-    Name = "Training-${var.project_name}-${var.env}-vpn-profile"
-  })
+moved {
+  from = aws_iam_role_policy.vpn_secrets
+  to   = module.iam_role.aws_iam_role_policy.inline["vpn_secrets"]
 }
 
 # ==============================================================================
@@ -173,7 +183,7 @@ resource "aws_instance" "vpn" {
   subnet_id              = var.public_subnet_id
   vpc_security_group_ids = [aws_security_group.vpn.id]
   key_name               = var.key_name
-  iam_instance_profile   = aws_iam_instance_profile.vpn.name
+  iam_instance_profile   = module.iam_role.iam_instance_profile_name
   monitoring             = true
   source_dest_check      = false # Required: allows the instance to forward VPN client traffic
 
