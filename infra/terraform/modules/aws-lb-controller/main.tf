@@ -39,16 +39,31 @@ data "aws_iam_policy_document" "alb_controller_assume_role" {
   }
 }
 
-# IAM role for AWS Load Balancer Controller
-resource "aws_iam_role" "alb_controller" {
-  name                 = "Training-${var.project_name}-${var.env}-alb-controller-role"
-  assume_role_policy   = data.aws_iam_policy_document.alb_controller_assume_role.json
-  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
-  tags                 = var.tags
+module "iam_role" {
+  source = "../iam-role"
+
+  role_name               = "Training-${var.project_name}-${var.env}-alb-controller-role"
+  assume_role_policy      = data.aws_iam_policy_document.alb_controller_assume_role.json
+  permissions_boundary    = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+
+  managed_policy_arns = [
+    aws_iam_policy.alb_controller.arn
+  ]
+
+  tags = var.tags
 }
 
-# Attach policy to role
-resource "aws_iam_role_policy_attachment" "alb_controller" {
-  role       = aws_iam_role.alb_controller.name
-  policy_arn = aws_iam_policy.alb_controller.arn
+# Attach policy to role (Moved into iam_role module)
+# resource "aws_iam_role_policy_attachment" "alb_controller" {
+#   role       = aws_iam_role.alb_controller.name
+#   policy_arn = aws_iam_policy.alb_controller.arn
+# }
+
+moved {
+  from = aws_iam_role.alb_controller
+  to   = module.iam_role.aws_iam_role.this
+}
+moved {
+  from = aws_iam_role_policy_attachment.alb_controller
+  to   = module.iam_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::969283154407:policy/Training-drive-ops-dev-alb-controller-policy"]
 }
