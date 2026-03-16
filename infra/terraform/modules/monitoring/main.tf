@@ -105,7 +105,7 @@ resource "aws_cloudwatch_metric_alarm" "ec2_status_check" {
 resource "aws_lambda_function" "discord_notifier" {
   filename      = "${path.module}/dummy.zip"
   function_name = "${var.project_name}-${var.env}-discord-notifier"
-  role          = aws_iam_role.lambda_exec.arn
+  role          = module.lambda_iam_role.iam_role_arn
   handler       = "discord.lambda_handler"
   runtime       = "python3.12"
   timeout       = 30
@@ -123,8 +123,15 @@ resource "aws_lambda_function" "discord_notifier" {
 
   tags = { Name = "${var.project_name}-${var.env}-discord-notifier" }
 }
-resource "aws_iam_role" "lambda_exec" {
-  name                 = "Training-${var.project_name}-${var.env}-lambda-discord-role"
+
+# ==============================================================================
+# Lambda IAM Role
+# ==============================================================================
+
+module "lambda_iam_role" {
+  source = "../iam-role"
+
+  role_name            = "Training-${var.project_name}-${var.env}-lambda-discord-role"
   permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
 
   assume_role_policy = jsonencode({
@@ -135,26 +142,38 @@ resource "aws_iam_role" "lambda_exec" {
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
+
+  managed_policy_arns = [
+    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  ]
+
+  inline_policies = {
+    secrets_read = jsonencode({
+      Version = "2012-10-17"
+      Statement = [{
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = [var.discord_webhook_secret_arn]
+      }]
+    })
+  }
 }
 
-resource "aws_iam_role_policy_attachment" "lambda_logs" {
-  role       = aws_iam_role.lambda_exec.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+#-------------- Moved IAM Role and Policies to module/iam-role --------------
+
+moved {
+  from = aws_iam_role.lambda_exec
+  to   = module.lambda_iam_role.aws_iam_role.this
 }
 
-# Inline policy granting the Lambda permission to read the Discord secret from Secrets Manager
-resource "aws_iam_role_policy" "lambda_secrets_read" {
-  name = "Training-${var.project_name}-${var.env}-lambda-secrets-policy"
-  role = aws_iam_role.lambda_exec.id
+moved {
+  from = aws_iam_role_policy_attachment.lambda_logs
+  to   = module.lambda_iam_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
+}
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:GetSecretValue"]
-      Resource = [var.discord_webhook_secret_arn]
-    }]
-  })
+moved {
+  from = aws_iam_role_policy.lambda_secrets_read
+  to   = module.lambda_iam_role.aws_iam_role_policy.inline["secrets_read"]
 }
 
 # Subscribes the Lambda function to the SNS alerts topic
