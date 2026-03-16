@@ -1,8 +1,9 @@
 resource "aws_iam_role" "this" {
-  name               = var.role_name
-  assume_role_policy = var.assume_role_policy
-  description        = var.role_description
-  tags               = var.tags
+  name                 = var.role_name
+  assume_role_policy   = var.assume_role_policy
+  description          = var.role_description
+  permissions_boundary = var.permissions_boundary
+  tags                 = var.tags
 }
 
 resource "aws_iam_policy" "custom" {

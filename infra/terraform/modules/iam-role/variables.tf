@@ -9,6 +9,12 @@ variable "role_description" {
   default     = null
 }
 
+variable "permissions_boundary" {
+  description = "ARN of the policy that is used to set the permissions boundary for the role"
+  type        = string
+  default     = null
+}
+
 variable "assume_role_policy" {
   description = "IAM policy document that restricts who can assume this role (JSON)"
   type        = string
