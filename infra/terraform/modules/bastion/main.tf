@@ -117,3 +117,21 @@ resource "aws_eip_association" "bastion" {
   instance_id   = aws_instance.bastion.id
   allocation_id = aws_eip.bastion.id
 }
+
+
+#----------------- Moved IAM Role & Instance Profile to module/iam-role -----------------
+
+moved {
+  from = aws_iam_role.bastion
+  to   = module.iam_role.aws_iam_role.this
+}
+
+moved {
+  from = aws_iam_instance_profile.bastion
+  to   = module.iam_role.aws_iam_instance_profile.this[0]
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.bastion_ssm
+  to   = module.iam_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"]
+}
