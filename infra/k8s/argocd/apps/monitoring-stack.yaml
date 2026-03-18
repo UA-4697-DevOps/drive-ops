@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
     targetRevision: HEAD
-    path: infra/k8s/monitoring
+    path: infra/k8s/manifests/monitoring
   destination:
     server: https://kubernetes.default.svc
   syncPolicy:
