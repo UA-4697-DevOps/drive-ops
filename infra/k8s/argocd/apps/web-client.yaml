@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
     targetRevision: HEAD
-    path: infra/k8s/apps/web-client
+    path: web-client/charts/web-client
   destination:
     server: https://kubernetes.default.svc
     namespace: web-client
