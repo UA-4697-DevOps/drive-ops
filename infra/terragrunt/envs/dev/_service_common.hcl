@@ -44,6 +44,7 @@ locals {
       trip_service   = "000000000000.dkr.ecr.us-east-2.amazonaws.com/trip-service"
       driver_service = "000000000000.dkr.ecr.us-east-2.amazonaws.com/driver-service"
       client_gateway = "000000000000.dkr.ecr.us-east-2.amazonaws.com/client-gateway"
+      web_client     = "000000000000.dkr.ecr.us-east-2.amazonaws.com/web-client"
     }
 
     # SQS ARNs needed by trip-service and driver-service IAM policies
