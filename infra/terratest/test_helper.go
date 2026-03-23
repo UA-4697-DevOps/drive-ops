@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/gruntwork-io/terratest/modules/files"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 )
@@ -210,3 +212,23 @@ func SecretsTestOptions(t *testing.T) *terraform.Options {
 		"discord_webhook_url": "https://discord.com/api/webhooks/123456789/test-token",
 	}, region)
 }
+
+// FindResourceChange looks for a resource whose address ends with "type.name",
+// optionally filtered by a parent module name. It is the single shared helper
+// used by all service infra tests (previously duplicated as findResourceChange
+// and findDriverResourceChange in individual test files).
+func FindResourceChange(t *testing.T, plan *terraform.PlanStruct, resType string, resName string, parentModule string) *tfjson.ResourceChange {
+	t.Helper()
+	targetSuffix := fmt.Sprintf("%s.%s", resType, resName)
+
+	for key, resource := range plan.ResourceChangesMap {
+		if strings.HasSuffix(key, targetSuffix) {
+			if parentModule != "" && !strings.Contains(key, fmt.Sprintf("module.%s", parentModule)) {
+				continue
+			}
+			return resource
+		}
+	}
+	return nil
+}
+
