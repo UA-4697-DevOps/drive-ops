@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/gruntwork-io/terratest/modules/files"
 	"github.com/gruntwork-io/terratest/modules/terraform"
+	tfjson "github.com/hashicorp/terraform-json"
 )
 
 const (
@@ -223,12 +223,15 @@ func FindResourceChange(t *testing.T, plan *terraform.PlanStruct, resType string
 
 	for key, resource := range plan.ResourceChangesMap {
 		if strings.HasSuffix(key, targetSuffix) {
-			if parentModule != "" && !strings.Contains(key, fmt.Sprintf("module.%s", parentModule)) {
-				continue
+			if parentModule != "" {
+				dotPrefix := fmt.Sprintf("module.%s.", parentModule)
+				indexedPrefix := fmt.Sprintf("module.%s[", parentModule)
+				if !strings.Contains(key, dotPrefix) && !strings.Contains(key, indexedPrefix) {
+					continue
+				}
 			}
 			return resource
 		}
 	}
 	return nil
 }
-
