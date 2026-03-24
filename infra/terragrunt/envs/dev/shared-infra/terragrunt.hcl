@@ -9,18 +9,10 @@ terraform {
   source = "../../../../terraform//modules/shared-infra"
 }
 
-locals {
-  common_vars = yamldecode(file(find_in_parent_folders("common_vars.yaml")))
-  env_vars    = yamldecode(file(find_in_parent_folders("env_vars.yaml")))
-}
+# Note: project_name, env, account_id, cost_center, and tags are already
+# injected as common Terraform variable inputs by root.hcl.
 
 inputs = {
-  # Global variables
-  project_name = local.common_vars.project_name
-  env          = local.env_vars.env
-  cost_center  = local.common_vars.cost_center
-  account_id   = local.env_vars.account_id
-
   # VPC settings
   vpc_cidr           = "10.0.0.0/16"
   availability_zones = ["us-east-2a", "us-east-2b"]
@@ -43,7 +35,7 @@ inputs = {
 
   # --- RDS Secrets Configuration ---
   # These values are required for the secrets module to generate the master password
-  db_identifier       = "Training-${local.common_vars.project_name}-${local.env_vars.env}-db"
+  db_identifier       = "Training-drive-ops-dev-db"
   rds_master_username = "drive_admin"
 
   # --- Monitoring & Alerting (Discord) ---
@@ -59,3 +51,4 @@ inputs = {
     Description = "Shared infrastructure including VPC SQS ECR and Secrets"
   }
 }
+
