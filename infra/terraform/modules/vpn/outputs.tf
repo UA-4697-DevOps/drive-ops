@@ -10,7 +10,7 @@ output "vpn_instance_id" {
 
 output "vpn_security_group_id" {
   description = "Security group ID of the VPN instance"
-  value       = aws_security_group.vpn.id
+  value       = module.security_group.sg_id
 }
 
 output "vpn_client_config_secret_name" {

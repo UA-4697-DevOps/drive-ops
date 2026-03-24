@@ -87,7 +87,7 @@ resource "aws_instance" "bastion" {
   ami                    = data.aws_ami.al2023.id
   instance_type          = var.instance_type
   subnet_id              = var.public_subnet_id
-  vpc_security_group_ids = [aws_security_group.bastion.id]
+  vpc_security_group_ids = [module.security_group.sg_id]
   key_name               = var.key_name
   iam_instance_profile   = aws_iam_instance_profile.bastion.name
   monitoring             = true

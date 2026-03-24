@@ -24,10 +24,6 @@
 #     --query SecretString --output text > client1.ovpn
 # ==============================================================================
 
-# ==============================================================================
-# Variables
-# ==============================================================================
-
 variable "ami_id" {
   type        = string
   default     = null
@@ -75,10 +71,6 @@ data "aws_ami" "al2023" {
     values = ["hvm"]
   }
 }
-
-# ==============================================================================
-# IAM Role & Instance Profile
-# ==============================================================================
 
 data "aws_iam_policy_document" "vpn_assume_role" {
   statement {
@@ -151,10 +143,6 @@ resource "aws_iam_instance_profile" "vpn" {
   })
 }
 
-# ==============================================================================
-# Elastic IP — allocated first so the public IP can be embedded in user_data
-# ==============================================================================
-
 resource "aws_eip" "vpn" {
   domain = "vpc"
 
@@ -163,15 +151,11 @@ resource "aws_eip" "vpn" {
   })
 }
 
-# ==============================================================================
-# EC2 Instance
-# ==============================================================================
-
 resource "aws_instance" "vpn" {
   ami                    = var.ami_id != null ? var.ami_id : data.aws_ami.al2023[0].id
   instance_type          = var.instance_type
   subnet_id              = var.public_subnet_id
-  vpc_security_group_ids = [aws_security_group.vpn.id]
+  vpc_security_group_ids = [module.security_group.sg_id]
   key_name               = var.key_name
   iam_instance_profile   = aws_iam_instance_profile.vpn.name
   monitoring             = true
@@ -211,10 +195,6 @@ resource "aws_instance" "vpn" {
     ignore_changes = [user_data]
   }
 }
-
-# ==============================================================================
-# EIP Association
-# ==============================================================================
 
 resource "aws_eip_association" "vpn" {
   instance_id   = aws_instance.vpn.id

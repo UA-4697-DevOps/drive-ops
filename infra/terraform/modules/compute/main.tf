@@ -2,7 +2,7 @@ resource "aws_instance" "this" {
   ami                         = local.resolved_ami
   instance_type               = var.instance_type
   subnet_id                   = var.subnet_id
-  vpc_security_group_ids      = concat([aws_security_group.ec2.id], var.additional_security_group_ids)
+  vpc_security_group_ids      = concat([module.security_group.sg_id], var.additional_security_group_ids)
   key_name                    = var.key_name
   associate_public_ip_address = var.associate_public_ip_address
   iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name
