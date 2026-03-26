@@ -151,6 +151,19 @@ resource "aws_eip" "vpn" {
   })
 }
 
+module "security_group" {
+  source = "../security-group"
+
+  name        = "${var.project_name}-${var.env}-vpn-sg"
+  description = "Security group for OpenVPN server"
+  vpc_id      = var.vpc_id
+
+  ingress_rules = var.ingress_rules
+  egress_rules  = var.egress_rules
+
+  tags = var.tags
+}
+
 resource "aws_instance" "vpn" {
   ami                    = var.ami_id != null ? var.ami_id : data.aws_ami.al2023[0].id
   instance_type          = var.instance_type
@@ -190,10 +203,10 @@ resource "aws_instance" "vpn" {
     Role = "VPN"
   })
 
-  lifecycle {
-    # user_data changes require explicit replacement to avoid PKI regeneration
-    ignore_changes = [user_data]
-  }
+   lifecycle {
+     # user_data changes require explicit replacement to avoid PKI regeneration
+     ignore_changes = [user_data]
+   }
 }
 
 resource "aws_eip_association" "vpn" {
