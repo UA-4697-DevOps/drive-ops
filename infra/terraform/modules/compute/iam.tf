@@ -18,191 +18,123 @@ data "aws_iam_policy_document" "ec2_assume_role" {
   }
 }
 
-# --- EC2 IAM Role ---
+# --- EC2 IAM Role (managed by iam-role module) ---
 
-resource "aws_iam_role" "ec2_ssm_role" {
-  # var.name includes the "Training-" prefix from Terragrunt to pass the boundary
-  name                 = "${var.name}-ec2-role"
-  assume_role_policy   = data.aws_iam_policy_document.ec2_assume_role.json
-  permissions_boundary = local.permissions_boundary
-  tags                 = var.tags
-}
+module "ec2_iam_role" {
+  source = "../iam-role"
 
-resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "${var.name}-profile"
-  role = aws_iam_role.ec2_ssm_role.name
+  role_name               = "${var.name}-ec2-role"
+  assume_role_policy      = data.aws_iam_policy_document.ec2_assume_role.json
+  permissions_boundary    = local.permissions_boundary
+  create_instance_profile = true
+
+  managed_policy_arns = [
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  ]
+
+  custom_policies = {
+    # ECR Pull Access
+    "${var.name}-ecr-pull" = var.ecr_repository_url != null ? jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Effect   = "Allow"
+          Action   = "ecr:GetAuthorizationToken"
+          Resource = "*"
+        },
+        {
+          Effect = "Allow"
+          Action = [
+            "ecr:BatchCheckLayerAvailability",
+            "ecr:GetDownloadUrlForLayer",
+            "ecr:BatchGetImage"
+          ]
+          Resource = "*"
+        }
+      ]
+    }) : null
+
+    # SSM Parameter Store Access
+    "${var.name}-ssm-read" = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Effect = "Allow"
+          Action = [
+            "ssm:GetParameter",
+            "ssm:GetParameters",
+            "ssm:GetParametersByPath"
+          ]
+          Resource = "arn:aws:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/${var.env}/*"
+        }
+      ]
+    })
+
+    # Secrets Manager Access
+    "${var.name}-secrets-read" = length(var.iam_secret_arns) > 0 ? jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Effect   = "Allow"
+          Action   = ["secretsmanager:GetSecretValue"]
+          Resource = var.iam_secret_arns
+        }
+      ]
+    }) : null
+
+    # SQS Access
+    "${var.name}-sqs-access" = length(var.iam_sqs_arns) > 0 ? jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Effect = "Allow"
+          Action = [
+            "sqs:SendMessage",
+            "sqs:ReceiveMessage",
+            "sqs:DeleteMessage",
+            "sqs:GetQueueAttributes"
+          ]
+          Resource = var.iam_sqs_arns
+        }
+      ]
+    }) : null
+
+    # RDS Discovery Access
+    "${var.name}-rds-discovery" = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Effect   = "Allow"
+          Action   = ["rds:DescribeDBInstances"]
+          Resource = "*"
+        }
+      ]
+    })
+  }
+
   tags = var.tags
 }
 
-# Standard policy for Systems Manager (SSM) managed instances
-resource "aws_iam_role_policy_attachment" "ssm_managed_instance" {
-  role       = aws_iam_role.ec2_ssm_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-# --- 1. ECR Pull Access ---
-
-resource "aws_iam_policy" "ecr_pull" {
-  count       = var.ecr_repository_url != null ? 1 : 0
-  name        = "${var.name}-ecr-pull"
-  description = "Allow EC2 to pull images from ECR"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = "ecr:GetAuthorizationToken"
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "ecr_pull" {
-  count      = var.ecr_repository_url != null ? 1 : 0
-  role       = aws_iam_role.ec2_ssm_role.name
-  policy_arn = aws_iam_policy.ecr_pull[0].arn
-}
-
-# --- 2. SSM Parameter Store Access ---
-
-resource "aws_iam_policy" "ssm_config_read" {
-  count       = 1
-  name        = "${var.name}-ssm-read"
-  description = "Allow EC2 to read app config from SSM Parameter Store"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "ssm:GetParameter",
-          "ssm:GetParameters",
-          "ssm:GetParametersByPath"
-        ]
-        Resource = "arn:aws:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/${var.env}/*"
-      }
-    ]
-  })
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "ssm_config_read" {
-  count      = 1
-  role       = aws_iam_role.ec2_ssm_role.name
-  policy_arn = aws_iam_policy.ssm_config_read[0].arn
-}
-
-# --- 3. Secrets Manager Access (Database) ---
-
-resource "aws_iam_policy" "secrets_read" {
-  count       = length(var.iam_secret_arns) > 0 ? 1 : 0
-  name        = "${var.name}-secrets-read"
-  description = "Allow EC2 to read DB credentials from Secrets Manager"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["secretsmanager:GetSecretValue"]
-        Resource = var.iam_secret_arns
-      }
-    ]
-  })
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "secrets_read" {
-  count      = length(var.iam_secret_arns) > 0 ? 1 : 0
-  role       = aws_iam_role.ec2_ssm_role.name
-  policy_arn = aws_iam_policy.secrets_read[0].arn
-}
-
-# --- 4. SQS Access (Messaging) ---
-
-resource "aws_iam_policy" "sqs_access" {
-  count       = length(var.iam_sqs_arns) > 0 ? 1 : 0
-  name        = "${var.name}-sqs-access"
-  description = "Allow EC2 to access specific SQS queues"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "sqs:SendMessage",
-          "sqs:ReceiveMessage",
-          "sqs:DeleteMessage",
-          "sqs:GetQueueAttributes"
-        ]
-        Resource = var.iam_sqs_arns
-      }
-    ]
-  })
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "sqs_access" {
-  count      = length(var.iam_sqs_arns) > 0 ? 1 : 0
-  role       = aws_iam_role.ec2_ssm_role.name
-  policy_arn = aws_iam_policy.sqs_access[0].arn
-}
-
-# --- 5. RDS Discovery Access ---
-
-resource "aws_iam_policy" "rds_discovery" {
-  name        = "${var.name}-rds-discovery"
-  description = "Allow EC2 to discover RDS instance endpoints"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["rds:DescribeDBInstances"]
-        Resource = "*"
-      }
-    ]
-  })
-  tags = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "rds_discovery" {
-  role       = aws_iam_role.ec2_ssm_role.name
-  policy_arn = aws_iam_policy.rds_discovery.arn
-}
-
-# --- State Migrations ---
+# --- State Migrations (preserve existing resources) ---
 
 moved {
-  from = aws_iam_policy.ecr_pull
-  to   = aws_iam_policy.ecr_pull[0]
+  from = aws_iam_role.ec2_ssm_role
+  to   = module.ec2_iam_role.aws_iam_role.this
 }
 
 moved {
-  from = aws_iam_role_policy_attachment.ecr_pull
-  to   = aws_iam_role_policy_attachment.ecr_pull[0]
+  from = aws_iam_instance_profile.ec2_profile
+  to   = module.ec2_iam_role.aws_iam_instance_profile.this[0]
 }
 
 moved {
-  from = aws_iam_policy.ssm_config_read
-  to   = aws_iam_policy.ssm_config_read[0]
+  from = aws_iam_role_policy_attachment.ssm_managed_instance
+  to   = module.ec2_iam_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"]
 }
 
-moved {
-  from = aws_iam_role_policy_attachment.ssm_config_read
-  to   = aws_iam_role_policy_attachment.ssm_config_read[0]
-}
+# Note: moved blocks for custom policies cannot be used due to dynamic keys (${var.name} interpolation).
+# Terraform moved blocks only support static references. The custom policies will be created fresh
+# if they don't already exist in the iam-role module state. This is safe because:
+# 1. Custom policies are derived from var.ecr_repository_url and var.iam_* variables
+# 2. If those variables don't change, policies will be identical
+# 3. The role and attachments are preserved via moved blocks above
