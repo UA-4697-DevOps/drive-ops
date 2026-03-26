@@ -51,10 +51,10 @@ dependency "shared_infra" {
 }
 
 inputs = {
-  # Disabled by default. Flip to true when private-subnet egress is needed.
+  # Enabled for dev environment. Flip to false to disable NAT instance.
   enabled = true
 
-  tags = {
+  tags = {  
     Environment = local.env_vars.env
     Project     = local.common_vars.project_name
     ManagedBy   = "Terragrunt"
@@ -75,8 +75,7 @@ inputs = {
   # Optional SSH key for break-glass access (prefer SSM Session Manager)
   # key_name = "nat-key"
 
-  # Allow SSH from the bastion's public IP (set when bastion is deployed)
-  # allowed_ssh_cidrs = ["<bastion-eip>/32"]
+  # Allow SSH from the bastion's public IP
   allowed_ssh_cidrs = []
 
   enable_ssm        = true

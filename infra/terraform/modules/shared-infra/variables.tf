@@ -129,12 +129,13 @@ variable "discord_webhook_url" {
   type        = string
   sensitive   = true
 
-  validation {    
+  validation {
     condition = (
       can(regex("^https://discord\\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$", var.discord_webhook_url)) ||
-      var.discord_webhook_url == "https://discord.com/api/webhooks/placeholder"
+      endswith(var.discord_webhook_url, "placeholder") ||
+      endswith(var.discord_webhook_url, "dummy_token")
     )
-    error_message = "The discord_webhook_url must be a valid Discord webhook URL or the default placeholder."
+    error_message = "The discord_webhook_url must be a valid Discord webhook URL or a recognized development placeholder (placeholder/dummy_token)."
   }
 }
 

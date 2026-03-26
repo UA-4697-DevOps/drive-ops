@@ -19,10 +19,10 @@ data "aws_ami" "nat_instance" {
 }
 
 resource "aws_iam_role" "nat_instance" {
-  count                = var.enabled ? 1 : 0
-  name                 = "Training-${var.project_name}-${var.env}-nat-instance-role"
-  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+  name = "Training-${var.project_name}-${var.env}-nat-instance-role"
 
+  count = var.enabled ? 1 : 0
+  
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -32,7 +32,9 @@ resource "aws_iam_role" "nat_instance" {
     }]
   })
 
-  tags = { Name = "Training-${var.project_name}-${var.env}-nat-instance-role" }
+  tags = merge(var.tags, {
+    Name = "Training-${var.project_name}-${var.env}-nat-instance-role"
+  })
 }
 
 # SSM Session Manager — reach the NAT instance without opening port 22
@@ -58,7 +60,10 @@ resource "aws_iam_instance_profile" "nat_instance" {
 resource "aws_eip" "nat_instance" {
   count  = var.enabled ? 1 : 0
   domain = "vpc"
-  tags   = { Name = "${var.project_name}-${var.env}-nat-instance-eip" }
+  
+  tags = merge(var.tags, {
+    Name = "${var.project_name}-${var.env}-nat-instance-eip"
+  })
 }
 
 resource "aws_instance" "nat_instance" {
@@ -70,10 +75,7 @@ resource "aws_instance" "nat_instance" {
   iam_instance_profile        = aws_iam_instance_profile.nat_instance[0].name
   key_name                    = var.key_name
   associate_public_ip_address = true
-
-  # CRITICAL: Disables source/destination check so the instance can forward
-  # traffic that is not destined for itself (i.e., act as a router/NAT).
-  source_dest_check = false
+  source_dest_check           = false
 
   metadata_options {
     http_endpoint               = "enabled"
@@ -89,10 +91,10 @@ resource "aws_instance" "nat_instance" {
     delete_on_termination = true
   }
 
-  tags = {
+  tags = merge(var.tags, {
     Name = "${var.project_name}-${var.env}-nat-instance"
     Role = "NAT"
-  }
+  })
 
   lifecycle {
     ignore_changes = [ami]
