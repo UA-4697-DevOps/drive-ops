@@ -33,7 +33,13 @@ variable "managed_policy_arns" {
 }
 
 variable "custom_policies" {
-  description = "Map of custom policy names and their JSON documents to create and attach"
+  description = "Map of custom policies. Values can be either policy JSON string, or object with 'policy', 'description' keys"
+  type        = map(any)
+  default     = {}
+}
+
+variable "custom_policies_descriptions" {
+  description = "Optional map of custom policy descriptions (policy_name -> description)"
   type        = map(string)
   default     = {}
 }

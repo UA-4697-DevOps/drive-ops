@@ -9,8 +9,8 @@ resource "aws_iam_role" "this" {
 resource "aws_iam_policy" "custom" {
   for_each    = var.custom_policies
   name        = each.key
-  description = "Custom policy ${each.key} for ${var.role_name}"
-  policy      = each.value
+  description = lookup(var.custom_policies_descriptions, each.key, "Custom policy ${each.key} for ${var.role_name}")
+  policy      = try(each.value.policy, each.value)
   tags        = var.tags
 }
 

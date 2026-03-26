@@ -14,5 +14,5 @@ output "alb_controller_role_name" {
 
 output "alb_controller_policy_arn" {
   description = "ARN of the IAM policy for AWS Load Balancer Controller"
-  value       = aws_iam_policy.alb_controller.arn
+  value       = local.alb_controller_policy_arn
 }
