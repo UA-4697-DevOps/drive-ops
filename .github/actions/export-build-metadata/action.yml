@@ -31,15 +31,15 @@ runs:
         TAG="${{ inputs.image-tag }}"
         DIGEST="${{ inputs.image-digest }}"
 
-        cat > build-artifacts/metadata.env <<EOF
-        image_uri=$URI
-        image_tag=$TAG
-        image_digest=$DIGEST
-        commit_sha=${{ github.sha }}
-        commit_short_sha=${GITHUB_SHA:0:7}
-        branch=${{ github.ref_name }}
-        build_timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-        EOF
+        {
+          echo "image_uri=$URI"
+          echo "image_tag=$TAG"
+          echo "image_digest=$DIGEST"
+          echo "commit_sha=${{ github.sha }}"
+          echo "commit_short_sha=${GITHUB_SHA:0:7}"
+          echo "branch=${{ github.ref_name }}"
+          echo "build_timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        } > build-artifacts/metadata.env
 
         echo "Build metadata generated:"
         cat build-artifacts/metadata.env
