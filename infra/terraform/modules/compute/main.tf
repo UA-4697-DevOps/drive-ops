@@ -45,7 +45,7 @@ resource "aws_security_group_rule" "compute_ingress_internal" {
   from_port         = 0
   to_port           = 65535
   protocol          = "tcp"
-  cidr_blocks       = ["10.0.0.0/16"] 
+  cidr_blocks       = ["10.0.0.0/16"]
   security_group_id = module.security_group.sg_id
   description       = "Allow all TCP from internal VPC (VPN access)"
 }

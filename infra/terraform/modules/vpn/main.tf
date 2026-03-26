@@ -203,10 +203,10 @@ resource "aws_instance" "vpn" {
     Role = "VPN"
   })
 
-   lifecycle {
-     # user_data changes require explicit replacement to avoid PKI regeneration
-     ignore_changes = [user_data]
-   }
+  lifecycle {
+    # user_data changes require explicit replacement to avoid PKI regeneration
+    ignore_changes = [user_data]
+  }
 }
 
 resource "aws_eip_association" "vpn" {
