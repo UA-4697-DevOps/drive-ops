@@ -1,0 +1,32 @@
+name: 'Setup Go with Swagger'
+description: 'Sets up Go environment and installs Swagger CLI for API documentation generation'
+
+inputs:
+  go-version:
+    description: 'Go version to install'
+    required: true
+  service-path:
+    description: 'Path to the service directory (e.g., trip-service)'
+    required: true
+  swag-version:
+    description: 'Swagger CLI version to install'
+    required: false
+    default: 'v1.16.6'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache-dependency-path: ${{ inputs.service-path }}/go.sum
+
+    - name: Install Swagger CLI
+      shell: bash
+      run: go install github.com/swaggo/swag/cmd/swag@${{ inputs.swag-version }}
+
+    - name: Generate Swagger documentation
+      shell: bash
+      working-directory: ${{ inputs.service-path }}
+      run: swag init -g cmd/server/main.go -o docs

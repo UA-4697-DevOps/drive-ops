@@ -1,0 +1,52 @@
+name: 'Export Build Metadata'
+description: 'Exports build metadata (image URI, tag, digest, commit SHA) to artifacts'
+
+inputs:
+  ecr-registry:
+    description: 'ECR registry URL'
+    required: true
+  ecr-repository:
+    description: 'ECR repository name'
+    required: true
+  image-tag:
+    description: 'Image tag/version'
+    required: true
+  image-digest:
+    description: 'Image digest from build output'
+    required: true
+  artifact-name:
+    description: 'Name for the uploaded artifact'
+    required: false
+    default: 'build-metadata'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate metadata file
+      shell: bash
+      run: |
+        mkdir -p build-artifacts
+
+        URI="${{ inputs.ecr-registry }}/${{ inputs.ecr-repository }}"
+        TAG="${{ inputs.image-tag }}"
+        DIGEST="${{ inputs.image-digest }}"
+
+        cat > build-artifacts/metadata.env <<EOF
+        image_uri=$URI
+        image_tag=$TAG
+        image_digest=$DIGEST
+        commit_sha=${{ github.sha }}
+        commit_short_sha=${GITHUB_SHA:0:7}
+        branch=${{ github.ref_name }}
+        build_timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        EOF
+
+        echo "Build metadata generated:"
+        cat build-artifacts/metadata.env
+
+    - name: Upload build metadata
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: build-artifacts/metadata.env
+        retention-days: 30
