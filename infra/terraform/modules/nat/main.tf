@@ -22,7 +22,7 @@ resource "aws_iam_role" "nat_instance" {
   name = "Training-${var.project_name}-${var.env}-nat-instance-role"
 
   count = var.enabled ? 1 : 0
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -60,7 +60,7 @@ resource "aws_iam_instance_profile" "nat_instance" {
 resource "aws_eip" "nat_instance" {
   count  = var.enabled ? 1 : 0
   domain = "vpc"
-  
+
   tags = merge(var.tags, {
     Name = "${var.project_name}-${var.env}-nat-instance-eip"
   })
