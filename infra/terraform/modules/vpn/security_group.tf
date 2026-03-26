@@ -2,7 +2,7 @@ module "security_group" {
   source = "../security-group"
 
   name        = "${var.project_name}-${var.env}-vpn-sg"
-  description = "OpenVPN server — UDP 1194 from allowlisted CIDRs only"
+  description = "OpenVPN server - UDP 1194 from allowlisted CIDRs only"
   vpc_id      = var.vpc_id
 
   ingress_rules = [

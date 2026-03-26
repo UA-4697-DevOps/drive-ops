@@ -52,8 +52,14 @@ dependency "shared_infra" {
 
 inputs = {
   # Disabled by default. Flip to true when private-subnet egress is needed.
-  enabled = false
+  enabled = true
 
+  tags = {
+    Environment = local.env_vars.env
+    Project     = local.common_vars.project_name
+    ManagedBy   = "Terragrunt"
+  }
+  
   project_name = local.common_vars.project_name
   env          = local.env_vars.env
   account_id   = local.env_vars.account_id

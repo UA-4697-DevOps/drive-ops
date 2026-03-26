@@ -73,7 +73,7 @@ inputs = {
   allowed_vpn_cidrs = jsondecode(get_env("TG_VAR_BASTION_ALLOWED_SSH_CIDRS"))
 
   # Customer-managed KMS key for encrypting OpenVPN PKI and client .ovpn secrets
-  kms_key_arn = dependency.shared_infra.outputs.kms_key_arn
+  kms_key_arn = try(dependency.shared_infra.outputs.kms_key_arn, null)
 
   tags = {
     Component = "vpn"

@@ -83,3 +83,9 @@ variable "enable_cloudwatch" {
   default     = true
   description = "Attach CloudWatchAgentServerPolicy to enable enhanced instance monitoring (NAT throughput, errors, etc.)."
 }
+
+variable "tags" {
+  description = "A map of tags to add to all resources"
+  type        = map(string)
+  default     = {}
+}

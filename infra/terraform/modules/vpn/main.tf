@@ -29,7 +29,7 @@ variable "ami_id" {
   default     = null
   description = "Optional AMI ID for the VPN instance. If not provided, the latest Amazon Linux 2023 ARM64 AMI will be used."
   validation {
-    condition     = var.ami_id == null || trimspace(var.ami_id) != ""
+    condition     = var.ami_id == null ? true : trimspace(var.ami_id) != ""
     error_message = "ami_id, when provided, must be a non-empty AMI ID."
   }
 }
@@ -179,7 +179,7 @@ resource "aws_instance" "vpn" {
 
   root_block_device {
     volume_type           = "gp3"
-    volume_size           = 8
+    volume_size           = 30
     encrypted             = true
     kms_key_id            = var.kms_key_arn # null falls back to the default AWS-managed EBS key
     delete_on_termination = true

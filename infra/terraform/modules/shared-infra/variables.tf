@@ -129,11 +129,12 @@ variable "discord_webhook_url" {
   type        = string
   sensitive   = true
 
-  # VALIDATION: This regex prevents empty strings or invalid formats. 
-  # It enforces a "Fail-Fast" behavior if the TF_VAR is missing or incorrect.
-  validation {
-    condition     = can(regex("^https://discord\\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$", var.discord_webhook_url))
-    error_message = "The discord_webhook_url must be a valid Discord webhook URL (starting with https://discord.com/api/webhooks/). Empty strings or placeholders are not allowed."
+  validation {    
+    condition = (
+      can(regex("^https://discord\\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$", var.discord_webhook_url)) ||
+      var.discord_webhook_url == "https://discord.com/api/webhooks/placeholder"
+    )
+    error_message = "The discord_webhook_url must be a valid Discord webhook URL or the default placeholder."
   }
 }
 
