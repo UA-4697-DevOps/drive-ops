@@ -10,20 +10,20 @@ output "repository_arn" {
 
 output "role_arn" {
   description = "The ARN of the GitHub Actions IAM role"
-  value       = aws_iam_role.role.arn
+  value       = module.ci_role.iam_role_arn
 }
 
 output "role_name" {
   description = "The name of the GitHub Actions IAM role (for attaching additional policies)"
-  value       = aws_iam_role.role.name
+  value       = module.ci_role.iam_role_name
 }
 
 output "deploy_role_arn" {
   description = "The ARN of the GitHub Actions deploy IAM role (workflow_dispatch)"
-  value       = aws_iam_role.deploy_role.arn
+  value       = module.deploy_role.iam_role_arn
 }
 
 output "deploy_role_name" {
   description = "The name of the GitHub Actions deploy IAM role"
-  value       = aws_iam_role.deploy_role.name
+  value       = module.deploy_role.iam_role_name
 }

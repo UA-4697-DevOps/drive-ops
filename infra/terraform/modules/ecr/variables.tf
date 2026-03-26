@@ -12,3 +12,9 @@ variable "github_repo" {
   description = "The GitHub repository in 'org/repo' format (e.g., UA-4697-DevOps/drive-ops)"
   type        = string
 }
+
+variable "tags" {
+  description = "A map of tags to assign to all resources"
+  type        = map(string)
+  default     = {}
+}
