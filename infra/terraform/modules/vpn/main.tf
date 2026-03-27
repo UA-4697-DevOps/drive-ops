@@ -24,16 +24,12 @@
 #     --query SecretString --output text > client1.ovpn
 # ==============================================================================
 
-# ==============================================================================
-# Variables
-# ==============================================================================
-
 variable "ami_id" {
   type        = string
   default     = null
   description = "Optional AMI ID for the VPN instance. If not provided, the latest Amazon Linux 2023 ARM64 AMI will be used."
   validation {
-    condition     = var.ami_id == null || trimspace(var.ami_id) != ""
+    condition     = var.ami_id == null ? true : trimspace(var.ami_id) != ""
     error_message = "ami_id, when provided, must be a non-empty AMI ID."
   }
 }
@@ -75,10 +71,6 @@ data "aws_ami" "al2023" {
     values = ["hvm"]
   }
 }
-
-# ==============================================================================
-# IAM Role & Instance Profile
-# ==============================================================================
 
 data "aws_iam_policy_document" "vpn_assume_role" {
   statement {
@@ -151,10 +143,6 @@ resource "aws_iam_instance_profile" "vpn" {
   })
 }
 
-# ==============================================================================
-# Elastic IP — allocated first so the public IP can be embedded in user_data
-# ==============================================================================
-
 resource "aws_eip" "vpn" {
   domain = "vpc"
 
@@ -163,15 +151,24 @@ resource "aws_eip" "vpn" {
   })
 }
 
-# ==============================================================================
-# EC2 Instance
-# ==============================================================================
+module "security_group" {
+  source = "../security-group"
+
+  name        = "${var.project_name}-${var.env}-vpn-sg"
+  description = "Security group for OpenVPN server"
+  vpc_id      = var.vpc_id
+
+  ingress_rules = var.ingress_rules
+  egress_rules  = var.egress_rules
+
+  tags = var.tags
+}
 
 resource "aws_instance" "vpn" {
   ami                    = var.ami_id != null ? var.ami_id : data.aws_ami.al2023[0].id
   instance_type          = var.instance_type
   subnet_id              = var.public_subnet_id
-  vpc_security_group_ids = [aws_security_group.vpn.id]
+  vpc_security_group_ids = [module.security_group.sg_id]
   key_name               = var.key_name
   iam_instance_profile   = aws_iam_instance_profile.vpn.name
   monitoring             = true
@@ -195,7 +192,7 @@ resource "aws_instance" "vpn" {
 
   root_block_device {
     volume_type           = "gp3"
-    volume_size           = 8
+    volume_size           = 30
     encrypted             = true
     kms_key_id            = var.kms_key_arn # null falls back to the default AWS-managed EBS key
     delete_on_termination = true
@@ -211,10 +208,6 @@ resource "aws_instance" "vpn" {
     ignore_changes = [user_data]
   }
 }
-
-# ==============================================================================
-# EIP Association
-# ==============================================================================
 
 resource "aws_eip_association" "vpn" {
   instance_id   = aws_instance.vpn.id

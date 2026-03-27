@@ -15,5 +15,5 @@ output "nat_instance_private_ip" {
 
 output "nat_security_group_id" {
   description = "Security group ID of the NAT instance. null when enabled = false."
-  value       = try(aws_security_group.nat_instance[0].id, null)
+  value       = try(module.security_group[0].sg_id, null)
 }
