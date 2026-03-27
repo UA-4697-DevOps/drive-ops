@@ -23,11 +23,13 @@ resources:
 autoscaling:
   enabled: false
 
-backend:
-  driverServiceUrl: "http://driver-service.driver-service.svc.cluster.local:8082"
-
 ingress:
-  enabled: false
+  enabled: true
+  hosts:
+    - host: "driveops.dukhota.dev"
+      paths:
+        - path: /
+          pathType: Prefix
 
 livenessProbe:
   httpGet:
