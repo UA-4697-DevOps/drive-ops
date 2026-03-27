@@ -14,7 +14,7 @@ locals {
 inputs = {
   project_name = local.common_vars.project_name
   env          = local.env_vars.env
-  domain_name  = "driveops.dmytrominochkin.cloud"
+  domain_name  = "driveops.dukhota.dev"
 
   tags = {
     Component = "route53"

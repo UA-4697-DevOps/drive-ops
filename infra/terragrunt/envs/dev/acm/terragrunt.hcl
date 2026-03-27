@@ -25,7 +25,7 @@ dependency "route53" {
 inputs = {
   project_name = local.common_vars.project_name
   env          = local.env_vars.env
-  domain_name  = "driveops.dmytrominochkin.cloud"
+  domain_name  = "driveops.dukhota.dev"
   zone_id      = dependency.route53.outputs.zone_id
 
   tags = {
