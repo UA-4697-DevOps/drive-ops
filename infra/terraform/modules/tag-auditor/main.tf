@@ -48,10 +48,11 @@ data "archive_file" "dummy" {
   }
 }
 
-resource "aws_iam_role" "this" {
+module "lambda_iam_roles" {
+  source   = "../iam-role"
   for_each = var.lambda_functions
 
-  name                 = "Training-${var.project_name}-${var.env}-${each.key}-role"
+  role_name            = "Training-${var.project_name}-${var.env}-${each.key}-role"
   permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
 
   assume_role_policy = jsonencode({
@@ -62,25 +63,17 @@ resource "aws_iam_role" "this" {
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
-}
 
-resource "aws_iam_role_policy_attachment" "basic_exec" {
-  for_each = var.lambda_functions
+  managed_policy_arns = [
+    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  ]
 
-  role       = aws_iam_role.this[each.key].name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-resource "aws_iam_role_policy" "custom_policy" {
-  for_each = { for k, v in var.lambda_functions : k => v if contains(keys(local.policies), k) }
-
-  name = "Training-${var.project_name}-${var.env}-${each.key}-policy"
-  role = aws_iam_role.this[each.key].id
-
-  policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = local.policies[each.key].Statement
-  })
+  inline_policies = contains(keys(local.policies), each.key) ? {
+    "Training-${var.project_name}-${var.env}-${each.key}-policy" = jsonencode({
+      Version   = "2012-10-17"
+      Statement = local.policies[each.key].Statement
+    })
+  } : {}
 }
 
 resource "aws_lambda_function" "this" {
@@ -89,7 +82,8 @@ resource "aws_lambda_function" "this" {
   function_name = "${var.project_name}-${var.env}-${each.key}"
   filename      = data.archive_file.dummy.output_path
 
-  role        = aws_iam_role.this[each.key].arn
+  role        = module.lambda_iam_roles[each.key].iam_role_arn
+  
   handler     = each.value.handler
   runtime     = each.value.runtime
   timeout     = each.value.timeout
