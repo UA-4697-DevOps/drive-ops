@@ -1,18 +1,19 @@
 # ==============================================================================
 # EKS MODULE – IAM ROLES
 # ==============================================================================
-# Creates two IAM roles:
-#   1. EKS Cluster Role    – assumed by the EKS control plane
-#   2. Node Group Role      – assumed by EC2 worker nodes
+# Creates IAM roles using the iam-role module:
+#   1. EKS Cluster Role    – assumed by the EKS control plane (via module)
+#   2. Node Group Role      – assumed by EC2 worker nodes (via module)
+#   3. Cluster Autoscaler IRSA Role – for pod-level access (direct resource)
 # All roles use the Training- prefix and DevOpsBound permissions boundary
 # to comply with the account-level IAM constraints.
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# 1. EKS CLUSTER ROLE
+# 1. EKS CLUSTER ROLE (via iam-role module)
 # ------------------------------------------------------------------------------
 
-data "aws_iam_policy_document" "eks_assume_role" {
+data "aws_iam_policy_document" "eks_cluster_assume_role" {
   statement {
     actions = ["sts:AssumeRole"]
     principals {
@@ -22,28 +23,26 @@ data "aws_iam_policy_document" "eks_assume_role" {
   }
 }
 
-resource "aws_iam_role" "eks_cluster" {
-  name                 = "${local.cluster_name}-cluster-role"
-  assume_role_policy   = data.aws_iam_policy_document.eks_assume_role.json
+module "eks_cluster_role" {
+  source = "../iam-role"
+
+  role_name            = "${local.cluster_name}-cluster-role"
+  assume_role_policy   = data.aws_iam_policy_document.eks_cluster_assume_role.json
   permissions_boundary = local.permissions_boundary
-  tags                 = var.tags
-}
 
-resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
-  role       = aws_iam_role.eks_cluster.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
-}
+  managed_policy_arns = [
+    "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
+    "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
+  ]
 
-resource "aws_iam_role_policy_attachment" "eks_vpc_resource_controller" {
-  role       = aws_iam_role.eks_cluster.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
+  tags = var.tags
 }
 
 # ------------------------------------------------------------------------------
-# 2. NODE GROUP ROLE
+# 2. NODE GROUP ROLE (via iam-role module)
 # ------------------------------------------------------------------------------
 
-data "aws_iam_policy_document" "node_assume_role" {
+data "aws_iam_policy_document" "node_group_assume_role" {
   statement {
     actions = ["sts:AssumeRole"]
     principals {
@@ -53,31 +52,63 @@ data "aws_iam_policy_document" "node_assume_role" {
   }
 }
 
-resource "aws_iam_role" "node_group" {
-  name                 = "${local.cluster_name}-node-role"
-  assume_role_policy   = data.aws_iam_policy_document.node_assume_role.json
+module "node_group_role" {
+  source = "../iam-role"
+
+  role_name            = "${local.cluster_name}-node-role"
+  assume_role_policy   = data.aws_iam_policy_document.node_group_assume_role.json
   permissions_boundary = local.permissions_boundary
-  tags                 = var.tags
+
+  managed_policy_arns = [
+    "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
+    "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
+    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  ]
+
+  tags = var.tags
 }
 
-resource "aws_iam_role_policy_attachment" "node_worker_policy" {
-  role       = aws_iam_role.node_group.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+# --- State Migrations for Cluster and Node Roles ---
+
+moved {
+  from = aws_iam_role.eks_cluster
+  to   = module.eks_cluster_role.aws_iam_role.this
 }
 
-resource "aws_iam_role_policy_attachment" "node_cni_policy" {
-  role       = aws_iam_role.node_group.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+moved {
+  from = aws_iam_role_policy_attachment.eks_cluster_policy
+  to   = module.eks_cluster_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"]
 }
 
-resource "aws_iam_role_policy_attachment" "node_ecr_read" {
-  role       = aws_iam_role.node_group.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+moved {
+  from = aws_iam_role_policy_attachment.eks_vpc_resource_controller
+  to   = module.eks_cluster_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"]
 }
 
-resource "aws_iam_role_policy_attachment" "node_ssm" {
-  role       = aws_iam_role.node_group.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+moved {
+  from = aws_iam_role.node_group
+  to   = module.node_group_role.aws_iam_role.this
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.node_worker_policy
+  to   = module.node_group_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"]
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.node_cni_policy
+  to   = module.node_group_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"]
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.node_ecr_read
+  to   = module.node_group_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"]
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.node_ssm
+  to   = module.node_group_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"]
 }
 
 # ------------------------------------------------------------------------------
@@ -114,7 +145,7 @@ resource "aws_iam_role" "cluster_autoscaler" {
 }
 
 resource "aws_iam_policy" "cluster_autoscaler" {
-  name        = "${local.cluster_name}-cluster-autoscaler-policy"
+  name_prefix = "${local.cluster_name}-cluster-autoscaler-policy-"
   description = "Permissions for Cluster Autoscaler to manage EKS node group Auto Scaling Groups"
 
   policy = jsonencode({
@@ -169,6 +200,6 @@ resource "aws_iam_policy" "cluster_autoscaler" {
 }
 
 resource "aws_iam_role_policy_attachment" "cluster_autoscaler" {
-  role       = aws_iam_role.cluster_autoscaler.name
+  role       = aws_iam_role.cluster_autoscaler.id
   policy_arn = aws_iam_policy.cluster_autoscaler.arn
 }
