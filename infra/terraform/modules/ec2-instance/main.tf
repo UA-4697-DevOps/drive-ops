@@ -4,10 +4,12 @@
 # A reusable, hardened EC2 instance with sensible defaults:
 #   - IMDSv2 enforced (http_tokens = "required")
 #   - Encrypted gp3 root volume
+#   - Optional Elastic IP for a stable public address
 #   - Lifecycle: ignore AMI drift (prevents accidental replacement)
 #
-# This module owns ONLY the aws_instance resource. IAM roles, security groups,
-# EIPs, and user_data scripts are the responsibility of the calling module.
+# This module owns the aws_instance and optionally an aws_eip + association.
+# IAM roles, security groups, and user_data scripts are the responsibility
+# of the calling module.
 # ==============================================================================
 
 resource "aws_instance" "this" {
@@ -61,4 +63,21 @@ resource "aws_instance" "this" {
       error_message = "root_volume_throughput is only valid when root_volume_type is gp3."
     }
   }
+}
+
+# --- Optional Elastic IP ---
+
+resource "aws_eip" "this" {
+  count  = var.create_eip ? 1 : 0
+  domain = "vpc"
+
+  tags = merge(var.tags, {
+    Name = "${var.name}-eip"
+  })
+}
+
+resource "aws_eip_association" "this" {
+  count         = var.create_eip ? 1 : 0
+  instance_id   = aws_instance.this.id
+  allocation_id = aws_eip.this[0].id
 }

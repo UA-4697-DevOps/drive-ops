@@ -5,7 +5,7 @@ output "nat_instance_id" {
 
 output "nat_instance_public_ip" {
   description = "Elastic IP address assigned to the NAT instance. null when enabled = false."
-  value       = try(aws_eip.nat_instance[0].public_ip, null)
+  value       = try(module.ec2[0].eip_public_ip, null)
 }
 
 output "nat_instance_private_ip" {

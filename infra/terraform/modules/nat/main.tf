@@ -57,15 +57,7 @@ resource "aws_iam_instance_profile" "nat_instance" {
   role  = aws_iam_role.nat_instance[0].name
 }
 
-resource "aws_eip" "nat_instance" {
-  count  = var.enabled ? 1 : 0
-  domain = "vpc"
-
-  tags = merge(var.tags, {
-    Name = "${var.project_name}-${var.env}-nat-instance-eip"
-  })
-}
-
+# Note: EIP will be created by the ec2 module when create_eip = true
 module "ec2" {
   source = "../ec2-instance"
   count  = var.enabled ? 1 : 0
@@ -86,6 +78,8 @@ module "ec2" {
   extra_tags = {
     Role = "NAT"
   }
+
+  create_eip = true
 }
 
 # --- State Migration ---
@@ -94,14 +88,14 @@ moved {
   to   = module.ec2[0].aws_instance.this
 }
 
-# ==============================================================================
-# EIP Association
-# ==============================================================================
+moved {
+  from = aws_eip.nat_instance[0]
+  to   = module.ec2[0].aws_eip.this[0]
+}
 
-resource "aws_eip_association" "nat_instance" {
-  count         = var.enabled ? 1 : 0
-  instance_id   = module.ec2[0].instance_id
-  allocation_id = aws_eip.nat_instance[0].id
+moved {
+  from = aws_eip_association.nat_instance[0]
+  to   = module.ec2[0].aws_eip_association.this[0]
 }
 
 resource "aws_route" "private_nat_instance" {

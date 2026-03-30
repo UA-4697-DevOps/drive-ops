@@ -39,6 +39,14 @@ variable "vpc_security_group_ids" {
   }
 }
 
+# --- Optional: Networking ---
+
+variable "create_eip" {
+  description = "Allocate an Elastic IP and associate it with the instance (stable public address)"
+  type        = bool
+  default     = false
+}
+
 # --- Optional: Compute ---
 
 variable "instance_type" {

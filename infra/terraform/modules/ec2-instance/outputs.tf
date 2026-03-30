@@ -26,3 +26,13 @@ output "arn" {
   description = "ARN of the EC2 instance"
   value       = aws_instance.this.arn
 }
+
+output "eip_public_ip" {
+  description = "Elastic IP address (null if create_eip = false)"
+  value       = var.create_eip ? aws_eip.this[0].public_ip : null
+}
+
+output "eip_allocation_id" {
+  description = "Allocation ID of the Elastic IP (null if create_eip = false)"
+  value       = var.create_eip ? aws_eip.this[0].id : null
+}

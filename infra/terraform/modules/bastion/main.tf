@@ -71,17 +71,7 @@ resource "aws_iam_instance_profile" "bastion" {
   })
 }
 
-# --- Elastic IP (allocated first so it can be referenced in outputs) ---
-
-resource "aws_eip" "bastion" {
-  domain = "vpc"
-
-  tags = merge(var.tags, {
-    Name = "${var.project_name}-${var.env}-bastion-eip"
-  })
-}
-
-# --- EC2 Instance ---
+# --- EC2 Instance + Elastic IP ---
 
 module "ec2" {
   source = "../ec2-instance"
@@ -96,6 +86,7 @@ module "ec2" {
   monitoring             = true
   user_data              = file("${path.module}/scripts/user-data.sh")
   metadata_hop_limit     = 1
+  create_eip             = true
 
   tags = var.tags
 }
@@ -106,10 +97,12 @@ moved {
   to   = module.ec2.aws_instance.this
 }
 
-# --- Associate EIP with Instance ---
-
-resource "aws_eip_association" "bastion" {
-  instance_id   = module.ec2.instance_id
-  allocation_id = aws_eip.bastion.id
+moved {
+  from = aws_eip.bastion
+  to   = module.ec2.aws_eip.this[0]
 }
 
+moved {
+  from = aws_eip_association.bastion
+  to   = module.ec2.aws_eip_association.this[0]
+}
