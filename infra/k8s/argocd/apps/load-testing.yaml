@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
     targetRevision: HEAD
-    path: infra/k8s/load-testing
+    path: infra/k8s/manifests/load-testing
   destination:
     server: https://kubernetes.default.svc
     namespace: load-testing

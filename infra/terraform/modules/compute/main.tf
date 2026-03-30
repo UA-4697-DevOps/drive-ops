@@ -2,7 +2,7 @@ resource "aws_instance" "this" {
   ami                         = local.resolved_ami
   instance_type               = var.instance_type
   subnet_id                   = var.subnet_id
-  vpc_security_group_ids      = concat([aws_security_group.ec2.id], var.additional_security_group_ids)
+  vpc_security_group_ids      = concat([module.security_group.sg_id], var.additional_security_group_ids)
   key_name                    = var.key_name
   associate_public_ip_address = var.associate_public_ip_address
   iam_instance_profile        = module.ec2_iam_role.iam_instance_profile_name
@@ -36,9 +36,26 @@ resource "aws_instance" "this" {
   lifecycle {
     ignore_changes = [
       ami,
-      # REMOVED user_data from here. 
-      # This allows Terraform to detect the new SSM Agent installation 
-      # script and replace the instance.
     ]
   }
+}
+
+resource "aws_security_group_rule" "compute_ingress_internal" {
+  type              = "ingress"
+  from_port         = 0
+  to_port           = 65535
+  protocol          = "tcp"
+  cidr_blocks       = ["10.0.0.0/16"]
+  security_group_id = module.security_group.sg_id
+  description       = "Allow all TCP from internal VPC (VPN access)"
+}
+
+resource "aws_security_group_rule" "compute_icmp_internal" {
+  type              = "ingress"
+  from_port         = -1
+  to_port           = -1
+  protocol          = "icmp"
+  cidr_blocks       = ["10.0.0.0/16"]
+  security_group_id = module.security_group.sg_id
+  description       = "Allow Ping from internal VPC"
 }

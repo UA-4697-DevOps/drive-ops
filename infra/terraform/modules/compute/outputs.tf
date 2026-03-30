@@ -15,7 +15,7 @@ output "instance_private_ip" {
 
 output "security_group_id" {
   description = "ID of the EC2 security group"
-  value       = aws_security_group.ec2.id
+  value       = module.security_group.sg_id
 }
 
 output "iam_role_arn" {

@@ -2,11 +2,9 @@ package infratests
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/gruntwork-io/terratest/modules/terraform"
-	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -55,10 +53,10 @@ func TestDriverServiceInfra(t *testing.T) {
 		t.Run(fmt.Sprintf("SQS_%s_Configuration", queueModule), func(t *testing.T) {
 
 			// Use findDriverResourceChange to inspect planned changes (supports computed values)
-			mainQueue := findDriverResourceChange(t, planStruct, "aws_sqs_queue", "main_queue", queueModule)
+			mainQueue := FindResourceChange(t, planStruct, "aws_sqs_queue", "main_queue", queueModule)
 			assert.NotNil(t, mainQueue, fmt.Sprintf("%s Main Queue must be defined", queueModule))
 
-			dlq := findDriverResourceChange(t, planStruct, "aws_sqs_queue", "dlq", queueModule)
+			dlq := FindResourceChange(t, planStruct, "aws_sqs_queue", "dlq", queueModule)
 			assert.NotNil(t, dlq, fmt.Sprintf("%s DLQ must be defined", queueModule))
 
 			if mainQueue != nil {
@@ -88,13 +86,13 @@ func TestDriverServiceInfra(t *testing.T) {
 	// 2. Validate Security Group Wiring (App -> DB)
 	// -----------------------------------------------------------------------
 	t.Run("SecurityGroup_Isolation", func(t *testing.T) {
-		appSg := findDriverResourceChange(t, planStruct, "aws_security_group", "app", "vpc")
+		appSg := FindResourceChange(t, planStruct, "aws_security_group", "app", "vpc")
 		assert.NotNil(t, appSg, "App Security Group must be defined")
 
-		dbSg := findDriverResourceChange(t, planStruct, "aws_security_group", "db", "vpc")
+		dbSg := FindResourceChange(t, planStruct, "aws_security_group", "db", "vpc")
 		assert.NotNil(t, dbSg, "DB Security Group must be defined")
 
-		dbIngress := findDriverResourceChange(t, planStruct, "aws_security_group_rule", "db_ingress_postgres", "vpc")
+		dbIngress := FindResourceChange(t, planStruct, "aws_security_group_rule", "db_ingress_postgres", "vpc")
 		assert.NotNil(t, dbIngress, "DB Ingress Rule must be defined")
 
 		if dbIngress != nil {
@@ -108,17 +106,3 @@ func TestDriverServiceInfra(t *testing.T) {
 	})
 }
 
-func findDriverResourceChange(t *testing.T, plan *terraform.PlanStruct, resType string, resName string, parentModule string) *tfjson.ResourceChange {
-	t.Helper()
-	targetSuffix := fmt.Sprintf("%s.%s", resType, resName)
-
-	for key, resource := range plan.ResourceChangesMap {
-		if strings.HasSuffix(key, targetSuffix) {
-			if parentModule != "" && !strings.Contains(key, fmt.Sprintf("module.%s", parentModule)) {
-				continue
-			}
-			return resource
-		}
-	}
-	return nil
-}
