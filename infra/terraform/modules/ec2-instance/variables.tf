@@ -138,6 +138,18 @@ variable "root_volume_kms_key_id" {
   default     = null
 }
 
+variable "root_volume_iops" {
+  description = "Amount of provisioned IOPS. Required for io1 and io2, optional for gp3."
+  type        = number
+  default     = null
+}
+
+variable "root_volume_throughput" {
+  description = "Throughput in MiB/s. Only valid for gp3."
+  type        = number
+  default     = null
+}
+
 # --- Optional: Tags ---
 
 variable "tags" {
