@@ -41,12 +41,6 @@ data "aws_iam_policy_document" "external_dns" {
   }
 }
 
-resource "aws_iam_policy" "external_dns" {
-  name        = "Training-${var.project_name}-${var.env}-external-dns-policy"
-  description = "Allow External DNS to manage Route53 records"
-  policy      = data.aws_iam_policy_document.external_dns.json
-  tags        = var.tags
-}
 
 # Trust policy for IRSA (IAM Roles for Service Accounts)
 data "aws_iam_policy_document" "external_dns_assume_role" {
@@ -73,16 +67,21 @@ data "aws_iam_policy_document" "external_dns_assume_role" {
   }
 }
 
-# IAM role for External DNS
-resource "aws_iam_role" "external_dns" {
-  name                 = "Training-${var.project_name}-${var.env}-external-dns-role"
-  assume_role_policy   = data.aws_iam_policy_document.external_dns_assume_role.json
+module "external_dns_iam_role" {
+  source = "../iam-role" 
+
+  role_name            = "Training-${var.project_name}-${var.env}-external-dns-role"
   permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+  assume_role_policy   = data.aws_iam_policy_document.external_dns_assume_role.json
   tags                 = var.tags
+
+  custom_policies = {
+    "Training-${var.project_name}-${var.env}-external-dns-policy" = data.aws_iam_policy_document.external_dns.json
+  }
+
+  custom_policies_descriptions = {
+    "Training-${var.project_name}-${var.env}-external-dns-policy" = "Allow External DNS to manage Route53 records"
+  }
 }
 
-# Attach policy to role
-resource "aws_iam_role_policy_attachment" "external_dns" {
-  role       = aws_iam_role.external_dns.name
-  policy_arn = aws_iam_policy.external_dns.arn
-}
+
