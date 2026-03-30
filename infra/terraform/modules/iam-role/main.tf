@@ -6,11 +6,31 @@ resource "aws_iam_role" "this" {
   tags                 = var.tags
 }
 
+locals {
+  normalized_custom_policies = {
+    for key, value in var.custom_policies : key => (
+      can(value.policy) ? {
+        policy_name = try(value.policy_name, key)
+        policy      = value.policy
+        description = coalesce(
+          try(value.description, null),
+          lookup(var.custom_policies_descriptions, try(value.policy_name, key), null)
+        )
+        } : {
+        policy_name = key
+        policy      = value
+        description = lookup(var.custom_policies_descriptions, key, null)
+      }
+    )
+  }
+}
+
 resource "aws_iam_policy" "custom" {
-  for_each    = var.custom_policies
-  name        = each.key
-  description = lookup(var.custom_policies_descriptions, each.key, "Custom policy ${each.key} for ${var.role_name}")
-  policy      = try(each.value.policy, each.value)
+  for_each = local.normalized_custom_policies
+
+  name        = each.value.policy_name
+  description = coalesce(each.value.description, "Custom policy ${each.value.policy_name} for ${var.role_name}")
+  policy      = each.value.policy
   tags        = var.tags
 }
 

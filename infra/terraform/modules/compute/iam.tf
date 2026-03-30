@@ -22,84 +22,115 @@ data "aws_iam_policy_document" "ec2_assume_role" {
 
 # Build custom policies map with conditional logic
 locals {
+  ecr_url_parts      = var.ecr_repository_url != null ? split("/", replace(var.ecr_repository_url, "https://", "")) : []
+  ecr_registry_parts = length(local.ecr_url_parts) > 0 ? split(".", local.ecr_url_parts[0]) : []
+  ecr_repo_name      = length(local.ecr_url_parts) > 1 ? split(":", local.ecr_url_parts[1])[0] : null
+
+  derived_ecr_repository_arn = (
+    length(local.ecr_registry_parts) >= 4 &&
+    local.ecr_repo_name != null
+    ) ? format(
+    "arn:aws:ecr:%s:%s:repository/%s",
+    local.ecr_registry_parts[3],
+    local.ecr_registry_parts[0],
+    local.ecr_repo_name
+  ) : null
+
+  resolved_ecr_repository_arn = coalesce(var.ecr_repository_arn, local.derived_ecr_repository_arn)
+
   ec2_custom_policies = {
     # ECR Pull Access
-    "${var.name}-ecr-pull" = var.ecr_repository_url != null ? jsonencode({
-      Version = "2012-10-17"
-      Statement = [
-        {
-          Effect   = "Allow"
-          Action   = "ecr:GetAuthorizationToken"
-          Resource = "*"
-        },
-        {
-          Effect = "Allow"
-          Action = [
-            "ecr:BatchCheckLayerAvailability",
-            "ecr:GetDownloadUrlForLayer",
-            "ecr:BatchGetImage"
-          ]
-          Resource = "*"
-        }
-      ]
-    }) : null
+    ecr_pull = local.resolved_ecr_repository_arn != null ? {
+      policy_name = "${var.name}-ecr-pull"
+      policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+          {
+            Effect   = "Allow"
+            Action   = "ecr:GetAuthorizationToken"
+            Resource = "*"
+          },
+          {
+            Effect = "Allow"
+            Action = [
+              "ecr:BatchCheckLayerAvailability",
+              "ecr:GetDownloadUrlForLayer",
+              "ecr:BatchGetImage"
+            ]
+            Resource = local.resolved_ecr_repository_arn
+          }
+        ]
+      })
+    } : null
 
     # SSM Parameter Store Access
-    "${var.name}-ssm-read" = jsonencode({
-      Version = "2012-10-17"
-      Statement = [
-        {
-          Effect = "Allow"
-          Action = [
-            "ssm:GetParameter",
-            "ssm:GetParameters",
-            "ssm:GetParametersByPath"
-          ]
-          Resource = "arn:aws:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/${var.env}/*"
-        }
-      ]
-    })
+    ssm_read = {
+      policy_name = "${var.name}-ssm-read"
+      policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+          {
+            Effect = "Allow"
+            Action = [
+              "ssm:GetParameter",
+              "ssm:GetParameters",
+              "ssm:GetParametersByPath"
+            ]
+            Resource = "arn:aws:ssm:${data.aws_region.current.id}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/${var.env}/*"
+          }
+        ]
+      })
+    }
 
     # Secrets Manager Access
-    "${var.name}-secrets-read" = length(var.iam_secret_arns) > 0 ? jsonencode({
-      Version = "2012-10-17"
-      Statement = [
-        {
-          Effect   = "Allow"
-          Action   = ["secretsmanager:GetSecretValue"]
-          Resource = var.iam_secret_arns
-        }
-      ]
-    }) : null
+    secrets_read = length(var.iam_secret_arns) > 0 ? {
+      policy_name = "${var.name}-secrets-read"
+      policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+          {
+            Effect   = "Allow"
+            Action   = ["secretsmanager:GetSecretValue"]
+            Resource = var.iam_secret_arns
+          }
+        ]
+      })
+    } : null
 
     # SQS Access
-    "${var.name}-sqs-access" = length(var.iam_sqs_arns) > 0 ? jsonencode({
-      Version = "2012-10-17"
-      Statement = [
-        {
-          Effect = "Allow"
-          Action = [
-            "sqs:SendMessage",
-            "sqs:ReceiveMessage",
-            "sqs:DeleteMessage",
-            "sqs:GetQueueAttributes"
-          ]
-          Resource = var.iam_sqs_arns
-        }
-      ]
-    }) : null
+    sqs_access = length(var.iam_sqs_arns) > 0 ? {
+      policy_name = "${var.name}-sqs-access"
+      policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+          {
+            Effect = "Allow"
+            Action = [
+              "sqs:SendMessage",
+              "sqs:ReceiveMessage",
+              "sqs:DeleteMessage",
+              "sqs:GetQueueAttributes"
+            ]
+            Resource = var.iam_sqs_arns
+          }
+        ]
+      })
+    } : null
 
     # RDS Discovery Access
-    "${var.name}-rds-discovery" = jsonencode({
-      Version = "2012-10-17"
-      Statement = [
-        {
-          Effect   = "Allow"
-          Action   = ["rds:DescribeDBInstances"]
-          Resource = "*"
-        }
-      ]
-    })
+    rds_discovery = {
+      policy_name = "${var.name}-rds-discovery"
+      policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+          {
+            Effect   = "Allow"
+            Action   = ["rds:DescribeDBInstances"]
+            Resource = "*"
+          }
+        ]
+      })
+    }
   }
 
   # Filter out null policies before passing to module
@@ -142,9 +173,5 @@ moved {
   to   = module.ec2_iam_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"]
 }
 
-# Note: moved blocks for custom policies cannot be used due to dynamic keys (${var.name} interpolation).
-# Terraform moved blocks only support static references. The custom policies will be created fresh
-# if they don't already exist in the iam-role module state. This is safe because:
-# 1. Custom policies are derived from var.ecr_repository_url and var.iam_* variables
-# 2. If those variables don't change, policies will be identical
-# 3. The role and attachments are preserved via moved blocks above
+# Note: custom policy keys are now stable logical keys (e.g., ecr_pull, ssm_read),
+# so future moved blocks can target static addresses safely when needed.
