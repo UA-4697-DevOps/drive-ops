@@ -1,4 +1,7 @@
-resource "aws_instance" "this" {
+module "ec2" {
+  source = "../ec2-instance"
+
+  name                        = var.name
   ami                         = local.resolved_ami
   instance_type               = var.instance_type
   subnet_id                   = var.subnet_id
@@ -10,34 +13,16 @@ resource "aws_instance" "this" {
   user_data                   = local.resolved_user_data
   disable_api_termination     = var.enable_termination_protection
 
-  root_block_device {
-    volume_size           = var.root_volume_size
-    volume_type           = var.root_volume_type
-    delete_on_termination = true
-    encrypted             = true
+  root_volume_size = var.root_volume_size
+  root_volume_type = var.root_volume_type
 
-    tags = merge(var.tags, {
-      Name = "${var.name}-root-volume"
-    })
-  }
+  tags = var.tags
+}
 
-  metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required"
-    http_put_response_hop_limit = 2
-    instance_metadata_tags      = "enabled"
-  }
-
-  tags = merge(var.tags, {
-    Name = var.name
-  })
-
-  # --- CRITICAL UPDATE ---
-  lifecycle {
-    ignore_changes = [
-      ami,
-    ]
-  }
+# --- State Migration ---
+moved {
+  from = aws_instance.this
+  to   = module.ec2.aws_instance.this
 }
 
 resource "aws_security_group_rule" "compute_ingress_internal" {

@@ -83,7 +83,10 @@ resource "aws_eip" "bastion" {
 
 # --- EC2 Instance ---
 
-resource "aws_instance" "bastion" {
+module "ec2" {
+  source = "../ec2-instance"
+
+  name                   = "${var.project_name}-${var.env}-bastion"
   ami                    = data.aws_ami.al2023.id
   instance_type          = var.instance_type
   subnet_id              = var.public_subnet_id
@@ -91,38 +94,22 @@ resource "aws_instance" "bastion" {
   key_name               = var.key_name
   iam_instance_profile   = aws_iam_instance_profile.bastion.name
   monitoring             = true
+  user_data              = file("${path.module}/scripts/user-data.sh")
+  metadata_hop_limit     = 1
 
-  user_data = file("${path.module}/scripts/user-data.sh")
+  tags = var.tags
+}
 
-  metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required" # IMDSv2 only
-    http_put_response_hop_limit = 1
-  }
-
-  root_block_device {
-    volume_size = 30
-    volume_type = "gp3"
-    encrypted   = true
-  }
-
-  tags = merge(var.tags, {
-    Name = "${var.project_name}-${var.env}-bastion"
-  })
-
-  depends_on = [
-    aws_iam_role_policy_attachment.bastion_ssm,
-    aws_iam_instance_profile.bastion,
-  ]
-
-  lifecycle {
-    ignore_changes = [ami]
-  }
+# --- State Migration ---
+moved {
+  from = aws_instance.bastion
+  to   = module.ec2.aws_instance.this
 }
 
 # --- Associate EIP with Instance ---
 
 resource "aws_eip_association" "bastion" {
-  instance_id   = aws_instance.bastion.id
+  instance_id   = module.ec2.instance_id
   allocation_id = aws_eip.bastion.id
 }
+

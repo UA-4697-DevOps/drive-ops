@@ -5,7 +5,7 @@ output "bastion_public_ip" {
 
 output "bastion_instance_id" {
   description = "Instance ID of the bastion host"
-  value       = aws_instance.bastion.id
+  value       = module.ec2.instance_id
 }
 
 output "bastion_security_group_id" {
