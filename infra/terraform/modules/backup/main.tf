@@ -117,3 +117,20 @@ module "backup_iam_role" {
     "${var.project_name}-backup-s3-access-${var.env}" = "Allow backup process to upload to S3 and encrypt with KMS"
   }
 }
+
+# --- State Migrations for Backup IAM Role ---
+
+moved {
+  from = aws_iam_role.backup_role
+  to   = module.backup_iam_role.aws_iam_role.this
+}
+
+moved {
+  from = aws_iam_policy.backup_s3_access
+  to   = module.backup_iam_role.aws_iam_policy.custom["${var.project_name}-backup-s3-access-${var.env}"]
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.backup_s3_access
+  to   = module.backup_iam_role.aws_iam_role_policy_attachment.custom_attach["${var.project_name}-backup-s3-access-${var.env}"]
+}

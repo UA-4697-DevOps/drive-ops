@@ -84,4 +84,21 @@ module "external_dns_iam_role" {
   }
 }
 
+# --- State Migrations for External DNS IAM Role ---
+
+moved {
+  from = aws_iam_role.external_dns
+  to   = module.external_dns_iam_role.aws_iam_role.this
+}
+
+moved {
+  from = aws_iam_policy.external_dns
+  to   = module.external_dns_iam_role.aws_iam_policy.custom["Training-${var.project_name}-${var.env}-external-dns-policy"]
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.external_dns
+  to   = module.external_dns_iam_role.aws_iam_role_policy_attachment.custom_attach["Training-${var.project_name}-${var.env}-external-dns-policy"]
+}
+
 

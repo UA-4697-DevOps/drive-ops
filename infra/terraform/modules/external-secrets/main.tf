@@ -58,3 +58,20 @@ module "eso_iam_role" {
     "Training-${var.project_name}-${var.env}-eso-secrets-policy" = data.aws_iam_policy_document.eso_secrets.json
   }
 }
+
+# --- State Migrations for ESO IAM Role ---
+
+moved {
+  from = aws_iam_role.eso
+  to   = module.eso_iam_role.aws_iam_role.this
+}
+
+moved {
+  from = aws_iam_policy.eso_secrets
+  to   = module.eso_iam_role.aws_iam_policy.custom["Training-${var.project_name}-${var.env}-eso-secrets-policy"]
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.eso_secrets
+  to   = module.eso_iam_role.aws_iam_role_policy_attachment.custom_attach["Training-${var.project_name}-${var.env}-eso-secrets-policy"]
+}

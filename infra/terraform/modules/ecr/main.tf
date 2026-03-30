@@ -39,7 +39,7 @@ module "ci_role" {
   permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
 
   custom_policies = {
-    "Training-${var.repository_name}-ecr-push-policy" = jsonencode({
+    "Training-${var.repository_name}-ecr-push-policy-ci" = jsonencode({
       Version = "2012-10-17"
       Statement = [
         {
@@ -130,7 +130,7 @@ module "deploy_role" {
   permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
 
   custom_policies = {
-    "Training-${var.repository_name}-ecr-push-policy" = jsonencode({
+    "Training-${var.repository_name}-ecr-push-policy-deploy" = jsonencode({
       Version = "2012-10-17"
       Statement = [
         {
@@ -158,7 +158,10 @@ module "deploy_role" {
   tags = var.tags
 }
 
+# ==============================================================================
 # ECR Lifecycle Policy to manage storage costs
+# ==============================================================================
+
 resource "aws_ecr_lifecycle_policy" "cleanup_policy" {
   repository = aws_ecr_repository.service_repository.name
   policy = jsonencode({
@@ -171,7 +174,9 @@ resource "aws_ecr_lifecycle_policy" "cleanup_policy" {
   })
 }
 
-# --- State Migrations (preserve existing resources) ---
+# ==============================================================================
+# State Migrations (preserve existing resources)
+# ==============================================================================
 
 moved {
   from = aws_iam_role.role

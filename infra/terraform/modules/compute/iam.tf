@@ -20,19 +20,9 @@ data "aws_iam_policy_document" "ec2_assume_role" {
 
 # --- EC2 IAM Role (managed by iam-role module) ---
 
-module "ec2_iam_role" {
-  source = "../iam-role"
-
-  role_name               = "${var.name}-ec2-role"
-  assume_role_policy      = data.aws_iam_policy_document.ec2_assume_role.json
-  permissions_boundary    = local.permissions_boundary
-  create_instance_profile = true
-
-  managed_policy_arns = [
-    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-  ]
-
-  custom_policies = {
+# Build custom policies map with conditional logic
+locals {
+  ec2_custom_policies = {
     # ECR Pull Access
     "${var.name}-ecr-pull" = var.ecr_repository_url != null ? jsonencode({
       Version = "2012-10-17"
@@ -111,6 +101,26 @@ module "ec2_iam_role" {
       ]
     })
   }
+
+  # Filter out null policies before passing to module
+  filtered_custom_policies = {
+    for k, v in local.ec2_custom_policies : k => v if v != null
+  }
+}
+
+module "ec2_iam_role" {
+  source = "../iam-role"
+
+  role_name               = "${var.name}-ec2-role"
+  assume_role_policy      = data.aws_iam_policy_document.ec2_assume_role.json
+  permissions_boundary    = local.permissions_boundary
+  create_instance_profile = true
+
+  managed_policy_arns = [
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  ]
+
+  custom_policies = local.filtered_custom_policies
 
   tags = var.tags
 }

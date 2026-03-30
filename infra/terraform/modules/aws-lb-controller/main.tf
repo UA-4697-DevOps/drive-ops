@@ -52,7 +52,7 @@ module "iam_role" {
 
 moved {
   from = aws_iam_policy.alb_controller
-  to   = module.iam_role.aws_iam_policy.custom["Training-drive-ops-dev-alb-controller-policy"]
+  to   = module.iam_role.aws_iam_policy.custom["Training-${var.project_name}-${var.env}-alb-controller-policy"]
 }
 
 moved {
@@ -62,5 +62,5 @@ moved {
 
 moved {
   from = aws_iam_role_policy_attachment.alb_controller
-  to   = module.iam_role.aws_iam_role_policy_attachment.custom_attach["Training-drive-ops-dev-alb-controller-policy"]
+  to   = module.iam_role.aws_iam_role_policy_attachment.custom_attach["Training-${var.project_name}-${var.env}-alb-controller-policy"]
 }
