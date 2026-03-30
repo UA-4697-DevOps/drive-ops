@@ -137,69 +137,68 @@ data "aws_iam_policy_document" "cluster_autoscaler_assume_role" {
   }
 }
 
-resource "aws_iam_role" "cluster_autoscaler" {
-  name                 = "${local.cluster_name}-cluster-autoscaler-role"
+module "cluster_autoscaler_role" {
+  source = "../iam-role"
+
+  role_name            = "${local.cluster_name}-cluster-autoscaler-role"
   assume_role_policy   = data.aws_iam_policy_document.cluster_autoscaler_assume_role.json
   permissions_boundary = local.permissions_boundary
-  tags                 = var.tags
-}
 
-resource "aws_iam_policy" "cluster_autoscaler" {
-  name_prefix = "${local.cluster_name}-cluster-autoscaler-policy-"
-  description = "Permissions for Cluster Autoscaler to manage EKS node group Auto Scaling Groups"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "AutoScalingRead"
-        Effect = "Allow"
-        Action = [
-          "autoscaling:DescribeAutoScalingGroups",
-          "autoscaling:DescribeAutoScalingInstances",
-          "autoscaling:DescribeLaunchConfigurations",
-          "autoscaling:DescribeScalingActivities",
-          "autoscaling:DescribeTags",
-        ]
-        Resource = "*"
-      },
-      {
-        Sid    = "AutoScalingWrite"
-        Effect = "Allow"
-        Action = [
-          "autoscaling:SetDesiredCapacity",
-          "autoscaling:TerminateInstanceInAutoScalingGroup",
-        ]
-        Resource = "*"
-        Condition = {
-          StringEquals = {
-            "autoscaling:ResourceTag/k8s.io/cluster-autoscaler/${local.cluster_name}" = "owned"
-            "autoscaling:ResourceTag/k8s.io/cluster-autoscaler/enabled"               = "true"
+  custom_policies = {
+    "${local.cluster_name}-cluster-autoscaler-policy" = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Sid    = "AutoScalingRead"
+          Effect = "Allow"
+          Action = [
+            "autoscaling:DescribeAutoScalingGroups",
+            "autoscaling:DescribeAutoScalingInstances",
+            "autoscaling:DescribeLaunchConfigurations",
+            "autoscaling:DescribeScalingActivities",
+            "autoscaling:DescribeTags",
+          ]
+          Resource = "*"
+        },
+        {
+          Sid    = "AutoScalingWrite"
+          Effect = "Allow"
+          Action = [
+            "autoscaling:SetDesiredCapacity",
+            "autoscaling:TerminateInstanceInAutoScalingGroup",
+          ]
+          Resource = "*"
+          Condition = {
+            StringEquals = {
+              "autoscaling:ResourceTag/k8s.io/cluster-autoscaler/${local.cluster_name}" = "owned"
+              "autoscaling:ResourceTag/k8s.io/cluster-autoscaler/enabled"               = "true"
+            }
           }
+        },
+        {
+          Sid    = "EC2Describe"
+          Effect = "Allow"
+          Action = [
+            "ec2:DescribeLaunchTemplateVersions",
+            "ec2:DescribeInstanceTypes",
+          ]
+          Resource = "*"
+        },
+        {
+          Sid    = "EKSDescribe"
+          Effect = "Allow"
+          Action = [
+            "eks:DescribeNodegroup",
+          ]
+          Resource = "arn:aws:eks:${data.aws_region.current.id}:${var.account_id}:nodegroup/${local.cluster_name}/*/*"
         }
-      },
-      {
-        Sid    = "EC2Describe"
-        Effect = "Allow"
-        Action = [
-          "ec2:DescribeLaunchTemplateVersions",
-          "ec2:DescribeInstanceTypes",
-        ]
-        Resource = "*"
-      },
-      {
-        Sid    = "EKSDescribe"
-        Effect = "Allow"
-        Action = [
-          "eks:DescribeNodegroup",
-        ]
-        Resource = "arn:aws:eks:${data.aws_region.current.name}:${var.account_id}:nodegroup/${local.cluster_name}/*/*"
-      }
-    ]
-  })
-}
+      ]
+    })
+  }
 
-resource "aws_iam_role_policy_attachment" "cluster_autoscaler" {
-  role       = aws_iam_role.cluster_autoscaler.id
-  policy_arn = aws_iam_policy.cluster_autoscaler.arn
+  custom_policies_descriptions = {
+    "${local.cluster_name}-cluster-autoscaler-policy" = "Permissions for Cluster Autoscaler to manage EKS node group Auto Scaling Groups"
+  }
+
+  tags = var.tags
 }

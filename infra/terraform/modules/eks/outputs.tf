@@ -58,5 +58,5 @@ output "kubeconfig_command" {
 
 output "cluster_autoscaler_role_arn" {
   description = "ARN of the IRSA role for the Cluster Autoscaler ServiceAccount"
-  value       = aws_iam_role.cluster_autoscaler.arn
+  value       = module.cluster_autoscaler_role.iam_role_arn
 }
