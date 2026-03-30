@@ -74,6 +74,8 @@ module "lambda_iam_roles" {
       Statement = local.policies[each.key].Statement
     })
   } : {}
+
+  tags = var.tags
 }
 
 resource "aws_lambda_function" "this" {
@@ -82,8 +84,8 @@ resource "aws_lambda_function" "this" {
   function_name = "${var.project_name}-${var.env}-${each.key}"
   filename      = data.archive_file.dummy.output_path
 
-  role        = module.lambda_iam_roles[each.key].iam_role_arn
-  
+  role = module.lambda_iam_roles[each.key].iam_role_arn
+
   handler     = each.value.handler
   runtime     = each.value.runtime
   timeout     = each.value.timeout
