@@ -204,18 +204,10 @@ module "cluster_autoscaler_role" {
 }
 
 # --- State Migrations for Cluster Autoscaler Role ---
+# Note: Only migrating the role itself. Policies will be recreated as the custom_policies
+# map uses dynamic keys that cannot be referenced in moved blocks (which require static values only).
 
 moved {
   from = aws_iam_role.cluster_autoscaler
   to   = module.cluster_autoscaler_role.aws_iam_role.this
-}
-
-moved {
-  from = aws_iam_policy.cluster_autoscaler
-  to   = module.cluster_autoscaler_role.aws_iam_policy.custom["${local.cluster_name}-cluster-autoscaler-policy"]
-}
-
-moved {
-  from = aws_iam_role_policy_attachment.cluster_autoscaler
-  to   = module.cluster_autoscaler_role.aws_iam_role_policy_attachment.custom_attach["${local.cluster_name}-cluster-autoscaler-policy"]
 }
