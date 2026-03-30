@@ -68,7 +68,7 @@ data "aws_iam_policy_document" "external_dns_assume_role" {
 }
 
 module "external_dns_iam_role" {
-  source = "../iam-role" 
+  source = "../iam-role"
 
   role_name            = "Training-${var.project_name}-${var.env}-external-dns-role"
   permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"

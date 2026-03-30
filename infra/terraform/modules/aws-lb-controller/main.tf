@@ -34,9 +34,9 @@ data "aws_iam_policy_document" "alb_controller_assume_role" {
 module "iam_role" {
   source = "../iam-role"
 
-  role_name               = "Training-${var.project_name}-${var.env}-alb-controller-role"
-  assume_role_policy      = data.aws_iam_policy_document.alb_controller_assume_role.json
-  permissions_boundary    = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+  role_name            = "Training-${var.project_name}-${var.env}-alb-controller-role"
+  assume_role_policy   = data.aws_iam_policy_document.alb_controller_assume_role.json
+  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
   custom_policies = {
     "Training-${var.project_name}-${var.env}-alb-controller-policy" = file("${path.module}/iam-policy.json")
   }
