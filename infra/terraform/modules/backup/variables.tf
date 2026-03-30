@@ -34,3 +34,15 @@ variable "backup_kms_key_arn" {
   description = "The ARN of the KMS key used to encrypt the backup S3 bucket"
   type        = string
 }
+
+variable "permissions_boundary" {
+  description = "ARN of the policy that is used to set the permissions boundary for the role"
+  type        = string
+  default     = null
+}
+
+variable "tags" {
+  description = "A mapping of tags to assign to all resources"
+  type        = map(string)
+  default     = {}
+}

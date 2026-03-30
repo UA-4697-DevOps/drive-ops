@@ -75,39 +75,45 @@ data "aws_iam_policy_document" "eks_assume_role" {
   }
 }
 
-resource "aws_iam_role" "backup_role" {
-  name               = "${var.project_name}-backup-role-${var.env}"
-  assume_role_policy = data.aws_iam_policy_document.eks_assume_role.json
-}
+module "backup_iam_role" {
+  source = "../iam-role"
 
-resource "aws_iam_role_policy" "backup_s3_access" {
-  name = "${var.project_name}-backup-s3-access-${var.env}"
-  role = aws_iam_role.backup_role.id
+  role_name            = "${var.project_name}-backup-role-${var.env}"
+  assume_role_policy   = data.aws_iam_policy_document.eks_assume_role.json
+  permissions_boundary = var.permissions_boundary
+  tags                 = var.tags
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = [
-          "s3:PutObject",
-          "s3:ListBucket"
-        ]
-        Effect = "Allow"
-        Resource = [
-          aws_s3_bucket.db_backups.arn,
-          "${aws_s3_bucket.db_backups.arn}/*"
-        ]
-      },
-      {
-        # NEW: Allow the role to request a Data Key for encryption
-        Action = [
-          "kms:GenerateDataKey"
-        ]
-        Effect = "Allow"
-        Resource = [
-          var.backup_kms_key_arn
-        ]
-      }
-    ]
-  })
+  # Создаем управляемую политику для S3 и KMS доступа
+  custom_policies = {
+    "${var.project_name}-backup-s3-access-${var.env}" = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Action = [
+            "s3:PutObject",
+            "s3:ListBucket"
+          ]
+          Effect = "Allow"
+          Resource = [
+            aws_s3_bucket.db_backups.arn,
+            "${aws_s3_bucket.db_backups.arn}/*"
+          ]
+        },
+        {
+          # NEW: Allow the role to request a Data Key for encryption
+          Action = [
+            "kms:GenerateDataKey"
+          ]
+          Effect = "Allow"
+          Resource = [
+            var.backup_kms_key_arn
+          ]
+        }
+      ]
+    })
+  }
+
+  custom_policies_descriptions = {
+    "${var.project_name}-backup-s3-access-${var.env}" = "Allow backup process to upload to S3 and encrypt with KMS"
+  }
 }

@@ -5,5 +5,5 @@ output "s3_bucket_id" {
 
 output "backup_iam_role_arn" {
   description = "The ARN of the IAM role to attach to the Kubernetes Service Account"
-  value       = aws_iam_role.backup_role.arn
+  value       = module.backup_iam_role.iam_role_arn
 }
