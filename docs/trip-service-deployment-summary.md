@@ -55,7 +55,9 @@ Manual deploy also available via `deploy-trip-service.yml` (workflow_dispatch wi
 kubectl -n trip-service get pods
 
 # Health check
-kubectl -n trip-service exec -it <pod> -- curl http://localhost:8081/health
+kubectl -n trip-service exec -it \
+  $(kubectl -n trip-service get pods -l app=trip-service -o jsonpath='{.items[0].metadata.name}') \
+  -- curl http://localhost:8081/health
 
 # IRSA binding
 kubectl -n trip-service describe sa trip-service
