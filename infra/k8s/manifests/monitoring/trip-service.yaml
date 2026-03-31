@@ -32,6 +32,7 @@ spec:
         env: dev
         service: trip-service
     spec:
+      serviceAccountName: trip-service
       # Pod-level security: run as non-root with seccomp
       securityContext:
         runAsNonRoot: true
