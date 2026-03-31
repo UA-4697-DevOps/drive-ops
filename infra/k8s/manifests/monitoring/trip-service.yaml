@@ -100,7 +100,7 @@ spec:
 ---
 # --- Trip Service ClusterIP Service ---
 # Exposes the Trip Service inside the cluster at:
-#   trip-service.default.svc.cluster.local:8081
+#   trip-service.trip-service.svc.cluster.local:8081
 #
 # This is the DNS name that Prometheus uses in its scrape config
 # (see prometheus-config.yaml, job_name: "trip-service").
