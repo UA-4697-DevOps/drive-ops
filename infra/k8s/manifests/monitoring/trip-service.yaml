@@ -13,7 +13,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: trip-service
-  namespace: default
+  namespace: trip-service
   labels:
     app: trip-service
     team: platform
@@ -40,7 +40,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: trip-service
-          image: trip-service:latest    # Replace with your ECR image URI
+          image: 969283154407.dkr.ecr.us-east-2.amazonaws.com/trip-service:latest
           # Container-level security: least-privilege hardening
           securityContext:
             allowPrivilegeEscalation: false
@@ -62,13 +62,13 @@ spec:
 
             # --- SQS Queues (loaded by broker.LoadConfig()) ---
             - name: AWS_REGION
-              value: "us-east-1"
+              value: "us-east-2"
             - name: SQS_TRIP_CREATED_URL
-              value: ""
+              value: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-dev.fifo"
             - name: SQS_DRIVER_ASSIGNED_URL
-              value: ""
+              value: "https://sqs.us-east-2.amazonaws.com/969283154407/driver-assigned-dev.fifo"
             - name: SQS_TRIP_COMPLETED_URL
-              value: ""
+              value: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-dev.fifo"
 
             # --- OpenTelemetry ---
             # Tells the OTel SDK where to send trace spans (Jaeger OTLP gRPC)
@@ -108,7 +108,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: trip-service
-  namespace: default
+  namespace: trip-service
   labels:
     app: trip-service
 spec:

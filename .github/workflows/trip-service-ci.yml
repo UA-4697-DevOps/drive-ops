@@ -236,7 +236,7 @@ jobs:
 
     permissions:
       id-token: write # Required for AWS OIDC authentication
-      contents: read
+      contents: write # Required to commit updated image tag
 
     steps:
       - name: Checkout Code
@@ -283,3 +283,17 @@ jobs:
         with:
           name: trip-service-metadata
           path: build-metadata.txt
+
+      - name: Update Helm values with new image tag
+        run: |
+          sed -i 's|tag: ".*"|tag: "${{ github.sha }}"|' \
+            trip-service/charts/trip-service/values-dev.yaml
+
+      - name: Commit updated image tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add trip-service/charts/trip-service/values-dev.yaml
+          git diff --cached --quiet || \
+            git commit -m "chore(trip-service): update dev image tag to ${{ github.sha }}"
+          git push
