@@ -4,7 +4,7 @@ Reference document for the final milestone presentation.
 
 ## Architecture
 
-```
+```text
                   ┌──────────────┐
                   │  Web Client  │
                   └──────┬───────┘
