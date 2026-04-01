@@ -71,19 +71,12 @@ resource "aws_iam_instance_profile" "bastion" {
   })
 }
 
-# --- Elastic IP (allocated first so it can be referenced in outputs) ---
+# --- EC2 Instance + Elastic IP ---
 
-resource "aws_eip" "bastion" {
-  domain = "vpc"
+module "ec2" {
+  source = "../ec2-instance"
 
-  tags = merge(var.tags, {
-    Name = "${var.project_name}-${var.env}-bastion-eip"
-  })
-}
-
-# --- EC2 Instance ---
-
-resource "aws_instance" "bastion" {
+  name                   = "${var.project_name}-${var.env}-bastion"
   ami                    = data.aws_ami.al2023.id
   instance_type          = var.instance_type
   subnet_id              = var.public_subnet_id
@@ -91,38 +84,25 @@ resource "aws_instance" "bastion" {
   key_name               = var.key_name
   iam_instance_profile   = aws_iam_instance_profile.bastion.name
   monitoring             = true
+  user_data              = file("${path.module}/scripts/user-data.sh")
+  metadata_hop_limit     = 1
+  create_eip             = true
 
-  user_data = file("${path.module}/scripts/user-data.sh")
-
-  metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required" # IMDSv2 only
-    http_put_response_hop_limit = 1
-  }
-
-  root_block_device {
-    volume_size = 30
-    volume_type = "gp3"
-    encrypted   = true
-  }
-
-  tags = merge(var.tags, {
-    Name = "${var.project_name}-${var.env}-bastion"
-  })
-
-  depends_on = [
-    aws_iam_role_policy_attachment.bastion_ssm,
-    aws_iam_instance_profile.bastion,
-  ]
-
-  lifecycle {
-    ignore_changes = [ami]
-  }
+  tags = var.tags
 }
 
-# --- Associate EIP with Instance ---
+# --- State Migration ---
+moved {
+  from = aws_instance.bastion
+  to   = module.ec2.aws_instance.this
+}
 
-resource "aws_eip_association" "bastion" {
-  instance_id   = aws_instance.bastion.id
-  allocation_id = aws_eip.bastion.id
+moved {
+  from = aws_eip.bastion
+  to   = module.ec2.aws_eip.this[0]
+}
+
+moved {
+  from = aws_eip_association.bastion
+  to   = module.ec2.aws_eip_association.this[0]
 }

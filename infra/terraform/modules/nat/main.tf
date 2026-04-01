@@ -57,17 +57,12 @@ resource "aws_iam_instance_profile" "nat_instance" {
   role  = aws_iam_role.nat_instance[0].name
 }
 
-resource "aws_eip" "nat_instance" {
+# Note: EIP will be created by the ec2 module when create_eip = true
+module "ec2" {
+  source = "../ec2-instance"
   count  = var.enabled ? 1 : 0
-  domain = "vpc"
 
-  tags = merge(var.tags, {
-    Name = "${var.project_name}-${var.env}-nat-instance-eip"
-  })
-}
-
-resource "aws_instance" "nat_instance" {
-  count                       = var.enabled ? 1 : 0
+  name                        = "${var.project_name}-${var.env}-nat-instance"
   ami                         = data.aws_ami.nat_instance.id
   instance_type               = var.instance_type
   subnet_id                   = var.public_subnet_id
@@ -76,45 +71,37 @@ resource "aws_instance" "nat_instance" {
   key_name                    = var.key_name
   associate_public_ip_address = true
   source_dest_check           = false
+  metadata_hop_limit          = 1
 
-  metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required"
-    http_put_response_hop_limit = 1
-    instance_metadata_tags      = "enabled"
-  }
+  tags = var.tags
 
-  root_block_device {
-    volume_type           = "gp3"
-    volume_size           = 30
-    encrypted             = true
-    delete_on_termination = true
-  }
-
-  tags = merge(var.tags, {
-    Name = "${var.project_name}-${var.env}-nat-instance"
+  extra_tags = {
     Role = "NAT"
-  })
-
-  lifecycle {
-    ignore_changes = [ami]
   }
+
+  create_eip = true
 }
 
-# ==============================================================================
-# EIP Association
-# ==============================================================================
+# --- State Migration ---
+moved {
+  from = aws_instance.nat_instance[0]
+  to   = module.ec2[0].aws_instance.this
+}
 
-resource "aws_eip_association" "nat_instance" {
-  count         = var.enabled ? 1 : 0
-  instance_id   = aws_instance.nat_instance[0].id
-  allocation_id = aws_eip.nat_instance[0].id
+moved {
+  from = aws_eip.nat_instance[0]
+  to   = module.ec2[0].aws_eip.this[0]
+}
+
+moved {
+  from = aws_eip_association.nat_instance[0]
+  to   = module.ec2[0].aws_eip_association.this[0]
 }
 
 resource "aws_route" "private_nat_instance" {
   count                  = var.enabled ? 1 : 0
   route_table_id         = var.private_route_table_id
   destination_cidr_block = "0.0.0.0/0"
-  network_interface_id   = aws_instance.nat_instance[0].primary_network_interface_id
-  depends_on             = [aws_instance.nat_instance]
+  network_interface_id   = module.ec2[0].primary_network_interface_id
+  depends_on             = [module.ec2]
 }
