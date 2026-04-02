@@ -55,7 +55,7 @@ config:
 
 database:
   secretName: "trip-service-secrets"
-  secretKey: "DB_URL"
+  secretKey: "DATABASE_URL"
 
 # Simple health checks for test/dev
 livenessProbe:
