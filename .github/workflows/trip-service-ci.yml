@@ -247,8 +247,11 @@ jobs:
       - name: Export Build Metadata
         uses: ./.github/actions/export-build-metadata
         with:
-          name: trip-service-metadata
-          path: build-metadata.txt
+          ecr-registry: ${{ steps.ecr-auth.outputs.registry }}
+          ecr-repository: ${{ env.ECR_REPOSITORY }}
+          image-tag: ${{ steps.build-push.outputs.version }}
+          image-digest: ${{ steps.build-push.outputs.digest }}
+          artifact-name: trip-service-metadata
 
       - name: Update Helm values with new image tag
         run: |
