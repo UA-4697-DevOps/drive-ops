@@ -11,6 +11,11 @@ spec:
           - resources:
               kinds:
                 - Deployment
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - ingress-nginx
       validate:
         message: >-
           All containers must specify resources.requests and

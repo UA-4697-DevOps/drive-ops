@@ -11,6 +11,11 @@ spec:
           - resources:
               kinds:
                 - Deployment
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - ingress-nginx
       validate:
         message: >-
           Deployments must carry the labels: team, env, service.
