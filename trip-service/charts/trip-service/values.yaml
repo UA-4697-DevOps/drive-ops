@@ -76,7 +76,24 @@ nodeSelector: {}
 tolerations: []
 
 # -- Affinity for pod assignment
+# Example for pod anti-affinity to spread pods across nodes:
+# affinity:
+#   podAntiAffinity:
+#     preferredDuringSchedulingIgnoredDuringExecution:
+#     - weight: 100
+#       podAffinityTerm:
+#         labelSelector:
+#           matchLabels:
+#             app.kubernetes.io/name: trip-service
+#         topologyKey: kubernetes.io/hostname
 affinity: {}
+
+# -- PodDisruptionBudget configuration
+podDisruptionBudget:
+  # -- Enable PodDisruptionBudget
+  enabled: false
+  # -- Minimum number of pods that must be available during voluntary disruptions
+  minAvailable: 1
 
 # Health checks configuration
 startupProbe:
