@@ -57,20 +57,33 @@ database:
   secretName: "trip-service-secrets"
   secretKey: "DATABASE_URL"
 
-# Simple health checks for test/dev
+# Health probes (standardized with platform)
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 0
+  periodSeconds: 5
+  failureThreshold: 12  # 60 seconds total for startup
+  timeoutSeconds: 5
+
 livenessProbe:
   httpGet:
     path: /health
     port: 8081
-  initialDelaySeconds: 15
-  periodSeconds: 30
+  initialDelaySeconds: 30  # After startup succeeds
+  periodSeconds: 15
+  failureThreshold: 3      # 45 seconds before restart
+  timeoutSeconds: 5
 
 readinessProbe:
   httpGet:
     path: /health
     port: 8081
-  initialDelaySeconds: 5
+  initialDelaySeconds: 15
   periodSeconds: 10
+  failureThreshold: 3      # 30 seconds before unready
+  timeoutSeconds: 5
 
 startupProbe:
   httpGet:
@@ -103,7 +116,7 @@ strategy:
   type: RollingUpdate
   rollingUpdate:
     maxSurge: 1
-    maxUnavailable: 1  # Can tolerate downtime in dev
+    maxUnavailable: 0  # Zero-downtime deployments (matches driver-service)
 
 networkPolicy:
   enabled: true
