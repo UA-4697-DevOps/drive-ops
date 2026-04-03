@@ -135,10 +135,51 @@ module "ecr_web_client" {
 # - EKS cluster secrets (envelope encryption)
 # - CloudWatch Logs for EKS and other services
 # - RDS Performance Insights (when enabled)
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
+
+data "aws_iam_policy_document" "kms_policy" {
+  # Default policy to allow the AWS account full access (equivalent to default behavior)
+  statement {
+    sid    = "Enable IAM User Permissions"
+    effect = "Allow"
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+    actions   = ["kms:*"]
+    resources = ["*"]
+  }
+
+  # Allow CloudWatch Logs in the target region to use the key
+  statement {
+    sid    = "AllowCloudWatchLogs"
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["logs.${data.aws_region.current.name}.amazonaws.com"]
+    }
+    actions = [
+      "kms:Encrypt",
+      "kms:Decrypt",
+      "kms:ReEncrypt*",
+      "kms:GenerateDataKey*",
+      "kms:DescribeKey"
+    ]
+    resources = ["*"]
+    condition {
+      test     = "ArnEquals"
+      variable = "kms:EncryptionContext:aws:logs:arn"
+      values   = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:*"]
+    }
+  }
+}
+
 resource "aws_kms_key" "cmk" {
   description             = "Customer-managed KMS key for ${var.project_name}-${var.env} encryption (EKS, CloudWatch, RDS)"
   deletion_window_in_days = 7
   enable_key_rotation     = true
+  policy                  = data.aws_iam_policy_document.kms_policy.json
   tags = merge(var.common_tags, {
     Name = "${var.project_name}-${var.env}-cmk"
   })
