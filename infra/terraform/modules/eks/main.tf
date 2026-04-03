@@ -145,7 +145,7 @@ resource "aws_cloudwatch_log_group" "eks" {
 resource "aws_eks_cluster" "this" {
   name     = local.cluster_name
   version  = var.cluster_version
-  role_arn = aws_iam_role.eks_cluster.arn
+  role_arn = module.eks_cluster_role.iam_role_arn
 
   # API endpoint access is controlled via cluster_endpoint_public_access and
   # cluster_endpoint_private_access variables. In dev, public access is disabled
@@ -179,10 +179,9 @@ resource "aws_eks_cluster" "this" {
     Name = local.cluster_name
   })
 
-  # Ensure IAM roles and log group are created before the cluster
+  # Ensure IAM role module and log group are created before the cluster
   depends_on = [
-    aws_iam_role_policy_attachment.eks_cluster_policy,
-    aws_iam_role_policy_attachment.eks_vpc_resource_controller,
+    module.eks_cluster_role,
     aws_cloudwatch_log_group.eks,
   ]
 }
@@ -241,7 +240,7 @@ resource "aws_eks_node_group" "this" {
 
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "${local.cluster_name}-${each.key}"
-  node_role_arn   = aws_iam_role.node_group.arn
+  node_role_arn   = module.node_group_role.iam_role_arn
   subnet_ids      = local.resolved_node_subnet_ids
 
   instance_types = each.value.instance_types
@@ -272,10 +271,7 @@ resource "aws_eks_node_group" "this" {
   })
 
   depends_on = [
-    aws_iam_role_policy_attachment.node_worker_policy,
-    aws_iam_role_policy_attachment.node_cni_policy,
-    aws_iam_role_policy_attachment.node_ecr_read,
-    aws_iam_role_policy_attachment.node_ssm,
+    module.node_group_role,
   ]
 }
 

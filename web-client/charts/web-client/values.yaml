@@ -59,22 +59,28 @@ service:
 
 ingress:
   # -- Enable Ingress resource for external access
-  enabled: false
+  enabled: true
   # -- Ingress class name (e.g. alb, nginx)
   className: "alb"
   # -- Ingress annotations
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}, {"HTTP": 80}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/certificate-arn: "" # Replace with ACM certificate ARN
+    alb.ingress.kubernetes.io/tags: "app=web-client,env=dev"
   # -- Ingress host rules
   hosts:
-    - host: ""
+    - host: "driveops.dukhota.dev"
       paths:
         - path: /
           pathType: Prefix
   # -- TLS configuration
-  tls: []
+  tls:
+    - secretName: web-client-tls
+      hosts:
+        - driveops.dukhota.dev
 
 resources:
   # -- Resource requests
@@ -136,7 +142,7 @@ strategy:
 # Backend service discovery
 backend:
   # -- URL of the driver service (K8s internal DNS)
-  driverServiceUrl: "http://driver-service.driver-service.svc.cluster.local:8082"
+  driverServiceUrl: "http://driver-service.driver-service.svc.cluster.local:80"
 
 # Nginx configuration
 nginx:

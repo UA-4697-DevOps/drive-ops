@@ -24,16 +24,12 @@
 #     --query SecretString --output text > client1.ovpn
 # ==============================================================================
 
-# ==============================================================================
-# Variables
-# ==============================================================================
-
 variable "ami_id" {
   type        = string
   default     = null
   description = "Optional AMI ID for the VPN instance. If not provided, the latest Amazon Linux 2023 ARM64 AMI will be used."
   validation {
-    condition     = var.ami_id == null || trimspace(var.ami_id) != ""
+    condition     = var.ami_id == null ? true : trimspace(var.ami_id) != ""
     error_message = "ami_id, when provided, must be a non-empty AMI ID."
   }
 }
@@ -76,10 +72,6 @@ data "aws_ami" "al2023" {
   }
 }
 
-# ==============================================================================
-# IAM Role & Instance Profile
-# ==============================================================================
-
 data "aws_iam_policy_document" "vpn_assume_role" {
   statement {
     effect  = "Allow"
@@ -91,69 +83,75 @@ data "aws_iam_policy_document" "vpn_assume_role" {
   }
 }
 
-resource "aws_iam_role" "vpn" {
-  name                 = "Training-${var.project_name}-${var.env}-vpn-role"
-  assume_role_policy   = data.aws_iam_policy_document.vpn_assume_role.json
-  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+module "iam_role" {
+  source = "../iam-role"
+
+  role_name               = "Training-${var.project_name}-${var.env}-vpn-role"
+  assume_role_policy      = data.aws_iam_policy_document.vpn_assume_role.json
+  create_instance_profile = true
+  permissions_boundary    = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+
+  managed_policy_arns = [
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  ]
+
+  inline_policies = {
+    vpn_secrets = jsonencode({
+      Version = "2012-10-17"
+      Statement = concat(
+        [
+          {
+            Effect = "Allow"
+            Action = [
+              "secretsmanager:CreateSecret",
+              "secretsmanager:DescribeSecret",
+              "secretsmanager:GetSecretValue",
+              "secretsmanager:PutSecretValue",
+            ]
+            Resource = "arn:aws:secretsmanager:${var.aws_region}:${var.account_id}:secret:${var.project_name}/${var.env}/openvpn/*"
+          },
+        ],
+        var.kms_key_arn != null ? [
+          {
+            Effect = "Allow"
+            Action = [
+              "kms:Decrypt",
+              "kms:DescribeKey",
+              "kms:GenerateDataKey",
+            ]
+            Resource = var.kms_key_arn
+          },
+        ] : []
+      )
+    })
+  }
 
   tags = merge(var.tags, {
     Name = "Training-${var.project_name}-${var.env}-vpn-role"
   })
 }
 
-# SSM Session Manager — administrative access without opening port 22
-resource "aws_iam_role_policy_attachment" "vpn_ssm" {
-  role       = aws_iam_role.vpn.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+#-------------- Moved IAM Role, Instance Profile, and Policies to module/iam-role --------------
+
+moved {
+  from = aws_iam_role.vpn
+  to   = module.iam_role.aws_iam_role.this
 }
 
-# Least-privilege Secrets Manager — only OpenVPN PKI secrets for this project/env
-resource "aws_iam_role_policy" "vpn_secrets" {
-  name = "${var.project_name}-${var.env}-vpn-secrets-policy"
-  role = aws_iam_role.vpn.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = concat(
-      [
-        {
-          Effect = "Allow"
-          Action = [
-            "secretsmanager:CreateSecret",
-            "secretsmanager:DescribeSecret",
-            "secretsmanager:GetSecretValue",
-            "secretsmanager:PutSecretValue",
-          ]
-          Resource = "arn:aws:secretsmanager:${var.aws_region}:${var.account_id}:secret:${var.project_name}/${var.env}/openvpn/*"
-        },
-      ],
-      var.kms_key_arn != null ? [
-        {
-          Effect = "Allow"
-          Action = [
-            "kms:Decrypt",
-            "kms:DescribeKey",
-            "kms:GenerateDataKey",
-          ]
-          Resource = var.kms_key_arn
-        },
-      ] : []
-    )
-  })
+moved {
+  from = aws_iam_instance_profile.vpn
+  to   = module.iam_role.aws_iam_instance_profile.this[0]
 }
 
-resource "aws_iam_instance_profile" "vpn" {
-  name = "Training-${var.project_name}-${var.env}-vpn-profile"
-  role = aws_iam_role.vpn.name
-
-  tags = merge(var.tags, {
-    Name = "Training-${var.project_name}-${var.env}-vpn-profile"
-  })
+moved {
+  from = aws_iam_role_policy_attachment.vpn_ssm
+  to   = module.iam_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"]
 }
 
-# ==============================================================================
-# Elastic IP — allocated first so the public IP can be embedded in user_data
-# ==============================================================================
+moved {
+  from = aws_iam_role_policy.vpn_secrets
+  to   = module.iam_role.aws_iam_role_policy.inline["vpn_secrets"]
+}
 
 resource "aws_eip" "vpn" {
   domain = "vpc"
@@ -163,17 +161,26 @@ resource "aws_eip" "vpn" {
   })
 }
 
-# ==============================================================================
-# EC2 Instance
-# ==============================================================================
+module "security_group" {
+  source = "../security-group"
+
+  name        = "${var.project_name}-${var.env}-vpn-sg"
+  description = "Security group for OpenVPN server"
+  vpc_id      = var.vpc_id
+
+  ingress_rules = var.ingress_rules
+  egress_rules  = var.egress_rules
+
+  tags = var.tags
+}
 
 resource "aws_instance" "vpn" {
   ami                    = var.ami_id != null ? var.ami_id : data.aws_ami.al2023[0].id
   instance_type          = var.instance_type
   subnet_id              = var.public_subnet_id
-  vpc_security_group_ids = [aws_security_group.vpn.id]
+  vpc_security_group_ids = [module.security_group.sg_id]
   key_name               = var.key_name
-  iam_instance_profile   = aws_iam_instance_profile.vpn.name
+  iam_instance_profile   = module.iam_role.iam_instance_profile_name
   monitoring             = true
   source_dest_check      = false # Required: allows the instance to forward VPN client traffic
 
@@ -195,7 +202,7 @@ resource "aws_instance" "vpn" {
 
   root_block_device {
     volume_type           = "gp3"
-    volume_size           = 8
+    volume_size           = 30
     encrypted             = true
     kms_key_id            = var.kms_key_arn # null falls back to the default AWS-managed EBS key
     delete_on_termination = true
@@ -211,10 +218,6 @@ resource "aws_instance" "vpn" {
     ignore_changes = [user_data]
   }
 }
-
-# ==============================================================================
-# EIP Association
-# ==============================================================================
 
 resource "aws_eip_association" "vpn" {
   instance_id   = aws_instance.vpn.id

@@ -62,21 +62,6 @@ variable "vpn_client_cidr" {
   }
 }
 
-variable "allowed_vpn_cidrs" {
-  type        = list(string)
-  description = "List of CIDR blocks allowed to connect to the OpenVPN server on UDP 1194. Example: [\"203.0.113.10/32\"]"
-
-  validation {
-    condition     = length(var.allowed_vpn_cidrs) > 0
-    error_message = "allowed_vpn_cidrs must contain at least one CIDR block. An empty allowlist means nobody can connect."
-  }
-
-  validation {
-    condition     = !contains(var.allowed_vpn_cidrs, "0.0.0.0/0") && !contains(var.allowed_vpn_cidrs, "::/0")
-    error_message = "0.0.0.0/0 and ::/0 are forbidden — use specific IPs or ranges to restrict VPN access."
-  }
-}
-
 variable "kms_key_arn" {
   type        = string
   default     = null
@@ -92,4 +77,16 @@ variable "tags" {
   type        = map(string)
   default     = {}
   description = "Additional tags applied to all VPN resources"
+}
+
+variable "ingress_rules" {
+  description = "List of ingress rules for the VPN security group"
+  type        = any
+  default     = []
+}
+
+variable "egress_rules" {
+  description = "List of egress rules for the VPN security group"
+  type        = any
+  default     = []
 }

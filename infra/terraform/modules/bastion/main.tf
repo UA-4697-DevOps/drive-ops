@@ -46,15 +46,13 @@ data "aws_iam_policy_document" "bastion_assume_role" {
   }
 }
 
-resource "aws_iam_role" "bastion" {
-  name                 = "Training-${var.project_name}-${var.env}-bastion-role"
-  assume_role_policy   = data.aws_iam_policy_document.bastion_assume_role.json
-  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+module "iam_role" {
+  source = "../iam-role"
 
-  tags = merge(var.tags, {
-    Name = "Training-${var.project_name}-${var.env}-bastion-role"
-  })
-}
+  role_name               = "Training-${var.project_name}-${var.env}-bastion-role"
+  assume_role_policy      = data.aws_iam_policy_document.bastion_assume_role.json
+  create_instance_profile = true
+  permissions_boundary    = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
 
 # SSM Session Manager — engineers can open a shell without opening port 22
 resource "aws_iam_role_policy_attachment" "bastion_ssm" {
@@ -84,7 +82,7 @@ resource "aws_iam_instance_profile" "bastion" {
   role = aws_iam_role.bastion.name
 
   tags = merge(var.tags, {
-    Name = "Training-${var.project_name}-${var.env}-bastion-profile"
+    Name = "Training-${var.project_name}-${var.env}-bastion-role"
   })
 }
 
@@ -104,9 +102,9 @@ resource "aws_instance" "bastion" {
   ami                    = data.aws_ami.al2023.id
   instance_type          = var.instance_type
   subnet_id              = var.public_subnet_id
-  vpc_security_group_ids = [aws_security_group.bastion.id]
+  vpc_security_group_ids = [module.security_group.sg_id]
   key_name               = var.key_name
-  iam_instance_profile   = aws_iam_instance_profile.bastion.name
+  iam_instance_profile   = module.iam_role.iam_instance_profile_name
   monitoring             = true
 
   user_data = file("${path.module}/scripts/user-data.sh")
@@ -118,7 +116,7 @@ resource "aws_instance" "bastion" {
   }
 
   root_block_device {
-    volume_size = 20
+    volume_size = 30
     volume_type = "gp3"
     encrypted   = true
   }
@@ -128,8 +126,7 @@ resource "aws_instance" "bastion" {
   })
 
   depends_on = [
-    aws_iam_role_policy_attachment.bastion_ssm,
-    aws_iam_instance_profile.bastion,
+    module.iam_role
   ]
 
   lifecycle {
@@ -142,4 +139,22 @@ resource "aws_instance" "bastion" {
 resource "aws_eip_association" "bastion" {
   instance_id   = aws_instance.bastion.id
   allocation_id = aws_eip.bastion.id
+}
+
+
+#----------------- Moved IAM Role & Instance Profile to module/iam-role -----------------
+
+moved {
+  from = aws_iam_role.bastion
+  to   = module.iam_role.aws_iam_role.this
+}
+
+moved {
+  from = aws_iam_instance_profile.bastion
+  to   = module.iam_role.aws_iam_instance_profile.this[0]
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.bastion_ssm
+  to   = module.iam_role.aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"]
 }

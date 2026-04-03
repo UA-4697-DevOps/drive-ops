@@ -20,12 +20,6 @@ data "aws_iam_policy_document" "eso_secrets" {
   }
 }
 
-resource "aws_iam_policy" "eso_secrets" {
-  name        = "Training-${var.project_name}-${var.env}-eso-secrets-policy"
-  description = "Allow ESO to read drive-ops secrets from AWS Secrets Manager"
-  policy      = data.aws_iam_policy_document.eso_secrets.json
-  tags        = var.tags
-}
 
 data "aws_iam_policy_document" "eso_assume_role" {
   statement {
@@ -51,14 +45,27 @@ data "aws_iam_policy_document" "eso_assume_role" {
   }
 }
 
-resource "aws_iam_role" "eso" {
-  name                 = "Training-${var.project_name}-${var.env}-eso-role"
-  assume_role_policy   = data.aws_iam_policy_document.eso_assume_role.json
+
+module "eso_iam_role" {
+  source = "../iam-role"
+
+  role_name            = "Training-${var.project_name}-${var.env}-eso-role"
   permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+  assume_role_policy   = data.aws_iam_policy_document.eso_assume_role.json
   tags                 = var.tags
+
+  custom_policies = {
+    "Training-${var.project_name}-${var.env}-eso-secrets-policy" = data.aws_iam_policy_document.eso_secrets.json
+  }
+
+  custom_policies_descriptions = {
+    "Training-${var.project_name}-${var.env}-eso-secrets-policy" = "Allow ESO to read drive-ops secrets from AWS Secrets Manager"
+  }
 }
 
-resource "aws_iam_role_policy_attachment" "eso_secrets" {
-  role       = aws_iam_role.eso.name
-  policy_arn = aws_iam_policy.eso_secrets.arn
+# --- State Migrations for ESO IAM Role ---
+
+moved {
+  from = aws_iam_role.eso
+  to   = module.eso_iam_role.aws_iam_role.this
 }

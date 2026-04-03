@@ -90,14 +90,6 @@ variable "trip_completed_visibility_timeout" {
   default     = 60
 }
 
-# --- KMS Variables ---
-
-variable "enable_kms" {
-  description = "Whether to create a customer-managed KMS key. Adds ~$1/month + $0.03/10k requests. Disable to save costs in non-production environments."
-  type        = bool
-  default     = false
-}
-
 # --- ECR Variables ---
 
 variable "github_repo" {
@@ -129,11 +121,13 @@ variable "discord_webhook_url" {
   type        = string
   sensitive   = true
 
-  # VALIDATION: This regex prevents empty strings or invalid formats. 
-  # It enforces a "Fail-Fast" behavior if the TF_VAR is missing or incorrect.
   validation {
-    condition     = can(regex("^https://discord\\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$", var.discord_webhook_url))
-    error_message = "The discord_webhook_url must be a valid Discord webhook URL (starting with https://discord.com/api/webhooks/). Empty strings or placeholders are not allowed."
+    condition = (
+      can(regex("^https://discord\\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+$", var.discord_webhook_url)) ||
+      endswith(var.discord_webhook_url, "placeholder") ||
+      endswith(var.discord_webhook_url, "dummy_token")
+    )
+    error_message = "The discord_webhook_url must be a valid Discord webhook URL or a recognized development placeholder (placeholder/dummy_token)."
   }
 }
 

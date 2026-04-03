@@ -25,12 +25,12 @@ output "cluster_certificate_authority_data" {
 
 output "cluster_role_arn" {
   description = "ARN of the IAM role used by the EKS cluster"
-  value       = aws_iam_role.eks_cluster.arn
+  value       = module.eks_cluster_role.iam_role_arn
 }
 
 output "node_role_arn" {
   description = "ARN of the IAM role used by the EKS worker nodes"
-  value       = aws_iam_role.node_group.arn
+  value       = module.node_group_role.iam_role_arn
 }
 
 # --- OIDC / IRSA ---
@@ -58,5 +58,5 @@ output "kubeconfig_command" {
 
 output "cluster_autoscaler_role_arn" {
   description = "ARN of the IRSA role for the Cluster Autoscaler ServiceAccount"
-  value       = aws_iam_role.cluster_autoscaler.arn
+  value       = module.cluster_autoscaler_role.iam_role_arn
 }

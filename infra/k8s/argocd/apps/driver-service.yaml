@@ -3,34 +3,18 @@ kind: Application
 metadata:
   name: driver-service
   namespace: argocd
-  finalizers:
-  - resources-finalizer.argocd.argoproj.io
-
 spec:
   project: default
-
   source:
     repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
-    targetRevision: main
+    targetRevision: HEAD
     path: driver-service/charts/driver-service
-    helm:
-      valueFiles:
-        - values-dev.yaml
-
   destination:
     server: https://kubernetes.default.svc
     namespace: driver-service
-
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
-    - CreateNamespace=true
-    - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 3
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
+      - CreateNamespace=true

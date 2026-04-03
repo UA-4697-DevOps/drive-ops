@@ -15,17 +15,17 @@ output "instance_private_ip" {
 
 output "security_group_id" {
   description = "ID of the EC2 security group"
-  value       = aws_security_group.ec2.id
+  value       = module.security_group.sg_id
 }
 
 output "iam_role_arn" {
   description = "ARN of the EC2 IAM role"
-  value       = aws_iam_role.ec2_ssm_role.arn
+  value       = module.ec2_iam_role.iam_role_arn
 }
 
 output "instance_profile_name" {
   description = "Name of the EC2 IAM instance profile"
-  value       = aws_iam_instance_profile.ec2_profile.name
+  value       = module.ec2_iam_role.iam_instance_profile_name
 }
 
 output "ssm_document_name" {

@@ -142,3 +142,12 @@ secret:
   create: false
   # -- Database URL (only used if secret.create is true)
   databaseUrl: ""
+
+# Network Policy settings
+networkPolicy:
+  # -- Enable network policies
+  enabled: false
+  # -- Namespace allowed to send ingress traffic
+  ingressNamespace: "client-gateway"
+  # -- App label allowed to send ingress traffic
+  ingressApp: "client-gateway"

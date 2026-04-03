@@ -10,7 +10,7 @@ output "bastion_instance_id" {
 
 output "bastion_security_group_id" {
   description = "Security group ID of the bastion host"
-  value       = aws_security_group.bastion.id
+  value       = module.security_group.sg_id
 }
 
 output "bastion_role_arn" {

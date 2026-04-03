@@ -114,9 +114,9 @@ strategy:
 
 backend:
   # -- URL of the trip service
-  tripServiceUrl: "http://trip-service.dev.svc.cluster.local:8081"
+  tripServiceUrl: "http://trip-service.trip-service.svc.cluster.local:80"
   # -- URL of the driver service
-  driverServiceUrl: "http://driver-service.dev.svc.cluster.local:8082"
+  driverServiceUrl: "http://driver-service.driver-service.svc.cluster.local:80"
 
 config:
   # -- Port the health-check HTTP server listens on

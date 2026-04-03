@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: client-gateway
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
+    targetRevision: HEAD
+    path: client-gateway/charts/client-gateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: client-gateway
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
