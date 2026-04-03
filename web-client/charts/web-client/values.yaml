@@ -136,7 +136,7 @@ strategy:
 # Backend service discovery
 backend:
   # -- URL of the driver service (K8s internal DNS)
-  driverServiceUrl: "http://driver-service.driver-service.svc.cluster.local:8082"
+  driverServiceUrl: "http://driver-service.driver-service.svc.cluster.local:80"
 
 # Nginx configuration
 nginx:
