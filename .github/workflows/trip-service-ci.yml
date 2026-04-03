@@ -6,12 +6,20 @@ on:
     paths:
       - 'trip-service/**'
       - '.github/workflows/trip-service-ci.yml'
+      - '.github/actions/setup-go-with-swagger/**'
+      - '.github/actions/aws-ecr-auth/**'
+      - '.github/actions/docker-build-push-ecr/**'
+      - '.github/actions/export-build-metadata/**'
       - 'docker-compose.yml'
   pull_request:
     branches: [main]
     paths:
       - 'trip-service/**'
       - '.github/workflows/trip-service-ci.yml'
+      - '.github/actions/setup-go-with-swagger/**'
+      - '.github/actions/aws-ecr-auth/**'
+      - '.github/actions/docker-build-push-ecr/**'
+      - '.github/actions/export-build-metadata/**'
       - 'docker-compose.yml'
 
 concurrency:
