@@ -1,0 +1,76 @@
+name: 'Docker Build and Push to ECR'
+description: 'Builds and pushes Docker image to Amazon ECR with GitHub Actions cache'
+
+inputs:
+  ecr-repository:
+    description: 'ECR repository name'
+    required: true
+  ecr-registry:
+    description: 'ECR registry URL (from ECR login output)'
+    required: true
+  context:
+    description: 'Build context path (e.g., ./trip-service)'
+    required: true
+  push:
+    description: 'Whether to push the image to ECR'
+    required: false
+    default: 'false'
+  cache-scope:
+    description: 'Cache scope for GitHub Actions cache'
+    required: false
+    default: 'default'
+  dockerfile:
+    description: 'Path to Dockerfile relative to context'
+    required: false
+    default: 'Dockerfile'
+
+outputs:
+  tags:
+    description: 'Generated image tags'
+    value: ${{ steps.meta.outputs.tags }}
+  version:
+    description: 'Generated version tag'
+    value: ${{ steps.meta.outputs.version }}
+  digest:
+    description: 'Image digest'
+    value: ${{ steps.build-and-push.outputs.digest }}
+  image-uri:
+    description: 'Full image URI with registry'
+    value: ${{ steps.image-uri.outputs.uri }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Extract metadata for Docker
+      id: meta
+      uses: docker/metadata-action@v6
+      with:
+        images: ${{ inputs.ecr-registry }}/${{ inputs.ecr-repository }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and push Docker image
+      id: build-and-push
+      uses: docker/build-push-action@v6
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.context }}/${{ inputs.dockerfile }}
+        push: ${{ inputs.push }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha,scope=${{ inputs.cache-scope }}
+        cache-to: type=gha,mode=max,scope=${{ inputs.cache-scope }}
+
+    - name: Generate image URI
+      id: image-uri
+      shell: bash
+      run: |
+        URI="${{ inputs.ecr-registry }}/${{ inputs.ecr-repository }}"
+        echo "uri=$URI" >> $GITHUB_OUTPUT

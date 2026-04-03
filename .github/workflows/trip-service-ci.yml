@@ -6,12 +6,20 @@ on:
     paths:
       - 'trip-service/**'
       - '.github/workflows/trip-service-ci.yml'
+      - '.github/actions/setup-go-with-swagger/**'
+      - '.github/actions/aws-ecr-auth/**'
+      - '.github/actions/docker-build-push-ecr/**'
+      - '.github/actions/export-build-metadata/**'
       - 'docker-compose.yml'
   pull_request:
     branches: [main]
     paths:
       - 'trip-service/**'
       - '.github/workflows/trip-service-ci.yml'
+      - '.github/actions/setup-go-with-swagger/**'
+      - '.github/actions/aws-ecr-auth/**'
+      - '.github/actions/docker-build-push-ecr/**'
+      - '.github/actions/export-build-metadata/**'
       - 'docker-compose.yml'
 
 concurrency:
@@ -21,6 +29,7 @@ concurrency:
 env:
   GO_VERSION: '1.25.5'
   AWS_REGION: us-east-2
+  ECR_REPOSITORY: trip-service
 
 jobs:
   lint:
@@ -33,17 +42,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - name: Setup Go with Swagger
+        uses: ./.github/actions/setup-go-with-swagger
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: trip-service/go.sum
-
-      - name: Generate Swagger docs
-        run: |
-          go install github.com/swaggo/swag/cmd/swag@v1.16.6
-          swag init -g cmd/server/main.go -o docs
-          echo "Swagger documentation generated"
+          service-path: trip-service
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
@@ -62,17 +65,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - name: Setup Go with Swagger
+        uses: ./.github/actions/setup-go-with-swagger
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: trip-service/go.sum
-
-      - name: Install swag
-        run: go install github.com/swaggo/swag/cmd/swag@v1.16.6
-
-      - name: Generate Swagger docs
-        run: swag init -g cmd/server/main.go -o docs
+          service-path: trip-service
 
       - name: Verify swagger.json exists
         run: |
@@ -139,16 +136,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - name: Setup Go with Swagger
+        uses: ./.github/actions/setup-go-with-swagger
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: trip-service/go.sum
-
-      - name: Generate Swagger docs
-        run: |
-          go install github.com/swaggo/swag/cmd/swag@v1.16.6
-          swag init -g cmd/server/main.go -o docs
+          service-path: trip-service
 
       - name: Run unit tests
         run: |
@@ -200,18 +192,18 @@ jobs:
           export DB_USER=testuser
           export DB_PASSWORD=testpass
           export TRIP_DB_NAME=trip_service_test
-          
+
           # 2. SQS Mocking (Ensures Go SDK doesn't look for real AWS URLs)
           # We use the values defined in the job's 'env' section
           export SQS_TRIP_CREATED_URL=${{ env.SQS_TRIP_CREATED_URL }}
           export SQS_DRIVER_ASSIGNED_URL=${{ env.SQS_DRIVER_ASSIGNED_URL }}
           export SQS_TRIP_COMPLETED_URL=${{ env.SQS_TRIP_COMPLETED_URL }}
-          
+
           # 3. AWS Credentials for Mocking
           export AWS_ACCESS_KEY_ID=mock
           export AWS_SECRET_ACCESS_KEY=mock
           export AWS_REGION=us-east-2
-          
+
           # 4. Execute tests with race detection
           go test -v -race ./tests/integration/...
 
@@ -242,51 +234,36 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v6
 
-      # 1. Set up Docker Buildx (The engine required for caching)
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # 2. Login to AWS via OIDC (Secure, Keyless!)
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
+      - name: Authenticate to AWS ECR
+        id: ecr-auth
+        uses: ./.github/actions/aws-ecr-auth
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/trip-service-github-actions-role
+          aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
           aws-region: ${{ env.AWS_REGION }}
+          role-name: trip-service-github-actions-role
 
-      # 3. Authorize Docker client in ECR
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      # 4. Build, Push, and CACHE (The hybrid optimized step)
-      - name: Build and Push Image
-        id: build-image
-        uses: docker/build-push-action@v6
+      - name: Build and Push Docker Image
+        id: build-push
+        uses: ./.github/actions/docker-build-push-ecr
         with:
+          ecr-repository: ${{ env.ECR_REPOSITORY }}
+          ecr-registry: ${{ steps.ecr-auth.outputs.registry }}
           context: ./trip-service
-          push: true
-          # Add SHA tag (for uniqueness)
-          tags: ${{ steps.login-ecr.outputs.registry }}/trip-service:${{ github.sha }}
-          # Free GitHub Actions Caching!
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          push: 'true'
+          cache-scope: trip-service
 
-      - name: Generate Build Metadata
-        run: |
-          # Note: Using the registry output ensures reliability
-          echo "IMAGE_URI: ${{ steps.login-ecr.outputs.registry }}/trip-service:${{ github.sha }}" > build-metadata.txt
-          echo "COMMIT_SHA: ${{ github.sha }}" >> build-metadata.txt
-          echo "BUILD_TIME: $(date -u)" >> build-metadata.txt
-
-      - name: Upload Metadata Artifact
-        uses: actions/upload-artifact@v4
+      - name: Export Build Metadata
+        uses: ./.github/actions/export-build-metadata
         with:
-          name: trip-service-metadata
-          path: build-metadata.txt
+          ecr-registry: ${{ steps.ecr-auth.outputs.registry }}
+          ecr-repository: ${{ env.ECR_REPOSITORY }}
+          image-tag: ${{ steps.build-push.outputs.version }}
+          image-digest: ${{ steps.build-push.outputs.digest }}
+          artifact-name: trip-service-metadata
 
       - name: Update Helm values with new image tag
         run: |
-          sed -i 's|tag: ".*"|tag: "${{ github.sha }}"|' \
+          sed -i 's|tag: ".*"|tag: "${{ steps.build-push.outputs.version }}"|' \
             trip-service/charts/trip-service/values-dev.yaml
 
       - name: Commit updated image tag
@@ -295,7 +272,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add trip-service/charts/trip-service/values-dev.yaml
           git diff --cached --quiet && exit 0
-          git commit -m "chore(trip-service): update dev image tag to ${{ github.sha }}"
+          git commit -m "chore(trip-service): update dev image tag to ${{ steps.build-push.outputs.version }}"
           for attempt in 1 2 3; do
             git pull --rebase origin HEAD && git push && exit 0
             echo "Push failed (attempt $attempt/3), retrying in ${attempt}s..."
