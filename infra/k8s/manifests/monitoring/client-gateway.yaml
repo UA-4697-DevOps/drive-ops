@@ -74,9 +74,9 @@ spec:
 
             # --- Upstream service URLs ---
             - name: TRIP_SERVICE_URL
-              value: "http://trip-service.default.svc.cluster.local:8081"
+              value: "http://trip-service.trip-service.svc.cluster.local:80"
             - name: DRIVER_SERVICE_URL
-              value: "http://driver-service.default.svc.cluster.local:8082"
+              value: "http://driver-service.driver-service.svc.cluster.local:80"
 
             # --- Health check port (matches containerPort above) ---
             - name: HEALTH_CHECK_PORT
