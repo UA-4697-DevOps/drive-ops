@@ -3,6 +3,8 @@ kind: Application
 metadata:
   name: trip-service
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"  # Deploy after infrastructure (External Secrets, metrics-server, etc.)
 spec:
   project: default
   source:
