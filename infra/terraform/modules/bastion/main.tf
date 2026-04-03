@@ -53,6 +53,7 @@ module "iam_role" {
   assume_role_policy      = data.aws_iam_policy_document.bastion_assume_role.json
   create_instance_profile = true
   permissions_boundary    = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+}
 
 # SSM Session Manager — engineers can open a shell without opening port 22
 resource "aws_iam_role_policy_attachment" "bastion_ssm" {
