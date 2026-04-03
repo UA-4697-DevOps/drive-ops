@@ -41,16 +41,6 @@ dependency "shared_infra" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "init"]
 }
 
-dependency "secrets" {
-  config_path = "../secrets"
-
-  mock_outputs = {
-    rds_master_secret_arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:mock-secret"
-  }
-
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init"]
-}
-
 
 
 
@@ -113,7 +103,7 @@ inputs = {
   }
 
   # --- IAM / Deploy Configuration ---
-  rds_secret_arn           = dependency.secrets.outputs.rds_master_secret_arn
+  rds_secret_arn           = dependency.shared_infra.outputs.rds_master_secret_arn
   service_name             = "trip-service"
   repository_name          = "trip-service"
   ecr_repo_arn             = dependency.shared_infra.outputs.ecr_repository_arns.trip_service
