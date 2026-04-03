@@ -1,5 +1,6 @@
 # Retrieve RDS credentials from Secrets Manager
 data "aws_secretsmanager_secret_version" "rds_credentials" {
+  count     = length(regexall("mock", var.rds_master_secret_id)) > 0 ? 0 : 1
   secret_id = var.rds_master_secret_id
 }
 
@@ -14,7 +15,10 @@ resource "aws_db_subnet_group" "main" {
 
 locals {
   # Parse credentials from Secrets Manager
-  rds_credentials = jsondecode(data.aws_secretsmanager_secret_version.rds_credentials.secret_string)
+  rds_credentials = length(regexall("mock", var.rds_master_secret_id)) > 0 ? {
+    username = "mockuser"
+    password = "mockpassword"
+  } : jsondecode(data.aws_secretsmanager_secret_version.rds_credentials[0].secret_string)
 
   # Generate a default final snapshot identifier when needed
   # Format: project-env-postgres-final-YYYYMMDDHHMMSS

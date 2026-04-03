@@ -11,7 +11,9 @@ terraform {
 dependency "rds" {
   config_path = "../rds"
 
+  mock_outputs_merge_strategy_with_state = "shallow"
   mock_outputs = {
+    rds_secret_arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:mock-secret-4b3D2"
     db_address  = "mock-db.us-east-2.rds.amazonaws.com"
     db_port     = 5432
     db_name     = "drive_ops_dev"
@@ -24,7 +26,9 @@ dependency "rds" {
 dependency "shared_infra" {
   config_path = "../shared-infra"
 
+  mock_outputs_merge_strategy_with_state = "shallow"
   mock_outputs = {
+    rds_secret_arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:mock-secret-4b3D2"
     sqs_urls = {
       trip_created    = "https://sqs.us-east-2.amazonaws.com/123456789012/trip-created-dev.fifo"
       driver_assigned = "https://sqs.us-east-2.amazonaws.com/123456789012/driver-assigned-dev.fifo"
@@ -47,7 +51,9 @@ dependency "shared_infra" {
 dependency "ec2" {
   config_path = "../trip-service"
 
+  mock_outputs_merge_strategy_with_state = "shallow"
   mock_outputs = {
+    rds_secret_arn = "arn:aws:secretsmanager:us-east-2:123456789012:secret:mock-secret-4b3D2"
     instance_id = "mock_id"
   }
 
@@ -103,7 +109,7 @@ inputs = {
   }
 
   # --- IAM / Deploy Configuration ---
-  rds_secret_arn           = dependency.shared_infra.outputs.rds_master_secret_arn
+  rds_secret_arn           = dependency.shared_infra.outputs.rds_secret_arn
   service_name             = "trip-service"
   repository_name          = "trip-service"
   ecr_repo_arn             = dependency.shared_infra.outputs.ecr_repository_arns.trip_service
