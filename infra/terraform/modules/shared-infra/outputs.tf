@@ -129,13 +129,13 @@ output "ecr_iam_role_names" {
 
 # --- Encryption (KMS) ---
 output "kms_key_arn" {
-  description = "ARN of the customer-managed KMS key (null when enable_kms = false)"
-  value       = var.enable_kms ? aws_kms_key.cmk[0].arn : null
+  description = "ARN of the customer-managed KMS key"
+  value       = aws_kms_key.cmk.arn
 }
 
 output "kms_key_id" {
-  description = "ID of the customer-managed KMS key (null when enable_kms = false)"
-  value       = var.enable_kms ? aws_kms_key.cmk[0].key_id : null
+  description = "ID of the customer-managed KMS key"
+  value       = aws_kms_key.cmk.key_id
 }
 
 # --- Secrets ---
