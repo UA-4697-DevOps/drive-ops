@@ -46,6 +46,16 @@ data "aws_iam_policy_document" "bastion_assume_role" {
   }
 }
 
+resource "aws_iam_role" "bastion" {
+  name                 = "Training-${var.project_name}-${var.env}-bastion-role"
+  assume_role_policy   = data.aws_iam_policy_document.bastion_assume_role.json
+  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
+
+  tags = merge(var.tags, {
+    Name = "Training-${var.project_name}-${var.env}-bastion-role"
+  })
+}
+
 module "iam_role" {
   source = "../iam-role"
 
