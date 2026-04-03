@@ -12,14 +12,14 @@ locals {
       can(value.policy) ? {
         policy_name = try(value.policy_name, key)
         policy      = value.policy
-        description = coalesce(
+        description = try(tostring(coalesce(
           try(value.description, null),
           lookup(var.custom_policies_descriptions, try(value.policy_name, key), null)
-        )
+        )), null)
         } : {
         policy_name = key
         policy      = value
-        description = lookup(var.custom_policies_descriptions, key, null)
+        description = try(tostring(lookup(var.custom_policies_descriptions, key, null)), null)
       }
     )
   }

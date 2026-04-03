@@ -118,19 +118,4 @@ module "backup_iam_role" {
   }
 }
 
-# --- State Migrations for Backup IAM Role ---
-
-moved {
-  from = aws_iam_role.backup_role
-  to   = module.backup_iam_role.aws_iam_role.this
-}
-
-moved {
-  from = aws_iam_policy.backup_s3_access
-  to   = module.backup_iam_role.aws_iam_policy.custom["${var.project_name}-backup-s3-access-${var.env}"]
-}
-
-moved {
-  from = aws_iam_role_policy_attachment.backup_s3_access
-  to   = module.backup_iam_role.aws_iam_role_policy_attachment.custom_attach["${var.project_name}-backup-s3-access-${var.env}"]
-}
+# --- State Migrations removed: dynamic expressions not allowed in moved blocks ---
