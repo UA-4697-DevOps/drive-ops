@@ -47,3 +47,9 @@ variable "mandatory_tags" {
   type        = string
   default     = "Project,Environment,ManagedBy,CostCenter"
 }
+
+variable "tags" {
+  description = "A mapping of tags to assign to all resources"
+  type        = map(string)
+  default     = {}
+}

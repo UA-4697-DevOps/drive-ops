@@ -120,6 +120,21 @@ variable "ecr_repository_url" {
   description = "ECR repository URL for the service (enables ECR pull permission and creates the SSM deploy document)"
   type        = string
   default     = null
+
+  validation {
+    condition = (
+      var.ecr_repository_url == null ||
+      var.ecr_repository_arn != null ||
+      can(regex("^(https://)?[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/.+$", var.ecr_repository_url))
+    )
+    error_message = "ecr_repository_url must be a valid ECR URL (optionally with https://), or set ecr_repository_arn explicitly."
+  }
+}
+
+variable "ecr_repository_arn" {
+  description = "Optional explicit ECR repository ARN used to scope pull permissions if URL parsing is not suitable"
+  type        = string
+  default     = null
 }
 
 variable "additional_security_group_ids" {
