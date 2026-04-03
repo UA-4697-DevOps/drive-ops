@@ -1,0 +1,80 @@
+{{- if .Values.networkPolicy.enabled -}}
+---
+# Allow ingress to trip-service only from client-gateway namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "trip-service.fullname" . }}-ingress-from-client-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trip-service.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "trip-service.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.ingressNamespace }}
+          podSelector:
+            matchLabels:
+              app: {{ .Values.networkPolicy.ingressApp }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.targetPort }}
+---
+# Allow DNS egress (required for SQS, RDS lookups)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "trip-service.fullname" . }}-egress-dns
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trip-service.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "trip-service.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Allow egress to AWS SQS (HTTPS) and RDS (PostgreSQL)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "trip-service.fullname" . }}-egress-aws
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trip-service.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "trip-service.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    # HTTPS for SQS API calls
+    - ports:
+        - protocol: TCP
+          port: 443
+    # PostgreSQL for RDS
+    - ports:
+        - protocol: TCP
+          port: 5432
+{{- end }}

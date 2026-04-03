@@ -21,7 +21,7 @@ resource "aws_ssm_document" "deploy_service" {
         runCommand = [
           "set -e",
           # Set AWS CLI region explicitly to avoid configuration errors
-          "export AWS_DEFAULT_REGION=${data.aws_region.current.name}",
+          "export AWS_DEFAULT_REGION=${data.aws_region.current.id}",
 
           # 1. Login to ECR
           "echo 'Logging into ECR...'",

@@ -126,9 +126,11 @@ resource "aws_cloudwatch_log_group" "flow_log" {
   tags              = { Name = "${var.project_name}-${var.env}-flow-log-group" }
 }
 
-resource "aws_iam_role" "flow_log_role" {
-  count                = var.enable_flow_logs ? 1 : 0
-  name                 = "Training-${var.project_name}-${var.env}-vpc-flow-log-role"
+module "flow_log_role" {
+  source = "../iam-role"
+  count  = var.enable_flow_logs ? 1 : 0
+
+  role_name            = "Training-${var.project_name}-${var.env}-vpc-flow-log-role"
   permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
 
   assume_role_policy = jsonencode({
@@ -144,36 +146,42 @@ resource "aws_iam_role" "flow_log_role" {
     ]
   })
 
+  custom_policies = {
+    "Training-${var.project_name}-${var.env}-vpc-flow-log-policy" = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Action = [
+            "logs:CreateLogStream",
+            "logs:PutLogEvents",
+            "logs:DescribeLogStreams"
+          ]
+          Effect   = "Allow"
+          Resource = "${aws_cloudwatch_log_group.flow_log[0].arn}:*"
+        }
+      ]
+    })
+  }
+
   tags = { Name = "Training-${var.project_name}-${var.env}-vpc-flow-log-role" }
-}
-
-resource "aws_iam_role_policy" "flow_log_policy" {
-  count = var.enable_flow_logs ? 1 : 0
-  name  = "Training-${var.project_name}-${var.env}-vpc-flow-log-policy"
-  role  = aws_iam_role.flow_log_role[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = [
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-          "logs:DescribeLogStreams"
-        ]
-        Effect   = "Allow"
-        Resource = "${aws_cloudwatch_log_group.flow_log[0].arn}:*"
-      }
-    ]
-  })
 }
 
 resource "aws_flow_log" "main" {
   count           = var.enable_flow_logs ? 1 : 0
-  iam_role_arn    = aws_iam_role.flow_log_role[0].arn
+  iam_role_arn    = module.flow_log_role[0].iam_role_arn
   log_destination = aws_cloudwatch_log_group.flow_log[0].arn
   traffic_type    = "ALL"
   vpc_id          = aws_vpc.main.id
 
   tags = { Name = "${var.project_name}-${var.env}-flow-log" }
 }
+
+# Add state migration block in case flow logs are already enabled in some environments
+moved {
+  from = aws_iam_role.flow_log_role
+  to   = module.flow_log_role[0].aws_iam_role.this
+}
+
+# Note: moved block for the inline policy is not possible due to dynamic key (interpolation).
+# Since flow logs are not currently enabled in any environment, the policy will be created fresh
+# if flow logs are enabled in the future.

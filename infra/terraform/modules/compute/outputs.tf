@@ -20,12 +20,12 @@ output "security_group_id" {
 
 output "iam_role_arn" {
   description = "ARN of the EC2 IAM role"
-  value       = aws_iam_role.ec2_ssm_role.arn
+  value       = module.ec2_iam_role.iam_role_arn
 }
 
 output "instance_profile_name" {
   description = "Name of the EC2 IAM instance profile"
-  value       = aws_iam_instance_profile.ec2_profile.name
+  value       = module.ec2_iam_role.iam_instance_profile_name
 }
 
 output "ssm_document_name" {

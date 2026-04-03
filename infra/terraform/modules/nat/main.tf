@@ -18,10 +18,17 @@ data "aws_ami" "nat_instance" {
   }
 }
 
-resource "aws_iam_role" "nat_instance" {
-  name = "Training-${var.project_name}-${var.env}-nat-instance-role"
+# ==============================================================================
+# IAM Role & Instance Profile
+# ==============================================================================
 
-  count = var.enabled ? 1 : 0
+module "iam_role" {
+  source = "../iam-role"
+  count  = var.enabled ? 1 : 0
+
+  role_name               = "Training-${var.project_name}-${var.env}-nat-instance-role"
+  create_instance_profile = true
+  permissions_boundary    = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -31,32 +38,7 @@ resource "aws_iam_role" "nat_instance" {
       Principal = { Service = "ec2.amazonaws.com" }
     }]
   })
-
-  tags = merge(var.tags, {
-    Name = "Training-${var.project_name}-${var.env}-nat-instance-role"
-  })
 }
-
-# SSM Session Manager — reach the NAT instance without opening port 22
-resource "aws_iam_role_policy_attachment" "nat_instance_ssm" {
-  count      = var.enabled && var.enable_ssm ? 1 : 0
-  role       = aws_iam_role.nat_instance[0].name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-# CloudWatch Agent — enhanced monitoring for NAT throughput/errors
-resource "aws_iam_role_policy_attachment" "nat_instance_cloudwatch" {
-  count      = var.enabled && var.enable_cloudwatch ? 1 : 0
-  role       = aws_iam_role.nat_instance[0].name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
-}
-
-resource "aws_iam_instance_profile" "nat_instance" {
-  count = var.enabled ? 1 : 0
-  name  = "Training-${var.project_name}-${var.env}-nat-instance-profile"
-  role  = aws_iam_role.nat_instance[0].name
-}
-
 resource "aws_eip" "nat_instance" {
   count  = var.enabled ? 1 : 0
   domain = "vpc"
@@ -72,7 +54,7 @@ resource "aws_instance" "nat_instance" {
   instance_type               = var.instance_type
   subnet_id                   = var.public_subnet_id
   vpc_security_group_ids      = [module.security_group[0].sg_id]
-  iam_instance_profile        = aws_iam_instance_profile.nat_instance[0].name
+  iam_instance_profile        = module.iam_role[0].iam_instance_profile_name
   key_name                    = var.key_name
   associate_public_ip_address = true
   source_dest_check           = false
@@ -117,4 +99,28 @@ resource "aws_route" "private_nat_instance" {
   destination_cidr_block = "0.0.0.0/0"
   network_interface_id   = aws_instance.nat_instance[0].primary_network_interface_id
   depends_on             = [aws_instance.nat_instance]
+}
+
+
+
+
+#-------------------
+moved {
+  from = aws_iam_role.nat_instance[0]
+  to   = module.iam_role[0].aws_iam_role.this
+}
+
+moved {
+  from = aws_iam_instance_profile.nat_instance[0]
+  to   = module.iam_role[0].aws_iam_instance_profile.this[0]
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.nat_instance_ssm[0]
+  to   = module.iam_role[0].aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"]
+}
+
+moved {
+  from = aws_iam_role_policy_attachment.nat_instance_cloudwatch[0]
+  to   = module.iam_role[0].aws_iam_role_policy_attachment.managed_attach["arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"]
 }

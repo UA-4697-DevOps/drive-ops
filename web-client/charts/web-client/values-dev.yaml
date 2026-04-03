@@ -23,6 +23,9 @@ resources:
 autoscaling:
   enabled: false
 
+backend:
+  driverServiceUrl: "http://driver-service.driver-service.svc.cluster.local:80"
+
 ingress:
   enabled: true
   hosts:
