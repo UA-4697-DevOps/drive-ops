@@ -90,14 +90,6 @@ variable "trip_completed_visibility_timeout" {
   default     = 60
 }
 
-# --- KMS Variables ---
-
-variable "enable_kms" {
-  description = "Whether to create a customer-managed KMS key. Adds ~$1/month + $0.03/10k requests. Disable to save costs in non-production environments."
-  type        = bool
-  default     = false
-}
-
 # --- ECR Variables ---
 
 variable "github_repo" {
