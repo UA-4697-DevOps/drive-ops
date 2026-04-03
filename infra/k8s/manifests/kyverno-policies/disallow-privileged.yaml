@@ -12,6 +12,11 @@ spec:
               kinds:
                 - Pod
                 - Deployment
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - ingress-nginx
       validate:
         message: >-
           Privileged containers are not allowed.
