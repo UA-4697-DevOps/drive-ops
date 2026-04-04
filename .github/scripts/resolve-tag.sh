@@ -11,9 +11,24 @@ else
     --repository-name "${ECR_REPOSITORY}" \
     --query 'sort_by(imageDetails,& imagePushedAt)[-1]' \
     --output json)
-  
-  # Try to find a sha-* tag (most deterministic)
-  TAG=$(echo "$LATEST_IMAGE" | jq -r '.imageTags[] | select(. | startswith("sha-")) | .' | head -1)
+
+  # Prefer branch-prefixed SHA tags first (e.g. main-sha-abc1234), then any SHA-like tag.
+  TAG=""
+  if [ -n "${GITHUB_REF_NAME:-}" ]; then
+    TAG=$(echo "$LATEST_IMAGE" | jq -r --arg branch "$GITHUB_REF_NAME" '
+      [.imageTags[]?]
+      | map(select(startswith($branch + "-sha-")))
+      | .[0] // empty
+    ')
+  fi
+
+  if [ -z "$TAG" ]; then
+    TAG=$(echo "$LATEST_IMAGE" | jq -r '
+      [.imageTags[]?]
+      | map(select(test("(^|.+-)sha-[0-9a-f]+$")))
+      | .[0] // empty
+    ')
+  fi
   
   # Fallbacks if no sha-* tag is found
   if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
