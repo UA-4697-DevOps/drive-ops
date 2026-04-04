@@ -136,7 +136,13 @@ module "ecr_web_client" {
 # - CloudWatch Logs for EKS and other services
 # - RDS Performance Insights (when enabled)
 data "aws_region" "current" {}
-data "aws_caller_identity" "current" {}
+data "aws_caller_identity" "current" {
+  count = var.account_id == "" ? 1 : 0
+}
+
+locals {
+  effective_account_id = var.account_id != "" ? var.account_id : data.aws_caller_identity.current[0].account_id
+}
 
 data "aws_iam_policy_document" "kms_policy" {
   # Default policy to allow the AWS account full access (equivalent to default behavior)
@@ -145,7 +151,7 @@ data "aws_iam_policy_document" "kms_policy" {
     effect = "Allow"
     principals {
       type        = "AWS"
-      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+      identifiers = ["arn:aws:iam::${local.effective_account_id}:root"]
     }
     actions   = ["kms:*"]
     resources = ["*"]
@@ -157,7 +163,7 @@ data "aws_iam_policy_document" "kms_policy" {
     effect = "Allow"
     principals {
       type        = "Service"
-      identifiers = ["logs.${data.aws_region.current.name}.amazonaws.com"]
+      identifiers = ["logs.${data.aws_region.current.id}.amazonaws.com"]
     }
     actions = [
       "kms:Encrypt",
@@ -170,7 +176,7 @@ data "aws_iam_policy_document" "kms_policy" {
     condition {
       test     = "ArnEquals"
       variable = "kms:EncryptionContext:aws:logs:arn"
-      values   = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:*"]
+      values   = ["arn:aws:logs:${data.aws_region.current.id}:${local.effective_account_id}:log-group:*"]
     }
   }
 }
