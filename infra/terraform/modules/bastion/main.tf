@@ -46,16 +46,6 @@ data "aws_iam_policy_document" "bastion_assume_role" {
   }
 }
 
-resource "aws_iam_role" "bastion" {
-  name                 = "Training-${var.project_name}-${var.env}-bastion-role"
-  assume_role_policy   = data.aws_iam_policy_document.bastion_assume_role.json
-  permissions_boundary = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
-
-  tags = merge(var.tags, {
-    Name = "Training-${var.project_name}-${var.env}-bastion-role"
-  })
-}
-
 module "iam_role" {
   source = "../iam-role"
 
@@ -65,16 +55,10 @@ module "iam_role" {
   permissions_boundary    = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
 }
 
-# SSM Session Manager — engineers can open a shell without opening port 22
-resource "aws_iam_role_policy_attachment" "bastion_ssm" {
-  role       = aws_iam_role.bastion.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
 # EKS — allow the bastion to run `aws eks update-kubeconfig`
 resource "aws_iam_role_policy" "bastion_eks_describe" {
   name = "Training-${var.project_name}-${var.env}-bastion-eks-describe"
-  role = aws_iam_role.bastion.id
+  role = module.iam_role.iam_role_id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -85,15 +69,6 @@ resource "aws_iam_role_policy" "bastion_eks_describe" {
         Resource = "*"
       }
     ]
-  })
-}
-
-resource "aws_iam_instance_profile" "bastion" {
-  name = "Training-${var.project_name}-${var.env}-bastion-profile"
-  role = aws_iam_role.bastion.name
-
-  tags = merge(var.tags, {
-    Name = "Training-${var.project_name}-${var.env}-bastion-role"
   })
 }
 
