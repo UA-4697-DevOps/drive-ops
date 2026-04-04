@@ -31,6 +31,18 @@ aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AW
 echo ">>> Pulling image ${IMAGE}..."
 docker pull "${IMAGE}"
 
+if [ -z "${APP_DIR:-}" ]; then
+  echo "APP_DIR must be set" >&2
+  exit 1
+fi
+
+if [ ! -d "${APP_DIR}" ]; then
+  echo "APP_DIR does not exist: ${APP_DIR}" >&2
+  exit 1
+fi
+
+cd "${APP_DIR}"
+
 echo ">>> Updating .env with fetched configuration..."
 touch .env
 for VAR_LINE in \

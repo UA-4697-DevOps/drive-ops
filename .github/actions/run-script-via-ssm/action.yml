@@ -13,7 +13,7 @@ inputs:
     required: false
     default: 'script.sh'
   env-vars:
-    description: 'Optional shell assignments injected before script execution (multi-line)'
+    description: 'Optional trusted multi-line VAR=VALUE assignments loaded before script execution'
     required: false
     default: ''
   working-directory:
@@ -51,7 +51,25 @@ runs:
         timeout-seconds: ${{ inputs.timeout-seconds }}
         command: |
           set -euo pipefail
+          ENV_FILE="$(mktemp /tmp/env-file.XXXXXX)"
+          INVALID_FILE="$(mktemp /tmp/env-file-invalid.XXXXXX)"
+          trap 'rm -f "$ENV_FILE" "$INVALID_FILE"' EXIT
+
+          cat > "$ENV_FILE" <<'ENV_VARS_EOF'
           ${{ inputs.env-vars }}
+          ENV_VARS_EOF
+
+          chmod 600 "$ENV_FILE"
+          if [ -s "$ENV_FILE" ]; then
+            if grep -nEv '^$|^[A-Z_][A-Z0-9_]*=[A-Za-z0-9_./:@%+=,-]*$' "$ENV_FILE" > "$INVALID_FILE"; then
+              echo "Invalid env-vars content. Only trusted simple VAR=VALUE assignments are allowed." >&2
+              cat "$INVALID_FILE" >&2
+              exit 1
+            fi
+            # shellcheck disable=SC1090
+            . "$ENV_FILE"
+          fi
+
           echo "${{ inputs.script-b64 }}" | base64 -d > "/tmp/${{ inputs.script-name }}"
           chmod +x "/tmp/${{ inputs.script-name }}"
           "/tmp/${{ inputs.script-name }}"
