@@ -5,7 +5,7 @@
 # This data source was missing from data.tf, so we declare it here.
 data "aws_caller_identity" "current" {}
 
-# Note: data.aws_region.current and local.permissions_boundary are 
+# Note: data.aws_region.current and local.permissions_boundary are
 # already declared in data.tf. We do not re-declare them to avoid duplicates.
 
 data "aws_iam_policy_document" "ec2_assume_role" {
@@ -22,47 +22,7 @@ data "aws_iam_policy_document" "ec2_assume_role" {
 
 # Build custom policies map with conditional logic
 locals {
-  ecr_url_parts      = var.ecr_repository_url != null ? split("/", replace(var.ecr_repository_url, "https://", "")) : []
-  ecr_registry_parts = length(local.ecr_url_parts) > 0 ? split(".", local.ecr_url_parts[0]) : []
-  ecr_repo_name      = length(local.ecr_url_parts) > 1 ? split(":", local.ecr_url_parts[1])[0] : null
-
-  derived_ecr_repository_arn = (
-    length(local.ecr_registry_parts) >= 4 &&
-    local.ecr_repo_name != null
-    ) ? format(
-    "arn:aws:ecr:%s:%s:repository/%s",
-    local.ecr_registry_parts[3],
-    local.ecr_registry_parts[0],
-    local.ecr_repo_name
-  ) : null
-
-  resolved_ecr_repository_arn = coalesce(var.ecr_repository_arn, local.derived_ecr_repository_arn)
-
   ec2_custom_policies = {
-    # ECR Pull Access
-    ecr_pull = local.resolved_ecr_repository_arn != null ? {
-      policy_name = "${var.name}-ecr-pull"
-      policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [
-          {
-            Effect   = "Allow"
-            Action   = "ecr:GetAuthorizationToken"
-            Resource = "*"
-          },
-          {
-            Effect = "Allow"
-            Action = [
-              "ecr:BatchCheckLayerAvailability",
-              "ecr:GetDownloadUrlForLayer",
-              "ecr:BatchGetImage"
-            ]
-            Resource = local.resolved_ecr_repository_arn
-          }
-        ]
-      })
-    } : null
-
     # SSM Parameter Store Access
     ssm_read = {
       policy_name = "${var.name}-ssm-read"

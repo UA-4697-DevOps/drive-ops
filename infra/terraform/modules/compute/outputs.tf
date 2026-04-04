@@ -27,8 +27,3 @@ output "instance_profile_name" {
   description = "Name of the EC2 IAM instance profile"
   value       = module.ec2_iam_role.iam_instance_profile_name
 }
-
-output "ssm_document_name" {
-  description = "Name of the SSM deploy document (null if ECR not configured)"
-  value       = var.ecr_repository_url != null ? aws_ssm_document.deploy_service[0].name : null
-}

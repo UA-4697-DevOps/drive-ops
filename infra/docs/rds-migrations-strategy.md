@@ -196,107 +196,28 @@ echo "✓ Migrations completed successfully"
 
 ---
 
-### Strategy 2: CI/CD Job Pattern via GitHub Actions
+### Current Strategy: EKS-Based Migrations
 
-Migrations run centrally from GitHub Actions before deploying to EC2 instances.
+Migrations are now executed via Kubernetes jobs running on EKS. This approach is centralized, scalable, and integrates with the ArgoCD GitOps workflow.
 
 #### Implementation
 
-**Workflow** (`.github/workflows/deploy-trip-service.yml`):
-```yaml
-name: Deploy Trip Service
+Services deploy via ArgoCD, which manages Helm releases. Database migrations run as:
+- **Helm hooks** (pre-install/pre-upgrade) for automatic migration execution
+- **Kubernetes Jobs** for manual migration triggers
 
-on:
-  push:
-    branches: [main]
-    paths:
-      - 'trip-service/**'
+No EC2 deployment or manual SSH tunneling is required. All migrations execute within the EKS cluster with IRSA (IAM Roles for Service Accounts) providing AWS credentials.
 
-jobs:
-  # Step 1: Run migrations from GitHub Actions
-  migrate:
-    name: Run Database Migrations
-    runs-on: ubuntu-latest
-    environment: dev
-    steps:
-      - uses: actions/checkout@v4
+**Advantages:**
+- ✅ No EC2 infrastructure dependency
+- ✅ Automatic migrations on ArgoCD sync
+- ✅ Native Kubernetes integration
+- ✅ Service account IAM permissions via IRSA
+- ✅ Audit trail via ArgoCD and kubectl events
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: us-east-2
+---
 
-      - name: Get RDS Connection Info
-        id: rds
-        run: |
-          # Get RDS endpoint
-          DB_HOST=$(aws rds describe-db-instances \
-            --db-instance-identifier drive-ops-dev-postgres \
-            --query 'DBInstances[0].Endpoint.Address' \
-            --output text)
-
-          # Get credentials from Secrets Manager
-          SECRET=$(aws secretsmanager get-secret-value \
-            --secret-id drive-ops/dev/rds/credentials \
-            --query SecretString --output text)
-
-          DB_USER=$(echo $SECRET | jq -r '.username')
-          DB_PASS=$(echo $SECRET | jq -r '.password')
-
-          echo "DB_HOST=$DB_HOST" >> $GITHUB_OUTPUT
-          echo "::add-mask::$DB_PASS"
-          echo "DB_USER=$DB_USER" >> $GITHUB_OUTPUT
-          echo "DB_PASS=$DB_PASS" >> $GITHUB_OUTPUT
-
-      - name: Run Migrations via Bastion
-        env:
-          BASTION_HOST: ${{ secrets.BASTION_HOST }}
-          BASTION_KEY: ${{ secrets.BASTION_SSH_KEY }}
-        run: |
-          # Set up SSH key
-          echo "$BASTION_KEY" > bastion.pem
-          chmod 600 bastion.pem
-
-          # Create SSH tunnel to RDS through bastion
-          ssh -i bastion.pem -f -N -L 5432:${{ steps.rds.outputs.DB_HOST }}:5432 ec2-user@$BASTION_HOST
-
-          # Run migrations through tunnel
-          docker run --rm --network host \
-            -e DB_HOST=localhost \
-            -e DB_USER=${{ steps.rds.outputs.DB_USER }} \
-            -e DB_PASSWORD=${{ steps.rds.outputs.DB_PASS }} \
-            -e DB_NAME=drive_ops_trip \
-            ghcr.io/your-org/trip-service-migrations:latest
-
-  # Step 2: Deploy to EC2 after migrations succeed
-  deploy:
-    name: Deploy to EC2
-    runs-on: ubuntu-latest
-    needs: migrate  # Wait for migrations
-    environment: dev
-    steps:
-      - name: Deploy via SSH
-        env:
-          EC2_HOST: ${{ secrets.TRIP_SERVICE_EC2_HOST }}
-          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-        run: |
-          echo "$SSH_KEY" > ec2.pem
-          chmod 600 ec2.pem
-
-          # Deploy new version on EC2
-          ssh -i ec2.pem ec2-user@$EC2_HOST << 'EOF'
-            cd /opt/drive-ops
-            export APP_VERSION=${{ github.sha }}
-            ./deploy.sh $APP_VERSION
-          EOF
-```
-
-**Pros:**
-- ✅ Centralized execution - runs once, not per EC2 instance
-- ✅ Clear audit trail in GitHub Actions logs
-- ✅ Can add approval gates before production migrations
-- ✅ Easier rollback (revert workflow, rollback migrations, redeploy old version)
+### Legacy: Strategy 2 (Deprecated)
 
 **Cons:**
 - ⚠️ Requires GitHub Actions to access RDS (via bastion/VPN)

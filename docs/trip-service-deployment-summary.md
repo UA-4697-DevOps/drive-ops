@@ -36,8 +36,6 @@ Reference document for the final milestone presentation.
 3. **ECR → ArgoCD** — ArgoCD watches `trip-service/charts/trip-service` with `values-dev.yaml`
 4. **ArgoCD → EKS** — Auto-syncs Helm chart to `trip-service` namespace
 
-Manual deploy also available via `deploy-trip-service.yml` (workflow_dispatch with custom tag).
-
 ## Key Configuration
 
 | Component | Source |
