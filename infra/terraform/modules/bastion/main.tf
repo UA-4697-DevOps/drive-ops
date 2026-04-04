@@ -53,22 +53,26 @@ module "iam_role" {
   assume_role_policy      = data.aws_iam_policy_document.bastion_assume_role.json
   create_instance_profile = true
   permissions_boundary    = "arn:aws:iam::${var.account_id}:policy/DevOpsBound"
-}
 
-# EKS — allow the bastion to run `aws eks update-kubeconfig`
-resource "aws_iam_role_policy" "bastion_eks_describe" {
-  name = "Training-${var.project_name}-${var.env}-bastion-eks-describe"
-  role = module.iam_role.iam_role_name
+  managed_policy_arns = [
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  ]
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["eks:DescribeCluster"]
-        Resource = "*"
-      }
-    ]
+  inline_policies = {
+    "Training-${var.project_name}-${var.env}-bastion-eks-describe" = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Effect   = "Allow"
+          Action   = ["eks:DescribeCluster"]
+          Resource = "*"
+        }
+      ]
+    })
+  }
+
+  tags = merge(var.tags, {
+    Name = "Training-${var.project_name}-${var.env}-bastion-role"
   })
 }
 

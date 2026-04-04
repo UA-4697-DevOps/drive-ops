@@ -88,11 +88,29 @@ locals {
     }
   }
 
+  bastion_security_group_rules = var.bastion_security_group_id == null ? {} : {
+    cluster_ingress_bastion_api = {
+      type              = "ingress"
+      from_port         = 443
+      to_port           = 443
+      protocol          = "tcp"
+      cidr_blocks       = null
+      source_sg_id      = var.bastion_security_group_id
+      security_group_id = aws_security_group.eks_cluster.id
+      description       = "Allow Bastion to communicate with EKS Control Plane API"
+    }
+  }
+
   # Merge default rules with user-provided custom rules
   all_security_group_rules = merge(
     local.default_security_group_rules,
+    local.bastion_security_group_rules,
     var.custom_security_group_rules
   )
+
+  bastion_access_entries = var.bastion_role_arn == null ? {} : {
+    bastion = var.bastion_role_arn
+  }
 }
 
 # --- Consolidated Security Group Rules ---
@@ -276,41 +294,24 @@ resource "aws_eks_node_group" "this" {
 }
 
 # ------------------------------------------------------------------------------
-# 6. BASTION → EKS CONTROL PLANE ACCESS
+# 6. BASTION EKS ACCESS ENTRIES
 # ------------------------------------------------------------------------------
 
-# Allow the bastion to reach the EKS API server (port 443)
-resource "aws_security_group_rule" "bastion_to_eks_api" {
-  count = var.bastion_security_group_id != null ? 1 : 0
-
-  type                     = "ingress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "tcp"
-  description              = "Allow Bastion to communicate with EKS Control Plane API"
-  security_group_id        = aws_security_group.eks_cluster.id
-  source_security_group_id = var.bastion_security_group_id
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Grant the bastion role admin access inside the cluster
+# Grant the bastion role admin access inside the cluster.
 resource "aws_eks_access_entry" "bastion" {
-  count = var.bastion_role_arn != null ? 1 : 0
+  for_each = local.bastion_access_entries
 
   cluster_name  = aws_eks_cluster.this.name
-  principal_arn = var.bastion_role_arn
+  principal_arn = each.value
   type          = "STANDARD"
 }
 
 resource "aws_eks_access_policy_association" "bastion_admin" {
-  count = var.bastion_role_arn != null ? 1 : 0
+  for_each = local.bastion_access_entries
 
   cluster_name  = aws_eks_cluster.this.name
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-  principal_arn = var.bastion_role_arn
+  principal_arn = each.value
 
   access_scope {
     type = "cluster"
