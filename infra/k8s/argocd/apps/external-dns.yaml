@@ -32,7 +32,7 @@ spec:
           - ingress
 
         domainFilters:
-          - driveops.dmytrominochkin.cloud
+          - driveops.dukhota.dev
 
         registry: txt
         txtOwnerId: driveops-dev-eks
@@ -51,10 +51,8 @@ spec:
     namespace: external-dns
 
   syncPolicy:
-    # ⚠️ AUTOMATED SYNC DISABLED: Placeholder must be replaced first!
-    # Uncomment 'automated' section after replacing REPLACE_WITH_EXTERNAL_DNS_ROLE_ARN placeholder above
-    # automated:
-    #   prune: true
-    #   selfHeal: true
+    automated:
+      prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true

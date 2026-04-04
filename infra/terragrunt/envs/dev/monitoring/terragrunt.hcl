@@ -38,23 +38,23 @@ dependency "rds" {
 
 # --- Compute Dependencies ---
 
-dependency "client_gateway" {
-  config_path                             = "../client-gateway"
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
-  mock_outputs                            = { instance_id = "i-mock-client-gateway" }
-}
+// dependency "client_gateway" {
+//   config_path                             = "../client-gateway"
+//   mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
+//   mock_outputs                            = { instance_id = "i-mock-client-gateway" }
+// }
 
-dependency "driver_service" {
-  config_path                             = "../driver-service"
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
-  mock_outputs                            = { instance_id = "i-mock-driver-service" }
-}
+// dependency "driver_service" {
+//   config_path                             = "../driver-service"
+//   mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
+//   mock_outputs                            = { instance_id = "i-mock-driver-service" }
+// }
 
-dependency "trip_service" {
-  config_path                             = "../trip-service"
-  mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
-  mock_outputs                            = { instance_id = "i-mock-trip-service" }
-}
+// dependency "trip_service" {
+//   config_path                             = "../trip-service"
+//   mock_outputs_allowed_terraform_commands = ["validate", "plan", "init", "destroy"]
+//   mock_outputs                            = { instance_id = "i-mock-trip-service" }
+// }
 
 # --- Inputs ---
 
@@ -71,12 +71,6 @@ inputs = {
   rds_instance_id = dependency.rds.outputs.db_instance_id
   sqs_queue_name  = dependency.shared_infra.outputs.sqs_names["trip_created"]
 
-  # Mapping service names to their specific EC2 Instance IDs for CloudWatch Alarms
-  ec2_instances = {
-    "client-gateway" = dependency.client_gateway.outputs.instance_id
-    "driver-service" = dependency.driver_service.outputs.instance_id
-    "trip-service"   = dependency.trip_service.outputs.instance_id
-  }
 
   # SECURITY FIX: Pass the Secret ARN instead of the raw URL environment variable.
   # This enables runtime secret retrieval and prevents plaintext leaks in the state file.

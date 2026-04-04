@@ -206,5 +206,4 @@ put_param "${SSM_BASE}/sqs/sqs-trip-completed-url"  "$SQS_TRIP_COMPLETED"  "Stri
 echo ""
 echo -e "${GREEN}✓ All SSM parameters populated for env=${ENV}${NC}"
 echo ""
-echo -e "${YELLOW}Next step:${NC}"
-echo "  ./03-deploy-services.sh ${ENV}"
+echo -e "${YELLOW}Note:${NC} Services are deployed via ArgoCD on EKS. SSM parameters are maintained for backward compatibility.

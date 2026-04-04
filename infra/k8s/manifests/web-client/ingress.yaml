@@ -39,13 +39,13 @@ metadata:
     # Share the same ALB as client-gateway to save cost (grouped by ALB controller)
     alb.ingress.kubernetes.io/group.name: driveops-dev
 
-    # External DNS annotation — apex domain for the user-facing web app
-    external-dns.alpha.kubernetes.io/hostname: driveops.dmytrominochkin.cloud
+    # External DNS annotation — subdomain for the user-facing web app
+    external-dns.alpha.kubernetes.io/hostname: web.driveops.dukhota.dev
 
 spec:
   ingressClassName: alb
   rules:
-  - host: driveops.dmytrominochkin.cloud
+  - host: web.driveops.dukhota.dev
     http:
       paths:
       - path: /

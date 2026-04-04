@@ -20,11 +20,11 @@ data:
           - targets: ["localhost:9090"]
 
       # Job 2: Trip Service — the main application we are monitoring
-      # Prometheus will HTTP GET http://trip-service.default.svc.cluster.local:8081/metrics
+      # Prometheus will HTTP GET http://trip-service.trip-service.svc.cluster.local:80/metrics
       # every 15 seconds and parse the Prometheus exposition format response
       - job_name: "trip-service"
         static_configs:
-          - targets: ["trip-service.default.svc.cluster.local:8081"]
+          - targets: ["trip-service.trip-service.svc.cluster.local:80"]
         metrics_path: "/metrics"    # Default path, shown explicitly for clarity
 
       # Job 3: Web Client — nginx metrics via nginx-prometheus-exporter sidecar
@@ -37,10 +37,10 @@ data:
 
       # Job 4: Driver Service — Python/FastAPI application metrics
       # Metrics exposed by prometheus-fastapi-instrumentator at /metrics on port 8082.
-      # See infra/k8s/monitoring/driver-service.yaml for the deployment.
+      # Driver Service is deployed via Helm/ArgoCD in the driver-service namespace.
       - job_name: "driver-service"
         static_configs:
-          - targets: ["driver-service.default.svc.cluster.local:8082"]
+          - targets: ["driver-service.driver-service.svc.cluster.local:80"]
         metrics_path: "/metrics"
 
       # Job 5: Client Gateway — Python Telegram bot + FastAPI health server metrics

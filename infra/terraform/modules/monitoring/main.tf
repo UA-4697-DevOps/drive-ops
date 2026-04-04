@@ -69,36 +69,36 @@ resource "aws_cloudwatch_metric_alarm" "sqs_old_messages" {
 }
 
 # EC2 High CPU, iterates through provided instances to create individual CPU alarms
-resource "aws_cloudwatch_metric_alarm" "ec2_cpu_high" {
-  for_each            = var.ec2_instances
-  alarm_name          = "${var.project_name}-${var.env}-${each.key}-cpu-high"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/EC2"
-  period              = "60"
-  statistic           = "Average"
-  threshold           = 85
-  alarm_actions       = [aws_sns_topic.alerts.arn]
+# resource "aws_cloudwatch_metric_alarm" "ec2_cpu_high" {
+#   for_each            = var.ec2_instances
+#   alarm_name          = "${var.project_name}-${var.env}-${each.key}-cpu-high"
+#   comparison_operator = "GreaterThanThreshold"
+#   evaluation_periods  = "2"
+#   metric_name         = "CPUUtilization"
+#   namespace           = "AWS/EC2"
+#   period              = "60"
+#   statistic           = "Average"
+#   threshold           = 85
+#   alarm_actions       = [aws_sns_topic.alerts.arn]
 
-  dimensions = { InstanceId = each.value }
-}
+#   dimensions = { InstanceId = each.value }
+# }
 
-# EC2 Status Check Failed, triggers if the EC2 instance fails any underlying AWS hardware or software checks
-resource "aws_cloudwatch_metric_alarm" "ec2_status_check" {
-  for_each            = var.ec2_instances
-  alarm_name          = "${var.project_name}-${var.env}-${each.key}-status-check"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "1"
-  metric_name         = "StatusCheckFailed"
-  namespace           = "AWS/EC2"
-  period              = "60"
-  statistic           = "Maximum"
-  threshold           = 0
-  alarm_actions       = [aws_sns_topic.alerts.arn]
+# # EC2 Status Check Failed, triggers if the EC2 instance fails any underlying AWS hardware or software checks
+# resource "aws_cloudwatch_metric_alarm" "ec2_status_check" {
+#   for_each            = var.ec2_instances
+#   alarm_name          = "${var.project_name}-${var.env}-${each.key}-status-check"
+#   comparison_operator = "GreaterThanThreshold"
+#   evaluation_periods  = "1"
+#   metric_name         = "StatusCheckFailed"
+#   namespace           = "AWS/EC2"
+#   period              = "60"
+#   statistic           = "Maximum"
+#   threshold           = 0
+#   alarm_actions       = [aws_sns_topic.alerts.arn]
 
-  dimensions = { InstanceId = each.value }
-}
+#   dimensions = { InstanceId = each.value }
+# }
 
 # 4. Discord Integration (Lambda) 
 
