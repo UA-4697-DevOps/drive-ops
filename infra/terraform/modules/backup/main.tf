@@ -1,6 +1,9 @@
 # ------------------------------------------------------------------------------
 # S3 BUCKET FOR BACKUPS
 # ------------------------------------------------------------------------------
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
+
 resource "aws_s3_bucket" "db_backups" {
   bucket = "${var.project_name}-db-backups-${var.env}"
 }
@@ -106,7 +109,7 @@ module "backup_iam_role" {
           ]
           Effect = "Allow"
           Resource = [
-            var.backup_kms_key_arn
+            var.backup_kms_key_arn == "alias/aws/s3" ? "arn:aws:kms:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:alias/aws/s3" : var.backup_kms_key_arn
           ]
         }
       ]
