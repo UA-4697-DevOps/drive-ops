@@ -52,13 +52,16 @@ fi
 cd "${APP_DIR}"
 
 echo ">>> Updating .env with fetched configuration..."
+umask 077
 touch .env
+chmod 600 .env
 for VAR_LINE in \
   "TRIP_SERVICE_URL=${TRIP_URL}" \
   "DRIVER_SERVICE_URL=${DRIVER_URL}" \
   "TELEGRAM_BOT_TOKEN=${BOT_TOKEN}"; do
   VAR_KEY="${VAR_LINE%%=*}"
   grep -v "^${VAR_KEY}=" .env > .env.tmp || true
+  chmod 600 .env.tmp
   mv .env.tmp .env
   printf '%s\n' "${VAR_LINE}" >> .env
 done
