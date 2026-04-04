@@ -1,0 +1,31 @@
+name: 'Load Script as Base64'
+description: 'Reads a local script file and exposes base64 payload for remote execution'
+
+inputs:
+  script-path:
+    description: 'Path to script file in repository (e.g. .github/scripts/deploy.sh)'
+    required: true
+
+outputs:
+  script-b64:
+    description: 'Base64-encoded script content'
+    value: ${{ steps.encode.outputs.script_b64 }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Encode script file
+      id: encode
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        SCRIPT_PATH="${{ inputs.script-path }}"
+        if [ ! -f "$SCRIPT_PATH" ]; then
+          echo "Script not found: $SCRIPT_PATH" >&2
+          exit 1
+        fi
+
+        chmod +x "$SCRIPT_PATH"
+        SCRIPT_B64=$(base64 -w0 "$SCRIPT_PATH")
+        echo "script_b64=$SCRIPT_B64" >> "$GITHUB_OUTPUT"

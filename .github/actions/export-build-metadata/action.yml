@@ -41,6 +41,24 @@ runs:
           echo "build_timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         } > build-artifacts/metadata.env
 
+        jq -n \
+          --arg uri "$URI" \
+          --arg tag "$TAG" \
+          --arg digest "$DIGEST" \
+          --arg commit_sha "${{ github.sha }}" \
+          --arg commit_short_sha "${GITHUB_SHA:0:7}" \
+          --arg branch "${{ github.ref_name }}" \
+          --arg build_timestamp "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+          '{
+            uri: $uri,
+            tag: $tag,
+            digest: $digest,
+            commit_sha: $commit_sha,
+            commit_short_sha: $commit_short_sha,
+            branch: $branch,
+            build_timestamp: $build_timestamp
+          }' > build-artifacts/metadata.json
+
         echo "Build metadata generated:"
         cat build-artifacts/metadata.env
 
@@ -48,5 +66,5 @@ runs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.artifact-name }}
-        path: build-artifacts/metadata.env
+        path: build-artifacts/
         retention-days: 30

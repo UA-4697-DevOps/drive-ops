@@ -1,0 +1,57 @@
+name: 'Run Script via SSM'
+description: 'Executes a base64-encoded script on an EC2 instance through the shared SSM Run Command action'
+
+inputs:
+  instance-id:
+    description: 'EC2 instance ID to target'
+    required: true
+  script-b64:
+    description: 'Base64-encoded script content to execute on the instance'
+    required: true
+  script-name:
+    description: 'Filename to use on the instance (e.g. deploy.sh)'
+    required: false
+    default: 'script.sh'
+  env-vars:
+    description: 'Optional shell assignments injected before script execution (multi-line)'
+    required: false
+    default: ''
+  working-directory:
+    description: 'Working directory on the remote instance'
+    required: false
+    default: '/home/ubuntu'
+  timeout-seconds:
+    description: 'Timeout for remote command execution'
+    required: false
+    default: '300'
+
+outputs:
+  command-id:
+    description: 'SSM command ID'
+    value: ${{ steps.run.outputs.command-id }}
+  status:
+    description: 'Final SSM invocation status'
+    value: ${{ steps.run.outputs.status }}
+  stdout:
+    description: 'Remote command stdout'
+    value: ${{ steps.run.outputs.stdout }}
+  stderr:
+    description: 'Remote command stderr'
+    value: ${{ steps.run.outputs.stderr }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run script using shared SSM action
+      id: run
+      uses: ./.github/actions/ssm-run-command
+      with:
+        instance-id: ${{ inputs.instance-id }}
+        working-directory: ${{ inputs.working-directory }}
+        timeout-seconds: ${{ inputs.timeout-seconds }}
+        command: |
+          set -euo pipefail
+          ${{ inputs.env-vars }}
+          echo "${{ inputs.script-b64 }}" | base64 -d > "/tmp/${{ inputs.script-name }}"
+          chmod +x "/tmp/${{ inputs.script-name }}"
+          "/tmp/${{ inputs.script-name }}"
