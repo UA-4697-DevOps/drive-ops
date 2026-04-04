@@ -9,8 +9,8 @@ set -euo pipefail
 # Credentials are fetched from Secrets Manager on the EC2 instance itself so
 # that RDS never needs to be publicly accessible.
 #
-# Only databases are created here — table schemas are applied by the
-# individual service migrations in 04-run-migrations.sh.
+# Only databases are created here — table schemas are applied by
+# individual service migrations running on EKS pods via Alembic or SQL runners.
 #
 # Prerequisites:
 #   - Terraform/Terragrunt compute modules applied (EC2 instances must be running)
