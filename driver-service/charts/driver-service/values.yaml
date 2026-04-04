@@ -96,11 +96,8 @@ config:
 database:
   # -- Secret name created by ExternalSecret
   secretName: "driver-service-secrets"
-  # -- Secret keys matching ExternalSecret target
-  usernameKey: "DB_USERNAME"
-  passwordKey: "DB_PASSWORD"
-  hostKey: "DB_HOST"
-  dbNameKey: "DRIVER_DB_NAME"
+  # -- Secret key containing DATABASE_URL
+  secretKey: "database-url"
 
 configMap:
   # -- Create ConfigMap
@@ -109,6 +106,20 @@ configMap:
 secret:
   # -- Create Secret (for local/testing only, ESO handles prod)
   create: false
+  # -- DATABASE_URL value (only used if secret.create is true)
+  databaseUrl: ""
 
 externalSecret:
   secretPath: "drive-ops/dev/rds/credentials"
+  property: "database-url"
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: driver.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []

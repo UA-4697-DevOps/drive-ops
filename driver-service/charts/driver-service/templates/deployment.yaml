@@ -37,27 +37,12 @@ spec:
           containerPort: {{ .Values.service.targetPort }}
           protocol: TCP
         env:
-        # Database credentials from ExternalSecret
-        - name: DB_USER
+        # Database URL from ExternalSecret/Secret
+        - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
               name: {{ .Values.database.secretName }}
-              key: {{ .Values.database.usernameKey }}
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.database.secretName }}
-              key: {{ .Values.database.passwordKey }}
-        - name: DB_HOST
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.database.secretName }}
-              key: {{ .Values.database.hostKey }}
-        - name: DRIVER_DB_NAME
-          valueFrom:
-            secretKeyRef:
-              name: {{ .Values.database.secretName }}
-              key: {{ .Values.database.dbNameKey }}
+              key: {{ .Values.database.secretKey }}
         # AWS Configuration
         - name: AWS_REGION
           valueFrom:
