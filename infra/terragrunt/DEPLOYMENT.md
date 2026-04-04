@@ -32,7 +32,7 @@ export TF_VAR_discord_webhook_url="https://discord.com/api/webhooks/your_actual_
 3. **AWS SSM Parameter Store (Recommended for production):**
    Store the CIDR list in SSM Parameter Store and update `bastion/terragrunt.hcl` to read from it.
 
-**OWNER:** DevOps team  
+**OWNER:** DevOps team
 **ROTATION:** Review quarterly or when team members change
 
 ### 🏗️ Step 1: Shared Infrastructure (Foundation)
@@ -63,8 +63,8 @@ Once the foundation and monitoring are active, deploy the individual microservic
 
 ```bash
 # Run for each service in the following recommended order:
-cd ../trip-service && terragrunt apply 
-cd ../driver-service && terragrunt apply 
+cd ../trip-service && terragrunt apply
+cd ../driver-service && terragrunt apply
 cd ../client-gateway && terragrunt apply
 ```
 
@@ -84,14 +84,17 @@ cd /home/vlad/projects/drive-ops/infra/scripts
 ```bash
 BOT_TOKEN=<your_token_here> ./02-populate-ssm.sh dev
 ```
-**5.3 Deploy Application Images**
-Use the image tag from ECR to deploy services.
+
+#### 5.3 Deploy Application Images via ArgoCD
+
+Services are now deployed exclusively on EKS via ArgoCD. ArgoCD automatically syncs applications from the Git repository (gitops/argocd/ and service charts).
+Monitor deployment status:
+
 ```bash
-./03-deploy-services.sh dev <tag> <service_name>
-```
-**5.4 Run Migrations**
-```bash
-./04-run-migrations.sh dev
+kubectl get applications -n argocd
+kubectl get pods -n trip-service
+kubectl get pods -n driver-service
+kubectl get pods -n client-gateway
 ```
 
 ### 📊 Step 5: Monitoring & Alerting
