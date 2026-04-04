@@ -58,7 +58,7 @@ module "iam_role" {
 # EKS — allow the bastion to run `aws eks update-kubeconfig`
 resource "aws_iam_role_policy" "bastion_eks_describe" {
   name = "Training-${var.project_name}-${var.env}-bastion-eks-describe"
-  role = module.iam_role.iam_role_id
+  role = module.iam_role.iam_role_name
 
   policy = jsonencode({
     Version = "2012-10-17"

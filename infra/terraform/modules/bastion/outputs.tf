@@ -15,5 +15,5 @@ output "bastion_security_group_id" {
 
 output "bastion_role_arn" {
   description = "ARN of the bastion IAM role (used for EKS access entries)"
-  value       = aws_iam_role.bastion.arn
+  value       = module.iam_role.iam_role_arn
 }
