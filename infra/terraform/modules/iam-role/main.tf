@@ -8,20 +8,11 @@ resource "aws_iam_role" "this" {
 
 locals {
   normalized_custom_policies = {
-    for key, value in var.custom_policies : key => (
-      can(value.policy) ? {
-        policy_name = try(value.policy_name, key)
-        policy      = value.policy
-        description = coalesce(
-          try(value.description, null),
-          lookup(var.custom_policies_descriptions, try(value.policy_name, key), null)
-        )
-        } : {
-        policy_name = key
-        policy      = value
-        description = lookup(var.custom_policies_descriptions, key, null)
-      }
-    )
+    for key, value in var.custom_policies : key => {
+      policy_name = can(value.policy) ? try(tostring(value.policy_name), key) : key
+      policy      = can(value.policy) ? tostring(value.policy) : tostring(value)
+      description = can(value.policy) ? try(tostring(coalesce(value.description, lookup(var.custom_policies_descriptions, try(value.policy_name, key), null))), null) : try(tostring(lookup(var.custom_policies_descriptions, key, null)), null)
+    }
   }
 }
 

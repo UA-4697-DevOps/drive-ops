@@ -4,7 +4,7 @@ include "root" {
 
 # Point to the actual Terraform module we discussed earlier
 terraform {
-  source = "../../../../terraform/modules/backup" # Adjust this relative path if your terraform dir is elsewhere
+  source = "../../../../terraform/modules//backup" # Keep repo context so sibling modules like ../iam-role are available
 }
 
 # Pull in the outputs from your EKS cluster

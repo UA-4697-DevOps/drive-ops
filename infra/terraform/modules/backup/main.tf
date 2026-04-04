@@ -1,6 +1,9 @@
 # ------------------------------------------------------------------------------
 # S3 BUCKET FOR BACKUPS
 # ------------------------------------------------------------------------------
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
+
 resource "aws_s3_bucket" "db_backups" {
   bucket = "${var.project_name}-db-backups-${var.env}"
 }
@@ -106,7 +109,7 @@ module "backup_iam_role" {
           ]
           Effect = "Allow"
           Resource = [
-            var.backup_kms_key_arn
+            var.backup_kms_key_arn == "alias/aws/s3" ? "arn:aws:kms:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:alias/aws/s3" : var.backup_kms_key_arn
           ]
         }
       ]
@@ -118,19 +121,4 @@ module "backup_iam_role" {
   }
 }
 
-# --- State Migrations for Backup IAM Role ---
-
-moved {
-  from = aws_iam_role.backup_role
-  to   = module.backup_iam_role.aws_iam_role.this
-}
-
-moved {
-  from = aws_iam_policy.backup_s3_access
-  to   = module.backup_iam_role.aws_iam_policy.custom["${var.project_name}-backup-s3-access-${var.env}"]
-}
-
-moved {
-  from = aws_iam_role_policy_attachment.backup_s3_access
-  to   = module.backup_iam_role.aws_iam_role_policy_attachment.custom_attach["${var.project_name}-backup-s3-access-${var.env}"]
-}
+# --- State Migrations removed: dynamic expressions not allowed in moved blocks ---
