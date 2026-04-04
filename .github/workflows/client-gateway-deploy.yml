@@ -73,11 +73,12 @@ jobs:
       previous_image: ${{ steps.previous.outputs.previous_image }}
       instance_id: ${{ steps.instance.outputs.instance_id }}
     steps:
-      - name: Configure AWS Credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
+      - name: AWS ECR Authentication
+        uses: ./.github/actions/aws-ecr-auth
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/client-gateway-github-actions-role
+          aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
           aws-region: ${{ env.AWS_REGION }}
+          role-name: client-gateway-github-actions-role
 
       - name: Resolve image tag
         id: resolve
@@ -204,11 +205,12 @@ jobs:
     timeout-minutes: 10
     environment: ${{ github.event.inputs.environment }}
     steps:
-      - name: Configure AWS Credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
+      - name: AWS ECR Authentication
+        uses: ./.github/actions/aws-ecr-auth
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/client-gateway-github-actions-role
+          aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
           aws-region: ${{ env.AWS_REGION }}
+          role-name: client-gateway-github-actions-role
 
       - name: Deploy via SSM
         id: ssm_deploy
@@ -370,11 +372,12 @@ jobs:
     outputs:
       healthy: ${{ steps.health.outputs.healthy }}
     steps:
-      - name: Configure AWS Credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
+      - name: AWS ECR Authentication
+        uses: ./.github/actions/aws-ecr-auth
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/client-gateway-github-actions-role
+          aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
           aws-region: ${{ env.AWS_REGION }}
+          role-name: client-gateway-github-actions-role
 
       - name: Health check via SSM
         id: health
@@ -565,11 +568,12 @@ jobs:
     if: failure() && needs.deploy.result == 'success'
     timeout-minutes: 10
     steps:
-      - name: Configure AWS Credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
+      - name: AWS ECR Authentication
+        uses: ./.github/actions/aws-ecr-auth
         with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/client-gateway-github-actions-role
+          aws-account-id: ${{ secrets.AWS_ACCOUNT_ID }}
           aws-region: ${{ env.AWS_REGION }}
+          role-name: client-gateway-github-actions-role
 
       - name: Rollback to previous image
         run: |
