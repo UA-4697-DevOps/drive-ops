@@ -1,5 +1,13 @@
 set -euo pipefail
 
+APP_DIR="__APP_DIR__"
+IMAGE="__IMAGE__"
+SERVICE="__SERVICE__"
+AWS_REGION="__AWS_REGION__"
+ECR_REGISTRY="__ECR_REGISTRY__"
+DEPLOY_ENV="__DEPLOY_ENV__"
+CONTAINER="__CONTAINER__"
+
 echo ">>> Fetching configuration from SSM Parameter Store..."
 TRIP_URL=$(aws ssm get-parameter \
   --name "/drive-ops/${DEPLOY_ENV}/client-gateway/trip-service-url" \
