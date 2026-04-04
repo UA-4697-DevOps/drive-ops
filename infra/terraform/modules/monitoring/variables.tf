@@ -28,10 +28,10 @@ variable "rds_instance_id" {
 }
 
 # --- UPDATED: Replaced ECS Cluster with EC2 Instances Map ---
-variable "ec2_instances" {
-  description = "Map of service names to EC2 Instance IDs for monitoring (e.g., { trip-service = 'i-0123456789abcdef0' })"
-  type        = map(string)
-}
+# variable "ec2_instances" {
+#   description = "Map of service names to EC2 Instance IDs for monitoring (e.g., { trip-service = 'i-0123456789abcdef0' })"
+#   type        = map(string)
+# }
 
 variable "sqs_queue_name" {
   description = "The name of the SQS FIFO queue to monitor"
