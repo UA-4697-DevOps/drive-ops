@@ -66,9 +66,11 @@ affinity:
         topologyKey: topology.kubernetes.io/zone
 
 # Pod disruption budget for voluntary disruptions (node drains, upgrades)
+# With 1 replica, maxUnavailable: 0 means the pod cannot be evicted,
+# ensuring availability during maintenance
 podDisruptionBudget:
   enabled: true
-  minAvailable: 1  # At least 1 pod must remain during disruptions
+  maxUnavailable: 0  # No pods can be unavailable (requires new pod before evicting old one)
 
 config:
   awsRegion: "us-east-2"
@@ -108,16 +110,6 @@ readinessProbe:
   periodSeconds: 10
   failureThreshold: 3      # 30 seconds before unready
   timeoutSeconds: 5
-
-startupProbe:
-  httpGet:
-    path: /health
-    port: 8081
-  initialDelaySeconds: 0
-  periodSeconds: 5
-  timeoutSeconds: 3
-  successThreshold: 1
-  failureThreshold: 12
 
 podSecurityContext:
   runAsNonRoot: true

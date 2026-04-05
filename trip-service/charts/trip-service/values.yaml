@@ -92,8 +92,11 @@ affinity: {}
 podDisruptionBudget:
   # -- Enable PodDisruptionBudget
   enabled: false
-  # -- Minimum number of pods that must be available during voluntary disruptions
-  minAvailable: 1
+  # -- Maximum number of pods that can be unavailable during voluntary disruptions
+  # Use maxUnavailable: 0 for single-replica deployments to ensure availability
+  # Use minAvailable: 1 for multi-replica deployments (requires ≥2 replicas)
+  maxUnavailable: 0
+  # minAvailable: 1  # Alternative for multi-replica setups
 
 # Health checks configuration
 startupProbe:
