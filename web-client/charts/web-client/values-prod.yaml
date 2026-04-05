@@ -10,7 +10,7 @@ image:
 serviceAccount:
   create: true
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-prod-web-client-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing
   name: "web-client"
 
 resources:
