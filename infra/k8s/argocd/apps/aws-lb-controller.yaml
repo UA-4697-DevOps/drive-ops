@@ -26,7 +26,7 @@ spec:
           create: true
           name: aws-load-balancer-controller
           annotations:
-            eks.amazonaws.com/role-arn: REPLACE_WITH_ALB_ROLE_ARN # From aws-lb-controller output: alb_controller_role_arn
+            eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing # From aws-lb-controller output: alb_controller_role_arn
 
         region: us-east-2
         vpcId: REPLACE_WITH_VPC_ID # From shared-infra output: vpc_id
