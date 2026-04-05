@@ -153,7 +153,7 @@ database:
   # -- Secret name containing database URL
   secretName: "trip-service-secrets"
   # -- Secret key for database URL
-  secretKey: "DATABASE_URL"
+  secretKey: "DB_URL"
 
 # External secrets configuration (optional)
 externalSecrets:

@@ -81,7 +81,7 @@ config:
 
 database:
   secretName: "trip-service-secrets"
-  secretKey: "DATABASE_URL"
+  secretKey: "DB_URL"
 
 # Health probes (standardized with platform)
 startupProbe:
