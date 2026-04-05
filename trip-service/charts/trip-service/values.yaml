@@ -76,29 +76,62 @@ nodeSelector: {}
 tolerations: []
 
 # -- Affinity for pod assignment
+# Example for pod anti-affinity to spread pods across nodes:
+# affinity:
+#   podAntiAffinity:
+#     preferredDuringSchedulingIgnoredDuringExecution:
+#     - weight: 100
+#       podAffinityTerm:
+#         labelSelector:
+#           matchLabels:
+#             app.kubernetes.io/name: trip-service
+#         topologyKey: kubernetes.io/hostname
 affinity: {}
 
+# -- PodDisruptionBudget configuration
+podDisruptionBudget:
+  # -- Enable PodDisruptionBudget
+  enabled: false
+  # -- Maximum number of pods that can be unavailable during voluntary disruptions
+  # Use maxUnavailable: 0 for single-replica deployments to ensure availability
+  # Use minAvailable: 1 for multi-replica deployments (requires ≥2 replicas)
+  maxUnavailable: 0
+  # minAvailable: 1  # Alternative for multi-replica setups
+
 # Health checks configuration
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 0
+  periodSeconds: 5
+  failureThreshold: 12
+  timeoutSeconds: 5
+
 livenessProbe:
   httpGet:
     path: /health
     port: 8081
-  initialDelaySeconds: 15
-  periodSeconds: 30
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  failureThreshold: 3
+  timeoutSeconds: 5
 
 readinessProbe:
   httpGet:
     path: /health
     port: 8081
-  initialDelaySeconds: 5
+  initialDelaySeconds: 15
   periodSeconds: 10
+  failureThreshold: 3
+  timeoutSeconds: 5
 
 # Strategy for deployment updates
 strategy:
   type: RollingUpdate
   rollingUpdate:
     maxSurge: 1
-    maxUnavailable: 1
+    maxUnavailable: 0
 
 # Application configuration
 config:
