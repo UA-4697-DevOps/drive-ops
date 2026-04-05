@@ -116,8 +116,12 @@ secret:
   databaseUrl: ""
 
 externalSecret:
-  secretPath: "drive-ops/dev/rds/credentials"
-  property: "database-url"
+  rdsSecretPath: "drive-ops/dev/rds/credentials"
+  serviceSecretPath: "drive-ops/dev/driver-service"
+  usernameProperty: "username"
+  passwordProperty: "password"
+  endpointProperty: "RDS_ENDPOINT"
+  databaseName: "driver_db"
 
 ingress:
   enabled: false

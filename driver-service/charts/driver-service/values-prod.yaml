@@ -42,4 +42,5 @@ database:
   secretKey: "DATABASE_URL"
 
 externalSecret:
-  secretPath: "drive-ops/prod/rds/credentials"
+  rdsSecretPath: "drive-ops/prod/rds/credentials"
+  serviceSecretPath: "drive-ops/prod/driver-service"
