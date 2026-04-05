@@ -9,6 +9,9 @@ spec:
     repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
     targetRevision: HEAD
     path: driver-service/charts/driver-service
+    helm:
+      valueFiles:
+        - values-dev.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: driver-service

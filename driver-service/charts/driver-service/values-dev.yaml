@@ -1,5 +1,10 @@
 replicaCount: 1
 
+requiredLabels:
+  team: "drive-ops"
+  env: "dev"
+  service: "driver-service"
+
 image:
   pullPolicy: Always
   tag: "latest"
