@@ -63,7 +63,7 @@ ingress:
           pathType: Prefix
   tls: []
 
-  securityContext:
+securityContext:
   privileged: false
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true

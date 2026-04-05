@@ -32,9 +32,13 @@ serviceAccount:
 
 podAnnotations: {}
 
-podSecurityContext: {}
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
+  seccompProfile:
+    type: RuntimeDefault
   privileged: false
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
