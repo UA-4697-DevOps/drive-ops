@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "web-client.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
   labels:
     {{- include "web-client.labels" . | nindent 4 }}
 spec:

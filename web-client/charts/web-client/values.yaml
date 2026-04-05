@@ -2,6 +2,9 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# -- Custom namespace for the deployment (empty string uses release namespace)
+namespace: "web-client"
+
 # -- Number of replicas for the deployment
 replicaCount: 1
 

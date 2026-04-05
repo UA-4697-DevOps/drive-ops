@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "client-gateway.fullname" . }}
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
   labels:
     {{- include "client-gateway.labels" . | nindent 4 }}
 spec:
