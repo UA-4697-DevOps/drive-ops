@@ -1,32 +1,19 @@
-# --- Grafana Datasource Provisioning ---
-# This ConfigMap auto-configures Grafana's datasources on first boot.
-# Without this, you would have to manually add Prometheus and Jaeger
-# through the Grafana UI every time the pod restarts.
-#
-# Grafana reads provisioning files from /etc/grafana/provisioning/datasources/
-# and creates the datasources automatically.
+# --- Grafana Datasource Addon ---
+# kube-prometheus-stack provisions Prometheus datasource by default.
+# This addon keeps Jaeger datasource provisioning via Grafana sidecar.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-datasources
   namespace: monitoring
   labels:
-    app: grafana
+    grafana_datasource: "1"
 data:
   datasources.yaml: |
     apiVersion: 1
     datasources:
-      # Datasource 1: Prometheus — for metrics (request rate, latency, error rate)
-      - name: Prometheus
-        uid: prometheus
-        type: prometheus
-        access: proxy            # "proxy" means Grafana backend proxies requests (recommended)
-        url: http://prometheus.monitoring.svc.cluster.local:9090
-        isDefault: true          # Default datasource used by new panels
-        editable: false          # Prevent accidental changes via UI
-
-      # Datasource 2: Jaeger — for distributed traces
       - name: Jaeger
+        uid: jaeger
         type: jaeger
         access: proxy
         url: http://jaeger.monitoring.svc.cluster.local:16686

@@ -15,6 +15,7 @@ metadata:
   namespace: monitoring
   labels:
     app: grafana
+    grafana_dashboard: "1"
 data:
   web-client.json: |
     {
