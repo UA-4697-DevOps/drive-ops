@@ -14,6 +14,11 @@ nameOverride: ""
 
 fullnameOverride: ""
 
+requiredLabels:
+  team: "drive-ops"
+  env: "dev"
+  service: "driver-service"
+
 serviceAccount:
   create: true
   annotations:

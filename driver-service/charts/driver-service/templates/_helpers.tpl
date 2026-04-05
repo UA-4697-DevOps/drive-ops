@@ -34,6 +34,9 @@ Common labels
 {{- define "driver-service.labels" -}}
 helm.sh/chart: {{ include "driver-service.chart" . }}
 {{ include "driver-service.selectorLabels" . }}
+team: {{ .Values.requiredLabels.team | quote }}
+env: {{ .Values.requiredLabels.env | quote }}
+service: {{ .Values.requiredLabels.service | quote }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
