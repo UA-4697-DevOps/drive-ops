@@ -103,7 +103,7 @@ database:
   # -- Secret name created by ExternalSecret
   secretName: "driver-service-secrets"
   # -- Secret key containing DATABASE_URL
-  secretKey: "database-url"
+  secretKey: "DATABASE_URL"
 
 configMap:
   # -- Create ConfigMap
