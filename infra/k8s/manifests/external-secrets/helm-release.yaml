@@ -12,6 +12,13 @@ spec:
     helm:
       values: |
         installCRDs: true
+        crds:
+          conversion:
+            enabled: false
+        webhook:
+          create: false
+        certController:
+          create: false
         serviceAccount:
           create: true
           name: external-secrets
