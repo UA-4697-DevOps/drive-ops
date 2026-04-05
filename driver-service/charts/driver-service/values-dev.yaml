@@ -7,7 +7,7 @@ requiredLabels:
 
 image:
   pullPolicy: Always
-  tag: "latest"
+  tag: "sha-17f0dea"
 
 serviceAccount:
   create: true
