@@ -108,9 +108,18 @@ locals {
     var.custom_security_group_rules
   )
 
-  bastion_access_entries = var.bastion_role_arn == null ? {} : {
-    bastion = var.bastion_role_arn
-  }
+  # Principals granted cluster-admin in this module:
+  # - dedicated EKS admin access role (always)
+  # - optional bastion role (break-glass/admin automation)
+  # - optional extra admin roles
+  bastion_access_entries = merge(
+    {
+      eks_admin = module.eks_admin_access_role.iam_role_arn
+    },
+    var.bastion_role_arn == null ? {} : {
+      bastion = var.bastion_role_arn
+    }
+  )
 }
 
 # --- Consolidated Security Group Rules ---
@@ -294,10 +303,10 @@ resource "aws_eks_node_group" "this" {
 }
 
 # ------------------------------------------------------------------------------
-# 6. BASTION EKS ACCESS ENTRIES
+# 6. EKS ACCESS ENTRIES (BASTION + HUMAN ADMIN ROLES)
 # ------------------------------------------------------------------------------
 
-# Grant the bastion role admin access inside the cluster.
+# Grant configured principals full cluster admin access.
 resource "aws_eks_access_entry" "bastion" {
   for_each = local.bastion_access_entries
 

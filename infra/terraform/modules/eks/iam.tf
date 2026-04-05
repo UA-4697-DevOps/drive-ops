@@ -112,7 +112,79 @@ moved {
 }
 
 # ------------------------------------------------------------------------------
-# 3. CLUSTER AUTOSCALER IRSA ROLE
+# 3. EKS HUMAN ADMIN ACCESS ROLE
+# ------------------------------------------------------------------------------
+# Dedicated role for human access to the cluster. Trusts the account root so
+# IAM users/roles can be granted sts:AssumeRole via identity policies.
+
+data "aws_iam_policy_document" "eks_admin_access_assume_role" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${var.account_id}:root"]
+    }
+  }
+}
+
+module "eks_admin_access_role" {
+  source = "../iam-role"
+
+  role_name            = "${local.cluster_name}-admin-role"
+  assume_role_policy   = data.aws_iam_policy_document.eks_admin_access_assume_role.json
+  permissions_boundary = local.permissions_boundary
+
+  # Practical EKS management permissions for operational fixes.
+  custom_policies = {
+    "${local.cluster_name}-admin-control-plane" = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Sid    = "EKSFullAccess"
+          Effect = "Allow"
+          Action = [
+            "eks:*",
+          ]
+          Resource = "*"
+        },
+        {
+          Sid    = "PassClusterAndNodeRoles"
+          Effect = "Allow"
+          Action = [
+            "iam:PassRole",
+            "iam:GetRole",
+          ]
+          Resource = [
+            module.eks_cluster_role.iam_role_arn,
+            module.node_group_role.iam_role_arn,
+          ]
+        },
+        {
+          Sid    = "EKSConsoleReadDependencies"
+          Effect = "Allow"
+          Action = [
+            "ec2:Describe*",
+            "autoscaling:Describe*",
+            "logs:Describe*",
+            "logs:Get*",
+            "cloudwatch:List*",
+            "cloudwatch:Get*",
+          ]
+          Resource = "*"
+        }
+      ]
+    })
+  }
+
+  custom_policies_descriptions = {
+    "${local.cluster_name}-admin-control-plane" = "EKS control-plane management and supporting read permissions for break-glass operations"
+  }
+
+  tags = var.tags
+}
+
+# ------------------------------------------------------------------------------
+# 4. CLUSTER AUTOSCALER IRSA ROLE
 # ------------------------------------------------------------------------------
 # Allows the cluster-autoscaler ServiceAccount in kube-system to assume this
 # role via IRSA, granting it permissions to manage Auto Scaling Groups.

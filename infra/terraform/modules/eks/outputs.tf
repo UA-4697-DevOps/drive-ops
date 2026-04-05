@@ -33,6 +33,11 @@ output "node_role_arn" {
   value       = module.node_group_role.iam_role_arn
 }
 
+output "eks_admin_access_role_arn" {
+  description = "ARN of the dedicated IAM role for human EKS cluster-admin access"
+  value       = module.eks_admin_access_role.iam_role_arn
+}
+
 # --- OIDC / IRSA ---
 
 output "oidc_provider_arn" {
@@ -52,6 +57,11 @@ output "oidc_provider_url" {
 output "kubeconfig_command" {
   description = "AWS CLI command to configure kubectl access to the cluster"
   value       = "aws eks update-kubeconfig --region ${data.aws_region.current.id} --name ${aws_eks_cluster.this.name}"
+}
+
+output "kubeconfig_command_admin_role" {
+  description = "AWS CLI command to configure kubectl access using the dedicated EKS admin access role"
+  value       = "aws eks update-kubeconfig --region ${data.aws_region.current.id} --name ${aws_eks_cluster.this.name} --role-arn ${module.eks_admin_access_role.iam_role_arn}"
 }
 
 # --- Cluster Autoscaler ---
