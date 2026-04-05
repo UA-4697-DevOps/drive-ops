@@ -29,7 +29,7 @@ serviceAccount:
   create: true
   # -- Annotations to add to the service account
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-prod-web-client-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing
   # -- The name of the service account to use
   name: "web-client"
 
