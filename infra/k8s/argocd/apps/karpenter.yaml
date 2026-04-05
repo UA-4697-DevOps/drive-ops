@@ -1,0 +1,33 @@
+# ==============================================================================
+# ArgoCD Application – Karpenter Node Configuration
+# ==============================================================================
+# Syncs EC2NodeClass and NodePool manifests to the cluster.
+# Karpenter controller itself is deployed via Helm in the Terraform module.
+#
+# Prerequisites:
+#   terragrunt apply in infra/terragrunt/envs/dev/karpenter must complete first.
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: karpenter
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
+    targetRevision: HEAD
+    path: infra/k8s/manifests/karpenter
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true

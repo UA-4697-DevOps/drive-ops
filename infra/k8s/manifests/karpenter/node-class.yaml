@@ -1,0 +1,42 @@
+# ==============================================================================
+# EC2NodeClass – Karpenter Node Template for drive-ops-dev
+# ==============================================================================
+# Defines AWS-specific config for nodes provisioned by Karpenter.
+# Karpenter discovers subnets and security groups via tags automatically.
+#
+# Tags required on VPC resources (applied by shared-infra Terraform module):
+#   Subnets:         kubernetes.io/cluster/<cluster-name> = shared
+#   Security Groups: karpenter.sh/discovery = <cluster-name>
+#
+# Before applying, replace placeholders:
+#   REPLACE_WITH_CLUSTER_NAME       → terragrunt output -raw cluster_name       (from ../eks)
+#   REPLACE_WITH_NODE_ROLE_NAME     → terragrunt output -raw node_instance_profile_name (from ../eks)
+# ==============================================================================
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  amiFamily: AL2023
+
+  role: REPLACE_WITH_NODE_ROLE_NAME
+
+  subnetSelectorTerms:
+    - tags:
+        kubernetes.io/cluster/REPLACE_WITH_CLUSTER_NAME: shared
+
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: REPLACE_WITH_CLUSTER_NAME
+
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 20Gi
+        volumeType: gp3
+        encrypted: true
+
+  tags:
+    Environment: dev
+    ManagedBy: karpenter
+    Experiment: "true"

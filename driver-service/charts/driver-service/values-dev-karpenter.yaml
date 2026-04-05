@@ -1,0 +1,25 @@
+# ==============================================================================
+# Driver Service – Dev Values Override for Karpenter Experiment
+# ==============================================================================
+# Apply on top of values-dev.yaml to route driver-service pods onto
+# Karpenter-provisioned nodes instead of the managed node group.
+#
+# Usage (manual):
+#   helm upgrade driver-service ./charts/driver-service \
+#     -f values-dev.yaml \
+#     -f values-dev-karpenter.yaml \
+#     -n driver-service
+# ==============================================================================
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+# Route pods to Karpenter-provisioned nodes
+# NodePool label: provisioner=karpenter (defined in node-pool.yaml)
+nodeSelector:
+  provisioner: karpenter
+
+tolerations: []
