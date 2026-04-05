@@ -57,7 +57,7 @@ inputs = {
   public_subnet_id = try(dependency.shared_infra.outputs.public_subnet_ids[0], "")
 
   # t4g.nano: ARM/Graviton — cheapest option, sufficient for SSH jump-host
-  instance_type = "t4g.nano"
+  instance_type = "t4g.micro"
 
   # EC2 Key Pair that MUST already exist in AWS (create manually or via CLI)
   key_name = "bastion-key"
