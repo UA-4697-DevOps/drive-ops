@@ -53,16 +53,20 @@ ingress:
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
-    alb.ingress.kubernetes.io/ssl-redirect: '443'
-    alb.ingress.kubernetes.io/certificate-arn: <your-acm-certificate-arn>  #this is mock value, replace with actual ARNs
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}, {"HTTP": 80}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-east-2:969283154407:certificate/45a5b1a5-3b99-40f5-9a5c-d6a1c279e731"
     alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
   hosts:
-    - host: ""
+    - host: "driveops.example.com"
       paths:
         - path: /
           pathType: Prefix
-  tls: []
+  tls:
+    - secretName: web-client-tls
+      hosts:
+        - driveops.example.com
 
 # Strict health checks for production
 livenessProbe:
