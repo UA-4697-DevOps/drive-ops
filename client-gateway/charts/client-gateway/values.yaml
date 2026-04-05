@@ -34,7 +34,15 @@ podAnnotations: {}
 
 podSecurityContext: {}
 
-securityContext: {}
+securityContext:
+  privileged: false
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10002
+  capabilities:
+    drop:
+    - ALL
 
 service:
   # -- Service type

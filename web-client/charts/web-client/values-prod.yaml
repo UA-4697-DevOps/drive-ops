@@ -120,6 +120,7 @@ podSecurityContext:
     type: RuntimeDefault
 
 securityContext:
+  privileged: false
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
   runAsNonRoot: true
