@@ -154,8 +154,3 @@ secret:
   create: false
   # -- Bot token (only used if secret.create is true)
   botToken: ""
-
-ingress:
-  enabled: false
-  host: ""
-  path: /
