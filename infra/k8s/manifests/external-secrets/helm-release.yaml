@@ -16,7 +16,7 @@ spec:
           create: true
           name: external-secrets
           annotations:
-            eks.amazonaws.com/role-arn: eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-dev-eso-role
+            eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-dev-eso-role
         replicaCount: 1
         resources:
           requests:
