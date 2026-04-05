@@ -7,6 +7,11 @@ image:
   pullPolicy: IfNotPresent
   tag: "v1.0.0"
 
+requiredLabels:
+  team: "backend-team"
+  env: "prod"
+  service: "trip-service"
+
 serviceAccount:
   create: true
   annotations:

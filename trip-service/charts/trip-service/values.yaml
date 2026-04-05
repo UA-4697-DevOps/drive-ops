@@ -21,6 +21,12 @@ nameOverride: ""
 # -- Override the full name of the release
 fullnameOverride: ""
 
+requiredLabels:
+  # Required by Kyverno policy require-labels/check-required-labels
+  team: "backend-team"
+  env: "dev"
+  service: "trip-service"
+
 serviceAccount:
   # -- Specifies whether a service account should be created
   create: true

@@ -7,6 +7,11 @@ image:
   pullPolicy: Always
   tag: "f0b02799234b1845412a0d7ce58997829bd693b1"
 
+requiredLabels:
+  team: "backend-team"
+  env: "dev"
+  service: "trip-service"
+
 serviceAccount:
   create: true
   annotations:
