@@ -56,6 +56,7 @@ inputs = {
   oidc_provider_arn = dependency.eks.outputs.oidc_provider_arn
   oidc_provider_url = dependency.eks.outputs.oidc_provider_url
   node_role_arn     = dependency.eks.outputs.node_role_arn
+  node_instance_profile = dependency.eks.outputs.node_instance_profile_name
 
   karpenter_version = "1.3.3"
 

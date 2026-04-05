@@ -10,7 +10,7 @@
 #
 # Before applying, replace placeholders:
 #   REPLACE_WITH_CLUSTER_NAME       → terragrunt output -raw cluster_name       (from ../eks)
-#   REPLACE_WITH_NODE_ROLE_NAME     → terragrunt output -raw node_instance_profile_name (from ../eks)
+#   REPLACE_WITH_NODE_ROLE_NAME     → terragrunt output -raw node_role_name              (from ../eks)
 # ==============================================================================
 apiVersion: karpenter.k8s.aws/v1
 kind: EC2NodeClass

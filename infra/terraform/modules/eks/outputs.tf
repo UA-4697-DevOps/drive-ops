@@ -76,3 +76,8 @@ output "node_instance_profile_name" {
   description = "Name of the IAM instance profile for EKS worker nodes (used by Karpenter EC2NodeClass)"
   value       = aws_iam_instance_profile.node.name
 }
+
+output "node_role_name" {
+  description = "Name of the IAM role used by EKS worker nodes (used by Karpenter EC2NodeClass.spec.role)"
+  value       = module.node_group_role.iam_role_name
+}
