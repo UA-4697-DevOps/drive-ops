@@ -8,14 +8,109 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/UA-4697-DevOps/drive-ops.git
-    targetRevision: HEAD
-    path: infra/k8s/manifests/monitoring
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 82.18.0
+    helm:
+      values: |
+        defaultRules:
+          create: false
+
+        alertmanager:
+          enabled: false
+
+        kubeEtcd:
+          enabled: false
+
+        kubeControllerManager:
+          enabled: false
+
+        kubeScheduler:
+          enabled: false
+
+        kubeProxy:
+          enabled: false
+
+        prometheusOperator:
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+
+        kube-state-metrics:
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+
+        nodeExporter:
+          enabled: true
+
+        prometheus-node-exporter:
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+
+        prometheus:
+          prometheusSpec:
+            retention: 24h
+            retentionSize: 1GB
+            walCompression: true
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            serviceMonitorSelector: {}
+            serviceMonitorNamespaceSelector: {}
+            podMonitorSelector: {}
+            podMonitorNamespaceSelector: {}
+            resources:
+              requests:
+                cpu: 100m
+                memory: 512Mi
+              limits:
+                cpu: 400m
+                memory: 1Gi
+
+        grafana:
+          enabled: true
+          adminPassword: admin
+          persistence:
+            enabled: false
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          sidecar:
+            dashboards:
+              enabled: true
+              searchNamespace: ALL
+              label: grafana_dashboard
+              labelValue: "1"
+            datasources:
+              enabled: true
+              searchNamespace: ALL
+              label: grafana_datasource
+              labelValue: "1"
   destination:
     server: https://kubernetes.default.svc
+    namespace: monitoring
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+

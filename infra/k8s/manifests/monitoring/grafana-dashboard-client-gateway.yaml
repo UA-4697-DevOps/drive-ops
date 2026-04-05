@@ -23,6 +23,7 @@ metadata:
   namespace: monitoring
   labels:
     app: grafana
+    grafana_dashboard: "1"
 data:
   client-gateway.json: |
     {
