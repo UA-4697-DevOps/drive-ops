@@ -17,6 +17,12 @@ spec:
           - resources:
               namespaces:
                 - ingress-nginx
+          - resources:
+              namespaces:
+                - argocd
+              names:
+                - "my-argo-cd-argocd-repo-server*"
+                - "my-argo-cd-argocd-redis*"
       validate:
         message: >-
           Privileged containers are not allowed.
