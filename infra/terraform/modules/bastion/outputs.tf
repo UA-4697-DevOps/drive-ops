@@ -12,3 +12,8 @@ output "bastion_security_group_id" {
   description = "Security group ID of the bastion host"
   value       = module.security_group.sg_id
 }
+
+output "bastion_role_arn" {
+  description = "ARN of the bastion IAM role (used for EKS access entries)"
+  value       = module.iam_role.iam_role_arn
+}

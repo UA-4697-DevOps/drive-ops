@@ -88,11 +88,29 @@ locals {
     }
   }
 
+  bastion_security_group_rules = var.bastion_security_group_id == null ? {} : {
+    cluster_ingress_bastion_api = {
+      type              = "ingress"
+      from_port         = 443
+      to_port           = 443
+      protocol          = "tcp"
+      cidr_blocks       = null
+      source_sg_id      = var.bastion_security_group_id
+      security_group_id = aws_security_group.eks_cluster.id
+      description       = "Allow Bastion to communicate with EKS Control Plane API"
+    }
+  }
+
   # Merge default rules with user-provided custom rules
   all_security_group_rules = merge(
     local.default_security_group_rules,
+    local.bastion_security_group_rules,
     var.custom_security_group_rules
   )
+
+  bastion_access_entries = var.bastion_role_arn == null ? {} : {
+    bastion = var.bastion_role_arn
+  }
 }
 
 # --- Consolidated Security Group Rules ---
@@ -156,6 +174,10 @@ resource "aws_eks_cluster" "this" {
     endpoint_public_access  = var.cluster_endpoint_public_access
     endpoint_private_access = var.cluster_endpoint_private_access
     public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
+  }
+
+  access_config {
+    authentication_mode = "API_AND_CONFIG_MAP"
   }
 
   # Envelope encryption for Kubernetes secrets (only when a CMK ARN is supplied)
@@ -269,4 +291,31 @@ resource "aws_eks_node_group" "this" {
   depends_on = [
     module.node_group_role,
   ]
+}
+
+# ------------------------------------------------------------------------------
+# 6. BASTION EKS ACCESS ENTRIES
+# ------------------------------------------------------------------------------
+
+# Grant the bastion role admin access inside the cluster.
+resource "aws_eks_access_entry" "bastion" {
+  for_each = local.bastion_access_entries
+
+  cluster_name  = aws_eks_cluster.this.name
+  principal_arn = each.value
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "bastion_admin" {
+  for_each = local.bastion_access_entries
+
+  cluster_name  = aws_eks_cluster.this.name
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = each.value
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.bastion]
 }

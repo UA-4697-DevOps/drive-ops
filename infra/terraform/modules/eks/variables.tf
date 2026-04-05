@@ -160,3 +160,19 @@ variable "node_groups" {
   }))
   default = {}
 }
+
+# --- Bastion Integration ---
+
+variable "bastion_security_group_id" {
+  description = "Security group ID of the bastion host. When set, an ingress rule allowing port 443 from the bastion to the EKS control plane is created."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "bastion_role_arn" {
+  description = "ARN of the bastion IAM role. When set, an EKS access entry with AmazonEKSClusterAdminPolicy is created so the bastion can manage the cluster."
+  type        = string
+  default     = null
+  nullable    = true
+}

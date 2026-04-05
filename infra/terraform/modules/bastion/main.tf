@@ -58,6 +58,19 @@ module "iam_role" {
     "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   ]
 
+  inline_policies = {
+    "Training-${var.project_name}-${var.env}-bastion-eks-describe" = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Effect   = "Allow"
+          Action   = ["eks:DescribeCluster"]
+          Resource = "*"
+        }
+      ]
+    })
+  }
+
   tags = merge(var.tags, {
     Name = "Training-${var.project_name}-${var.env}-bastion-role"
   })
