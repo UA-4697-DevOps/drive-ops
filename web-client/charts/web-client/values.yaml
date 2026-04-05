@@ -28,7 +28,8 @@ serviceAccount:
   # -- Specifies whether a service account should be created
   create: true
   # -- Annotations to add to the service account
-  annotations: {}
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-prod-web-client-role
   # -- The name of the service account to use
   name: "web-client"
 

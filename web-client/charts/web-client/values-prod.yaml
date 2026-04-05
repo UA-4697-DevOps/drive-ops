@@ -9,7 +9,8 @@ image:
 
 serviceAccount:
   create: true
-  annotations: {}
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::969283154407:role/Training-drive-ops-prod-web-client-role
   name: "web-client"
 
 resources:
