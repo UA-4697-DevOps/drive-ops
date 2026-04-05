@@ -72,7 +72,8 @@ ingress:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}, {"HTTP": 80}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
-    alb.ingress.kubernetes.io/certificate-arn: "" # Replace with ACM certificate ARN
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-east-2:969283154407:certificate/YOUR_CERT_ID"
+    alb.ingress.kubernetes.io/healthcheck-path: /health
     alb.ingress.kubernetes.io/tags: "app=web-client,env=dev"
   # -- Ingress host rules
   hosts:
