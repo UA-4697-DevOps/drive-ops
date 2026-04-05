@@ -34,6 +34,9 @@ Common labels
 {{- define "trip-service.labels" -}}
 helm.sh/chart: {{ include "trip-service.chart" . }}
 {{ include "trip-service.selectorLabels" . }}
+team: {{ .Values.requiredLabels.team | quote }}
+env: {{ .Values.requiredLabels.env | quote }}
+service: {{ .Values.requiredLabels.service | quote }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
