@@ -50,17 +50,4 @@ module "iam_role" {
 
 
 
-moved {
-  from = aws_iam_policy.alb_controller
-  to   = module.iam_role.aws_iam_policy.custom["Training-${var.project_name}-${var.env}-alb-controller-policy"]
-}
-
-moved {
-  from = aws_iam_role.alb_controller
-  to   = module.iam_role.aws_iam_role.this
-}
-
-moved {
-  from = aws_iam_role_policy_attachment.alb_controller
-  to   = module.iam_role.aws_iam_role_policy_attachment.custom_attach["Training-${var.project_name}-${var.env}-alb-controller-policy"]
-}
+# --- State Migrations removed: dynamic expressions not allowed in moved blocks ---

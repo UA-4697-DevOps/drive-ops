@@ -46,6 +46,32 @@ autoscaling:
         periodSeconds: 120
       selectPolicy: Min
 
+# Pod scheduling rules for high availability
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    # Spread pods across different nodes (highest priority)
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: trip-service
+        topologyKey: kubernetes.io/hostname
+    # Spread pods across availability zones
+    - weight: 50
+      podAffinityTerm:
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: trip-service
+        topologyKey: topology.kubernetes.io/zone
+
+# Pod disruption budget for voluntary disruptions (node drains, upgrades)
+# With 1 replica, maxUnavailable: 0 means the pod cannot be evicted,
+# ensuring availability during maintenance
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 0  # No pods can be unavailable (requires new pod before evicting old one)
+
 config:
   awsRegion: "us-east-2"
   sqsTripCreatedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-created-dev.fifo"
@@ -57,30 +83,33 @@ database:
   secretName: "trip-service-secrets"
   secretKey: "DB_URL"
 
-# Simple health checks for test/dev
-livenessProbe:
-  httpGet:
-    path: /health
-    port: 8081
-  initialDelaySeconds: 15
-  periodSeconds: 30
-
-readinessProbe:
-  httpGet:
-    path: /health
-    port: 8081
-  initialDelaySeconds: 5
-  periodSeconds: 10
-
+# Health probes (standardized with platform)
 startupProbe:
   httpGet:
     path: /health
     port: 8081
   initialDelaySeconds: 0
   periodSeconds: 5
-  timeoutSeconds: 3
-  successThreshold: 1
-  failureThreshold: 12
+  failureThreshold: 12  # 60 seconds total for startup
+  timeoutSeconds: 5
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 30  # After startup succeeds
+  periodSeconds: 15
+  failureThreshold: 3      # 45 seconds before restart
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  failureThreshold: 3      # 30 seconds before unready
+  timeoutSeconds: 5
 
 podSecurityContext:
   runAsNonRoot: true
@@ -103,7 +132,7 @@ strategy:
   type: RollingUpdate
   rollingUpdate:
     maxSurge: 1
-    maxUnavailable: 1  # Can tolerate downtime in dev
+    maxUnavailable: 0  # Zero-downtime deployments (matches driver-service)
 
 networkPolicy:
   enabled: true

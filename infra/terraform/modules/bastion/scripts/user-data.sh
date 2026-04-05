@@ -35,3 +35,8 @@ dnf install -y htop tmux
 # previous operator running `aws configure`. The bastion must always use its
 # IAM Instance Profile — never long-lived access keys.
 rm -f /home/ec2-user/.aws/credentials /root/.aws/credentials
+
+
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/arm64/kubectl"
+install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+rm kubectl
