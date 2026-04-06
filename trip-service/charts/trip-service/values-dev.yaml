@@ -84,6 +84,10 @@ config:
   sqsTripCompletedUrl: "https://sqs.us-east-2.amazonaws.com/969283154407/trip-completed-dev.fifo"
   servicePort: ":8081"
 
+debug:
+  # Temporary diagnostic mode: serve /health without DB/AWS/SQS initialization.
+  startupProbeStub: true
+
 database:
   secretName: "trip-service-secrets"
   secretKey: "DB_URL"

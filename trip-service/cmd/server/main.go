@@ -82,9 +82,48 @@ func parseDurationEnv(key string, defaultVal time.Duration) time.Duration {
 	return defaultVal
 }
 
+// runStartupProbeStub starts a minimal HTTP server that only serves /health.
+// This is a temporary diagnostic mode to isolate startup probe failures from
+// DB/AWS/SQS initialization issues.
+func runStartupProbeStub() {
+	r := chi.NewRouter()
+	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	serverPort := getEnv("TRIP_SERVICE_PORT", ":8081")
+	srv := &http.Server{
+		Addr:    serverPort,
+		Handler: r,
+	}
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		log.Printf("STARTUP_PROBE_STUB enabled: health stub is running on %s", serverPort)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Stub server failed: %v", err)
+		}
+	}()
+
+	<-stop
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Stub server shutdown error: %v", err)
+	}
+}
+
 func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("Note: .env file not found, using system env variables")
+	}
+
+	if getEnv("STARTUP_PROBE_STUB", "false") == "true" {
+		runStartupProbeStub()
+		return
 	}
 
 	// Define a background context to manage the entire application lifecycle
