@@ -68,6 +68,9 @@ spec:
         # Service Port
         - name: TRIP_SERVICE_PORT
           value: {{ .Values.config.servicePort | quote }}
+        # Diagnostic toggle to run only a minimal /health server.
+        - name: STARTUP_PROBE_STUB
+          value: {{ .Values.debug.startupProbeStub | quote }}
         # Health Probes
         {{- with .Values.startupProbe }}
         startupProbe:

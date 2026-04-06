@@ -160,6 +160,11 @@ config:
   # -- Service port
   servicePort: ":8081"
 
+# Diagnostic toggles
+debug:
+  # -- If true, run only a minimal /health stub server and skip DB/AWS/SQS init.
+  startupProbeStub: false
+
 # Database configuration (will be loaded from secret)
 database:
   # -- Database connection URL (leave empty to use secret)
