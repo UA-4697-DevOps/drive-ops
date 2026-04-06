@@ -1,0 +1,55 @@
+# ==============================================================================
+# NodePool – Karpenter Node Scaling Policy
+# ==============================================================================
+# Mirrors existing Cluster Autoscaler managed node group config:
+#   - Instance family: t3 (same as managed group t3.small)
+#   - Capacity: ON_DEMAND baseline (switch to Spot for cost comparison)
+#   - Limits: 4 CPU / 8Gi memory (≈ 4x t3.small)
+# ==============================================================================
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: default
+spec:
+  template:
+    metadata:
+      labels:
+        provisioner: karpenter
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+
+      requirements:
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values: ["t3"]
+
+        - key: karpenter.k8s.aws/instance-size
+          operator: In
+          values: ["small", "medium", "large"]
+
+        # ON_DEMAND for stable comparison baseline
+        # Switch to ["spot", "on-demand"] for cost-optimization experiment
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+
+      expireAfter: 720h
+
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 1m
+
+  limits:
+    cpu: "4"
+    memory: 8Gi

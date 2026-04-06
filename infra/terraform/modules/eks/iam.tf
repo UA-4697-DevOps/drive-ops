@@ -283,3 +283,17 @@ moved {
   from = aws_iam_role.cluster_autoscaler
   to   = module.cluster_autoscaler_role.aws_iam_role.this
 }
+
+# ------------------------------------------------------------------------------
+# 5. NODE INSTANCE PROFILE (for Karpenter)
+# ------------------------------------------------------------------------------
+# Karpenter provisions nodes directly via EC2 API (not managed node groups).
+# It requires an IAM Instance Profile linked to the node role to attach to
+# new instances. The existing node_group_role is reused — no new permissions needed.
+
+resource "aws_iam_instance_profile" "node" {
+  name = "${local.cluster_name}-node-instance-profile"
+  role = module.node_group_role.iam_role_name
+
+  tags = var.tags
+}
