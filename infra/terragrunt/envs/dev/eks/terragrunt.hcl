@@ -43,6 +43,7 @@ dependency "shared_infra" {
     vpc_id             = "vpc-mock-id"
     public_subnet_ids  = ["subnet-mock-pub-1", "subnet-mock-pub-2"]
     private_subnet_ids = ["subnet-mock-priv-1", "subnet-mock-priv-2"]
+    sg_db_id           = "sg-mock-db"
     kms_key_arn        = "arn:aws:kms:us-east-2:123456789012:key/mock-key-id"
   }
 }
@@ -70,6 +71,7 @@ inputs = {
   vpc_id             = dependency.shared_infra.outputs.vpc_id
   private_subnet_ids = dependency.shared_infra.outputs.private_subnet_ids
   public_subnet_ids  = dependency.shared_infra.outputs.public_subnet_ids
+  db_security_group_id = dependency.shared_infra.outputs.sg_db_id
 
   # Cluster
   # cgroup v2 is default on AL2023 — no additional AMI configuration needed.

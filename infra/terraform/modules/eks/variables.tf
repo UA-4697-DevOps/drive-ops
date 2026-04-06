@@ -53,6 +53,13 @@ variable "vpc_id" {
   type        = string
 }
 
+variable "db_security_group_id" {
+  description = "Security group ID of the RDS database. When set, allows EKS worker nodes to reach PostgreSQL on port 5432."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 variable "private_subnet_ids" {
   description = "List of private subnet IDs for EKS worker nodes"
   type        = list(string)

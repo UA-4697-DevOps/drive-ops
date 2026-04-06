@@ -154,6 +154,18 @@ resource "aws_security_group" "eks_nodes" {
   })
 }
 
+resource "aws_security_group_rule" "db_ingress_from_eks_nodes_postgres" {
+  count = var.db_security_group_id == null ? 0 : 1
+
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.eks_nodes.id
+  security_group_id        = var.db_security_group_id
+  description              = "Allow EKS worker nodes to reach PostgreSQL"
+}
+
 # ------------------------------------------------------------------------------
 # 2. CLOUDWATCH LOG GROUP (CONTROL PLANE LOGS)
 # ------------------------------------------------------------------------------
